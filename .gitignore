@@ -1,0 +1,28 @@
+# deps / build
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# dados gerados (reproduzíveis via `npm run data` / `npm run data:real`)
+data/*.json
+public/data/*.json
+# fotos oficiais baixadas dos portais (reproduzíveis via `npm run fotos`, ~10MB)
+public/fotos/
+# cache de downloads dos Dados Abertos (~750MB) — reproduzível por `npm run data:real`.
+# Note o `/*` em vez de `data/raw/`: com a barra final o git nem entra no diretório,
+# e qualquer exceção futura (`!data/raw/algo.csv`) seria ignorada em silêncio.
+data/raw/*
+
+# `data/social.csv` NÃO está ignorado e é VERSIONADO de propósito: são os seguidores
+# do Instagram coletados via Apify (serviço PAGO). É o único dado do projeto que
+# nenhum script reproduz de graça — perdê-lo custa crédito.
+
+# ambiente
+.env*
+!.env.example
+.DS_Store
+
+# Local Netlify folder
+.netlify

@@ -1,0 +1,326 @@
+/* ============================================================
+   CARTA — visual alternativo da página de parlamentar (/carta/)
+   Silhueta de carta colecionável estilo Ultimate Team, mantendo a
+   paleta dourado-heráldica e os materiais por tier de tiers.css.
+   Importado em layout.tsx DEPOIS de tiers.css — tudo escopado em
+   .futc-* / .carta-* para não colidir com o card clássico (.pcard).
+   ============================================================ */
+
+.carta-stage { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.carta-stage .panel { width: 100%; margin-bottom: 0; }
+
+/* halo de arena atrás da carta */
+.carta-hero { position: relative; padding: 26px 0 10px; display: grid; justify-items: center; width: 100%; }
+.carta-hero::before {
+  content: ""; position: absolute; inset: -30px -60px; pointer-events: none; z-index: -1;
+  background:
+    radial-gradient(46% 42% at 50% 38%, rgba(212, 175, 55, 0.14), transparent 70%),
+    radial-gradient(30% 26% at 50% 84%, rgba(212, 175, 55, 0.08), transparent 75%);
+}
+
+/* ------------------------------------------------------------
+   A carta: moldura (outer, gradiente do tier) + face (inner)
+   recortadas pela MESMA silhueta; o brilho externo vem de
+   drop-shadow (segue o clip-path, ao contrário de box-shadow).
+   ------------------------------------------------------------ */
+.futc {
+  --futshape: polygon(9% 0%, 91% 0%, 100% 4.5%, 100% 81%, 91% 87%, 56% 98%, 50% 100%, 44% 98%, 9% 87%, 0% 81%, 0% 4.5%);
+  /* largura FIXA de propósito: o conteúdo interno é dimensionado em px e a
+     altura vem do aspect-ratio — se a largura encolhesse, o conteúdo estouraria
+     para dentro do bico. 340px cabem até em viewport de 390px. */
+  position: relative; width: 340px; aspect-ratio: 340 / 528;
+  clip-path: var(--futshape); padding: 3px;
+  background: linear-gradient(140deg, #3a3f4d, #6a7183 30%, #3a3f4d 60%, #565d70);
+}
+.futc-glow {
+  filter: drop-shadow(0 26px 40px rgba(0, 0, 0, 0.75));
+  /* não remover: sem camada própria o iOS pinta os tiles de cima sem a sombra */
+  will-change: filter;
+}
+
+/* Entrada do card. Três coisas que parecem sobras e não são: começar em 0,45
+   (o card é o LCP e opacidade 0 não conta), `backwards` em vez de `both` (que
+   deixaria transform em matrix identidade para sempre) e ausência de `scale`
+   (com ele o texto re-rasteriza e "assenta" no fim). */
+.futc-glow > .futc { animation: futc-deal 0.7s cubic-bezier(0.45, 0.35, 0.3, 1) backwards; }
+@keyframes futc-deal { from { opacity: 0.45; transform: translateY(24px); } }
+@media (prefers-reduced-motion: reduce) { .futc-glow > .futc { animation: none; } }
+
+.futc-in {
+  clip-path: var(--futshape); height: 100%;
+  display: flex; flex-direction: column;
+  /* o padding-bottom generoso mantém o rodapé ACIMA do afunilamento da silhueta
+     (o taper começa a 81% da altura ≈ 428px — conteúdo abaixo disso é cortado
+     na diagonal; 72px deixa o rodapé inteiro na zona de largura plena) */
+  padding: 20px 24px 72px;
+  background:
+    radial-gradient(120% 60% at 50% -8%, rgba(212, 175, 55, 0.12), transparent 55%),
+    linear-gradient(180deg, #151a27, #0b0e15 72%);
+  position: relative; isolation: isolate;
+}
+/* textura sutil de "gravação" na face, como as cartas do jogo */
+.futc-in::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: -1;
+  background: repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 6px);
+}
+
+/* ---------- cabeçalho: trilho (Poder/posição/tier) + retrato ---------- */
+.futc-head { display: grid; grid-template-columns: 86px 1fr; gap: 10px; align-items: start; }
+
+.futc-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-top: 8px; }
+.futc-ops {
+  font-family: var(--font-display), serif; font-weight: 900; font-size: 52px; line-height: 0.95;
+  background: linear-gradient(180deg, var(--gold-2), var(--gold) 60%, #9a7a1e);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.futc-ops-lbl { font-size: 8px; letter-spacing: 0.34em; color: var(--muted); text-transform: uppercase; margin-left: 0.34em; }
+.futc-pos {
+  font-family: var(--font-display), serif; font-weight: 700; font-size: 19px; letter-spacing: 0.14em;
+  color: var(--ink); margin-top: 6px;
+}
+.futc-rail-sep { width: 40px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin: 7px 0; }
+.futc-tier {
+  font-family: var(--font-display), serif; font-weight: 900; font-size: 17px;
+  width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px;
+  background: var(--tc, var(--gold)); color: #0a0d14;
+  box-shadow: 0 0 14px -2px var(--tc, transparent);
+}
+.futc.tier-D .futc-tier, .futc.tier-F .futc-tier { color: #ded8c8; }
+/* tier rebaixado por gate: cadeado pendurado no chip */
+.futc-tier { position: relative; }
+.futc-tier.gate { box-shadow: 0 0 0 1.5px rgba(229, 72, 77, 0.75), 0 0 14px -2px rgba(229, 72, 77, 0.5); }
+.futc-tier .lock {
+  position: absolute; right: -9px; bottom: -8px; font-size: 11px; font-style: normal; line-height: 1;
+  background: #0a0d14; border: 1px solid rgba(229, 72, 77, 0.6); border-radius: 999px; padding: 2px;
+}
+
+/* retrato em janela de arco (janela heráldica) */
+.futc-photo {
+  justify-self: end; width: 100%; max-width: 196px; height: 216px;
+  border-radius: 120px 120px 14px 14px; overflow: hidden; position: relative;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: radial-gradient(90% 70% at 50% 20%, #232a3b, #0d1018 75%);
+  /* espelham o object-fit/position do <img>: senão o LQIP pula ao ser coberto */
+  background-size: cover; background-position: top center;
+  box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.55), inset 0 -30px 40px -22px rgba(0, 0, 0, 0.8);
+}
+.futc-photo img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+/* silhueta do retrato (sem foto) ancora no chão da janela… */
+.futc-photo svg { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); }
+/* …mas o brasão da guilda fica centrado de verdade */
+.futc-crestwin svg { position: static; transform: none; }
+.futc.tier-F .futc-photo img, .futc.fora .futc-photo img { filter: grayscale(0.55) contrast(0.92) brightness(0.88); }
+
+/* ---------- banda do nome ---------- */
+.futc-name {
+  margin-top: 14px; text-align: center;
+  font-family: var(--font-display), serif; font-weight: 900; font-size: 17px;
+  letter-spacing: 0.1em; text-transform: uppercase; line-height: 1.2; color: var(--ink);
+  display: grid; place-items: center; min-height: 40px; padding: 0 4px;
+}
+.futc-rule {
+  height: 8px; margin: 6px 10px 0; pointer-events: none;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 72 10'><path d='M36 1 L40 5 L36 9 L32 5 Z' fill='%23d4af37'/><path d='M14 5 h15 M43 5 h15' stroke='%23d4af37' stroke-width='1' opacity='.7'/><circle cx='10' cy='5' r='1.3' fill='%23d4af37' opacity='.7'/><circle cx='62' cy='5' r='1.3' fill='%23d4af37' opacity='.7'/></svg>") center / auto 8px no-repeat,
+    linear-gradient(90deg, transparent, var(--line) 22%, var(--line) 78%, transparent) center 3.5px / 100% 1px no-repeat;
+}
+
+/* ---------- grade de atributos 2×3, com divisor central ---------- */
+.futc-stats {
+  margin-top: 10px; position: relative;
+  display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, auto); grid-template-columns: 1fr 1fr;
+  row-gap: 7px; padding: 4px 14px 0;
+}
+.futc-stats::before {
+  content: ""; position: absolute; left: 50%; top: 6px; bottom: 2px; width: 1px;
+  background: linear-gradient(180deg, transparent, var(--line) 25%, var(--line) 75%, transparent);
+}
+.futc-stat { display: flex; align-items: baseline; gap: 8px; justify-content: center; }
+.futc-stat b { font-family: var(--font-display), serif; font-weight: 900; font-size: 21px; min-width: 34px; text-align: right; color: var(--ink); }
+.futc-stat.hi b { color: var(--gold-2); text-shadow: 0 0 12px rgba(246, 227, 155, 0.35); }
+.futc-stat.lo b { color: #a06055; }
+.futc-stat span { font-size: 11px; letter-spacing: 0.14em; color: var(--muted); min-width: 40px; }
+.futc-stat sup { font-size: 8px; color: var(--muted); cursor: help; }
+/* o atributo que trava o Tier S — a UI tem que dizer QUEM derrubou a carta */
+.futc-stat.gate b { color: var(--red-soft); text-shadow: 0 0 12px rgba(229, 72, 77, 0.35); }
+.futc-stat.gate span { color: var(--red-soft); }
+.futc.tier-F .futc-stat.hi b, .futc.fora .futc-stat.hi b { text-shadow: none; }
+
+/* ---------- variante guilda: brasão na janela de arco + nome longo ---------- */
+.futc-crestwin { display: grid; place-items: center; }
+.futc-name.futc-name-sm { font-size: 13.5px; letter-spacing: 0.08em; }
+.futc-foot-gem { color: var(--gold); font-size: 13px; }
+
+/* ---------- rodapé: UF · brasão · casa (nação/clube/liga do FUT) ---------- */
+/* grid 1fr/auto/1fr: o brasão fica EXATAMENTE no eixo da carta (alinhado ao
+   divisor central das stats) mesmo com placas de larguras diferentes ao redor */
+.futc-foot {
+  margin-top: auto; display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: center; gap: 20px; padding-bottom: 2px;
+}
+.futc-foot .plate:first-child { justify-self: end; }
+.futc-foot .plate:last-child { justify-self: start; }
+.futc-foot .plate {
+  font-family: var(--font-display), serif; font-weight: 700; font-size: 12px; letter-spacing: 0.12em;
+  color: var(--gold-2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px;
+  background: rgba(212, 175, 55, 0.06);
+}
+.futc-foot .crest-link { display: grid; place-items: center; transition: 0.2s; }
+.futc-foot .crest-link:hover { transform: translateY(-2px) scale(1.06); }
+
+/* ------------------------------------------------------------
+   Materiais por tier (mesma escala de tiers.css, na silhueta nova)
+   ------------------------------------------------------------ */
+.futc.tier-S, .futc.tier-A {
+  background: linear-gradient(140deg, #7a5e18, #f4e2a1 22%, #b7902c 46%, #f9edb9 66%, #8a6c1e);
+}
+.futc-glow.glow-S { filter: drop-shadow(0 26px 40px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 26px rgba(212, 175, 55, 0.45)); }
+.futc-glow.glow-A { filter: drop-shadow(0 26px 40px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 16px rgba(212, 175, 55, 0.3)); }
+
+/* 340px fixos num viewport de 390 deixam 25px de folga — menos que o brilho de
+   26 e a sombra de 40, que o `overflow-x: clip` do html/body decepa */
+@media (max-width: 420px) {
+  .futc-glow { filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.75)); }
+  .futc-glow.glow-S { filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 14px rgba(212, 175, 55, 0.45)); }
+  .futc-glow.glow-A { filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 10px rgba(212, 175, 55, 0.3)); }
+}
+
+/* S — holo animado varrendo a face */
+.futc.tier-S .futc-in::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.14) 38%, rgba(120, 220, 255, 0.1) 46%, rgba(255, 150, 255, 0.09) 54%, transparent 72%);
+  background-size: 250% 250%; mix-blend-mode: screen; animation: futc-holo 5s linear infinite;
+}
+/* 166,667% (= 250/150) anda um tile exato; qualquer outro valor faz o loop
+   saltar, porque o deslocamento é (100% − 250%) × posição. */
+@keyframes futc-holo { 0% { background-position: 0% 50%; } 100% { background-position: 166.6667% 50%; } }
+/* A — sheen estático discreto */
+.futc.tier-A .futc-in::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 34%, rgba(255, 255, 255, 0.07) 48%, transparent 62%);
+}
+
+.futc.tier-B { background: linear-gradient(140deg, #57503f, #b3a888 24%, #6a6250 48%, #c4b795 70%, #4e4737); }
+.futc.tier-C {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 7px),
+    linear-gradient(160deg, #4a4128, #35301f 55%, #423a24);
+}
+.futc.tier-D { background: linear-gradient(170deg, #2b2f3a, #20242e); }
+.futc.tier-F, .futc.fora { background: linear-gradient(160deg, #3a362e, #262420 38%, #343028 62%, #1f1d1a); }
+.futc.tier-F .futc-in, .futc.fora .futc-in {
+  background:
+    repeating-linear-gradient(-35deg, transparent 0 14px, rgba(0, 0, 0, 0.16) 14px 15px),
+    linear-gradient(180deg, #10120f, #0b0c0a);
+}
+.futc.tier-F .futc-ops, .futc.fora .futc-ops {
+  background: linear-gradient(180deg, #b8b09a, #7d7663);
+  -webkit-background-clip: text; background-clip: text;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .futc.tier-S .futc-in::after { animation: none; }
+}
+
+/* ------------------------------------------------------------
+   Seções abaixo da carta
+   ------------------------------------------------------------ */
+.carta-cta { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 100%; }
+.carta-cta .btn { flex: 1 1 130px; text-align: center; }
+
+.carta-rank { text-align: center; }
+.carta-rank .big {
+  font-family: var(--font-display), serif; font-weight: 900; font-size: clamp(20px, 5vw, 26px);
+  background: linear-gradient(180deg, var(--gold-2), var(--gold));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.carta-rank .sub { margin-top: 4px; margin-bottom: 0; }
+
+/* produção legislativa por ano — colunas com rótulo e valor (o antigo "spark",
+   agora com espaço para ler os números em vez de só a silhueta das barras) */
+/* alturas das barras vêm em PX do server (a escala é dado, não estilo):
+   % dentro de item de grid sem altura definida colapsaria para zero */
+.carta-spark { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; align-items: end; }
+.carta-spark .ano { display: flex; flex-direction: column; align-items: center; gap: 6px; justify-content: flex-end; }
+.carta-spark .n { font-family: var(--font-display), serif; font-weight: 900; font-size: 15px; color: var(--gold-2); }
+.carta-spark .bar {
+  width: 100%; max-width: 54px; border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--gold-2), var(--gold) 60%, #8a6c1e);
+  animation: spark-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.carta-spark .bar.zero { background: #2a2f3c; }
+.carta-spark .yr { font-size: 10px; letter-spacing: 0.1em; color: var(--muted); }
+@keyframes spark-rise { from { height: 0 !important; } }
+@media (prefers-reduced-motion: reduce) { .carta-spark .bar { animation: none; } }
+
+.scout-list { display: grid; gap: 8px; font-size: 12px; color: var(--ink); }
+.scout-list > div { display: grid; grid-template-columns: 20px 1fr; gap: 8px; align-items: baseline; }
+.scout-list b { text-align: center; }
+.scout-list .muted, .carta-stage .muted { color: var(--muted); }
+
+/* selo "S bloqueado por [motivo]" — exigido pelo spec (§ gates do Rank S) */
+.gate-panel {
+  border-color: rgba(229, 72, 77, 0.45);
+  background: linear-gradient(180deg, rgba(229, 72, 77, 0.07), var(--panel));
+}
+.gate-panel h3 { color: var(--red-soft); }
+.gate-motivo {
+  font-weight: 700; font-size: 13px; color: var(--red-soft);
+  border: 1px dashed rgba(229, 72, 77, 0.45); border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 10px; text-align: center;
+}
+.gate-txt { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+
+/* faixa-disclaimer — enxuta, acento dourado à esquerda, destaca a moldura de
+   leitura sem competir com a carta (o LCP logo abaixo dela na página do político).
+   Reusada na home (antes da Tier List) via variante .home. */
+.carta-disclaimer {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 11px 14px 11px 13px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.07), rgba(212, 175, 55, 0.02));
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.carta-disclaimer b { color: var(--gold-2); font-weight: 700; }
+/* na carta: encosta no espaço do carta-hero sem somar ao gap de 18px do stage */
+.carta-stage .carta-disclaimer { margin-bottom: -4px; }
+/* na home: respira antes da Tier List */
+.carta-disclaimer.home { margin-bottom: 22px; }
+
+.carta-note { font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+.carta-note b { color: var(--ink); }
+
+.carta-titles { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* "Onde foi a cota" — barra 100% empilhada + legenda (ver CotaBreakdown) */
+.cota-bar {
+  display: flex; height: 22px; width: 100%; border-radius: 6px; overflow: hidden;
+  border: 1px solid var(--line); background: #0c1018; margin: 2px 0 12px;
+}
+.cota-seg { height: 100%; min-width: 2px; }
+/* relief entre degraus escuros da rampa: fina divisa + tooltip por segmento */
+.cota-seg + .cota-seg { border-left: 1px solid rgba(10, 13, 20, 0.5); }
+.cota-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--muted); }
+.cota-leg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cota-leg i { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; border: 1px solid rgba(255, 255, 255, 0.12); }
+.cota-leg b { color: var(--ink); font-weight: 700; }
+.cota-forn { font-size: 11px; color: var(--muted); margin: 12px 0 0; }
+.cota-forn b { color: var(--ink); font-weight: 600; }
+/* agregado "Onde o Congresso gasta" (Insights): uma barra por casa */
+.cota-agg { margin-top: 16px; }
+.cota-agg h4 { font-size: 13px; color: var(--gold-2); margin: 0 0 8px; display: flex; align-items: baseline; gap: 8px; }
+.cota-agg h4 small { color: var(--muted); font-weight: 400; font-size: 11px; }
+
+.carta-back { font-size: 11px; color: var(--muted); text-align: center; }
+.carta-back a { color: var(--gold-2); text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .futc-head { grid-template-columns: 74px 1fr; }
+  .futc-ops { font-size: 46px; }
+}

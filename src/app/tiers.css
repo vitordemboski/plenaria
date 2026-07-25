@@ -1,0 +1,53 @@
+/* ============================================================
+   TIERS — identidade visual por rank (S/A/B/C/D/F)
+   Escala material na paleta dourado-heráldica (#3a2f18 → #f6e39b):
+     S ouro lendário · A ouro épico · B latão metálico · C bronze
+     texturizado · D ferro sóbrio · F desgastado/apagado.
+   Importado em layout.tsx DEPOIS de globals.css — a ordem importa:
+   estas regras sobrescrevem as bases .fcard/.mini-card.
+   (Os materiais da CARTA — .futc — vivem em carta.css.)
+   ============================================================ */
+
+/* cor base de cada tier — herdada por chips, badges, barras e legendas */
+.tier-S { --tc: #f6e39b; }
+.tier-A { --tc: #e0b84a; }
+.tier-B { --tc: #c9962b; }
+.tier-C { --tc: #9a7a1e; }
+.tier-D { --tc: #6b5518; }
+.tier-F { --tc: #55442a; }
+
+.tier-chip {
+  font-family: var(--font-display), serif; font-weight: 900; font-size: 13px;
+  width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: 8px;
+  background: var(--tc); color: #0a0d14; flex-shrink: 0;
+}
+
+/* D e F têm fundo escuro demais para texto escuro — clareia o glifo */
+.tier-D .tier-chip, .tier-chip.tier-D, .tier-F .tier-chip, .tier-chip.tier-F,
+.tier-mini.tier-D i, .tier-mini.tier-F i,
+.tier-section.tier-D .tier-head .big, .tier-section.tier-F .tier-head .big { color: #ded8c8; }
+
+/* accent discreto por tier nos rosters (mini-cards recebem tier-X) */
+.mini-card { border-left: 3px solid var(--tc, var(--line)); }
+
+/* ------------------------------------------------------------
+   .fcard — card de lutador no Modo Batalha
+   ------------------------------------------------------------ */
+.fcard.tier-S {
+  border-color: rgba(246, 227, 155, 0.75);
+  animation: fcard-pulse 2.6s ease-in-out infinite alternate;
+}
+@keyframes fcard-pulse {
+  from { box-shadow: 0 0 18px -8px rgba(255, 217, 112, 0.35); }
+  to { box-shadow: 0 0 34px -4px rgba(255, 217, 112, 0.6); }
+}
+.fcard.tier-A { border-color: rgba(212, 175, 55, 0.55); box-shadow: 0 0 24px -8px rgba(212, 175, 55, 0.35); }
+.fcard.tier-B { border-color: rgba(201, 150, 43, 0.5); }
+.fcard.tier-C { border-color: rgba(154, 122, 30, 0.4); }
+.fcard.tier-D { border-color: rgba(107, 85, 24, 0.35); }
+.fcard.tier-F { border-style: dashed; border-color: rgba(85, 68, 42, 0.55); }
+.fcard.tier-F .portrait { filter: grayscale(0.5) brightness(0.9); }
+
+@media (prefers-reduced-motion: reduce) {
+  .fcard.tier-S { animation: none; box-shadow: 0 0 24px -8px rgba(255, 217, 112, 0.45); }
+}

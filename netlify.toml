@@ -1,0 +1,31 @@
+# Headers de cache — versionados aqui para não depender do painel da Netlify.
+#
+# Princípio (ver CLAUDE.md): os dados quase não mudam (batch, no máx. diário) e
+# as fotos são id-keyed (só mudam em redeploy). Logo `/data/*` e `/fotos/*` são
+# imutáveis por URL: marcá-los `immutable` elimina os round-trips de revalidação
+# numa sessão multi-página. O `@netlify/plugin-nextjs` já cuida de `/_next/static/*`
+# (content-hash) e do HTML (`max-age=0, must-revalidate`); aqui só cobrimos o que
+# ele NÃO marca. Brotli/gzip a Netlify já negocia sozinha para texto.
+#
+# TOPOLOGIA DE EDGE EM PROD: a Netlify NÃO é o CDN que atende o usuário. O
+# domínio (plenariarpg.com) está na Cloudflare com os registros PROXIED (laranja),
+# então a Cloudflare fica NA FRENTE da Netlify e cacheia na borda de São Paulo
+# (GRU) — a Netlify não tem POP na América do Sul e servia o Brasil dos EUA
+# (~130ms de RTT; imagem "às vezes" em 600ms). Estes `Cache-Control` são a fonte
+# da verdade: a Cloudflare os HERDA (Edge TTL "respeitar o header de origem").
+# `.webp` a Cloudflare cacheia por extensão default; `/data/*.json` NÃO — por
+# isso existe uma Cache Rule no painel da Cloudflare marcando `/data/` e `/fotos/`
+# como "Eligible for cache". SSL/TLS da zona = Full (strict) (a Netlify serve cert
+# válido e força HTTPS; "Flexible" daria loop de redirect). Ao depurar cache em
+# prod, olhe `cf-cache-status`/`cf-ray`, não só o header da Netlify — são DOIS CDNs
+# empilhados, e é a Cloudflare que decide o que o usuário recebe.
+
+[[headers]]
+  for = "/fotos/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

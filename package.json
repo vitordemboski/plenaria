@@ -1,0 +1,33 @@
+{
+  "name": "plenaria",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "data:real": "node scripts/ingest-real.mjs && node scripts/fetch-fotos.mjs",
+    "fotos": "node scripts/fetch-fotos.mjs",
+    "og": "node scripts/make-og.mjs",
+    "social:template": "node scripts/social-template.mjs",
+    "social:discover": "node scripts/social-discover.mjs",
+    "social:fetch": "node scripts/social-fetch.mjs",
+    "predev": "node scripts/check-data.mjs",
+    "dev": "next dev -p 3001",
+    "prebuild": "node scripts/check-data.mjs",
+    "build": "next build",
+    "start": "npx serve out -l 3001",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/lib/*.test.mjs"
+  },
+  "dependencies": {
+    "next": "^15.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "sharp": "^0.35.3",
+    "typescript": "^5"
+  }
+}

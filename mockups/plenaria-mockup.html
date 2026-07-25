@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLENÁRIA — Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;900&family=Sometype+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0d14;
+    --panel:#11151f;
+    --panel-2:#161b28;
+    --ink:#e8e3d3;
+    --muted:#8a8f9e;
+    --line:rgba(212,175,55,.18);
+    --gold:#d4af37;
+    --gold-2:#f4e2a1;
+    --s-glow:#ffd970;
+    --win:#4ade80;
+    --lose:#8a8f9e;
+    --red:#e5484d;
+    --green:#3ecf8e;
+    --purple:#a684ff;
+    --pon:#c9962b;      /* Guilda PON */
+    --fpu:#e5484d;      /* Guilda FPU */
+    --font-d:'Cinzel',serif;
+    --font-m:'Sometype Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(212,175,55,.08), transparent 60%),
+      radial-gradient(900px 500px at 90% 110%, rgba(166,132,255,.06), transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--font-m);
+    min-height:100vh;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* subtle grain */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:38px 22px 80px;position:relative;z-index:2}
+
+  /* ---------- HEADER ---------- */
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;margin-bottom:34px}
+  .brand{display:flex;align-items:baseline;gap:14px}
+  .brand h1{
+    font-family:var(--font-d);font-weight:900;letter-spacing:.14em;font-size:clamp(26px,4vw,40px);
+    background:linear-gradient(180deg,var(--gold-2),var(--gold) 55%,#9a7a1e);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 1px 0 rgba(0,0,0,.4);
+  }
+  .brand small{font-size:11px;letter-spacing:.32em;color:var(--muted);text-transform:uppercase}
+  .tabs{display:flex;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px}
+  .tab{
+    font-family:var(--font-m);font-weight:600;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);background:none;border:0;padding:9px 18px;border-radius:999px;cursor:pointer;transition:.25s;
+  }
+  .tab.active{color:#0a0d14;background:linear-gradient(180deg,var(--gold-2),var(--gold));box-shadow:0 0 18px rgba(212,175,55,.4)}
+  .tab:not(.active):hover{color:var(--ink)}
+
+  .view{display:none;animation:fade .5s ease both}
+  .view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ---------- CARD VIEW LAYOUT ---------- */
+  .card-stage{display:grid;grid-template-columns:minmax(0,380px) 1fr;gap:44px;align-items:start}
+  @media(max-width:820px){.card-stage{grid-template-columns:1fr;gap:34px}}
+  .stage-note h2{font-family:var(--font-d);font-weight:700;font-size:20px;letter-spacing:.06em;margin-bottom:14px;color:var(--gold-2)}
+  .stage-note p{color:var(--muted);font-size:13.5px;line-height:1.7;margin-bottom:14px}
+  .stage-note .key{color:var(--ink)}
+  .legend{border-left:2px solid var(--line);padding:2px 0 2px 16px;margin-top:22px;display:grid;gap:11px}
+  .legend div{font-size:12px;color:var(--muted)}
+  .legend b{color:var(--ink);font-weight:600}
+
+  /* ---------- THE CARD ---------- */
+  .card{
+    position:relative;width:100%;max-width:380px;border-radius:20px;padding:3px;
+    background:linear-gradient(140deg,#7a5e18,#f4e2a1 22%,#b7902c 46%,#f9edb9 66%,#8a6c1e);
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 40px -8px rgba(212,175,55,.45);
+    isolation:isolate;
+  }
+  .card::before{ /* holographic sheen */
+    content:"";position:absolute;inset:0;border-radius:20px;padding:3px;z-index:3;pointer-events:none;
+    background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.55) 38%,rgba(120,220,255,.35) 46%,rgba(255,150,255,.3) 54%,transparent 72%);
+    background-size:250% 250%;
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;
+    mix-blend-mode:screen;opacity:.55;animation:holo 6s linear infinite;
+  }
+  @keyframes holo{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+  .card-inner{
+    position:relative;background:
+      radial-gradient(120% 80% at 50% -10%,rgba(212,175,55,.14),transparent 55%),
+      linear-gradient(180deg,#12161f,#0c0f17);
+    border-radius:17px;padding:16px 16px 18px;overflow:hidden;
+  }
+  .card-inner::after{ /* faint dossier watermark */
+    content:"DOSSIÊ";position:absolute;right:-6px;bottom:22px;font-family:var(--font-d);font-weight:900;
+    font-size:64px;letter-spacing:.1em;color:rgba(212,175,55,.04);transform:rotate(-90deg);transform-origin:right bottom;pointer-events:none;
+  }
+
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:2}
+  /* Guild brasão */
+  .brasao{width:46px;height:54px}
+  .tier-badge{
+    position:relative;width:58px;height:58px;display:grid;place-items:center;border-radius:12px;
+    font-family:var(--font-d);font-weight:900;font-size:30px;color:#0a0d14;
+    background:radial-gradient(circle at 30% 25%,var(--s-glow),var(--gold) 55%,#a17c1c);
+    box-shadow:0 0 22px rgba(255,217,112,.55),inset 0 0 8px rgba(255,255,255,.5);
+    animation:pulse 2.6s ease-in-out infinite;
+  }
+  .tier-badge span{transform:translateY(-1px)}
+  .tier-badge small{position:absolute;top:-8px;right:-8px;font-family:var(--font-m);font-size:9px;letter-spacing:.1em;
+    background:#0a0d14;color:var(--gold-2);border:1px solid var(--gold);padding:2px 5px;border-radius:6px}
+  @keyframes pulse{0%,100%{box-shadow:0 0 22px rgba(255,217,112,.5),inset 0 0 8px rgba(255,255,255,.5)}50%{box-shadow:0 0 34px rgba(255,217,112,.85),inset 0 0 8px rgba(255,255,255,.6)}}
+
+  .portrait{
+    position:relative;z-index:2;margin:12px 0 6px;height:184px;border-radius:12px;overflow:hidden;
+    border:1px solid rgba(212,175,55,.35);
+    background:
+      radial-gradient(90% 70% at 50% 20%,#26324a,#141a28 70%),
+      repeating-linear-gradient(45deg,rgba(255,255,255,.02) 0 8px,transparent 8px 16px);
+    display:grid;place-items:center;
+  }
+  .portrait .silhouette{width:120px;height:150px;opacity:.9}
+  .portrait .frame-tag{position:absolute;left:10px;bottom:9px;font-size:9.5px;letter-spacing:.18em;color:var(--gold-2);
+    background:rgba(10,13,20,.7);border:1px solid var(--line);padding:3px 7px;border-radius:6px}
+
+  .id-row{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px}
+  .id-row h3{font-family:var(--font-d);font-weight:700;font-size:19px;letter-spacing:.03em;line-height:1.1}
+  .id-row .meta{font-size:11px;color:var(--muted);letter-spacing:.08em;margin-top:4px}
+  .ops{text-align:right}
+  .ops b{font-family:var(--font-d);font-size:26px;color:var(--gold-2);line-height:1}
+  .ops small{display:block;font-size:9px;letter-spacing:.24em;color:var(--muted);margin-top:2px}
+
+  .stats{position:relative;z-index:2;margin-top:14px;display:grid;gap:9px}
+  .stat{display:grid;grid-template-columns:20px 74px 1fr 30px;align-items:center;gap:9px;font-size:12px}
+  .stat .ic{font-size:14px;text-align:center}
+  .stat .lbl{color:var(--muted);letter-spacing:.04em;font-size:11px;text-transform:uppercase}
+  .stat .track{height:8px;border-radius:6px;background:#0c1018;border:1px solid rgba(255,255,255,.05);overflow:hidden;position:relative}
+  .stat .fill{
+    height:100%;width:0;border-radius:6px;transition:width 1.1s cubic-bezier(.2,.8,.2,1);
+    background:linear-gradient(90deg,#8a6c1e,var(--gold) 60%,var(--gold-2));
+    box-shadow:0 0 10px rgba(212,175,55,.4);
+  }
+  .stat .fill.low{background:linear-gradient(90deg,#5a2530,#e5484d)}
+  .stat .val{font-weight:700;color:var(--ink);text-align:right;font-size:12px}
+
+  .card-foot{position:relative;z-index:2;margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+  .titles{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .badge{font-size:10.5px;letter-spacing:.03em;padding:5px 9px;border-radius:7px;border:1px solid;display:inline-flex;gap:5px;align-items:center;cursor:help;transition:.2s}
+  .badge:hover{transform:translateY(-1px)}
+  .badge.green{color:#bff3d6;border-color:rgba(62,207,142,.4);background:rgba(62,207,142,.08)}
+  .badge.red{color:#f7b9bb;border-color:rgba(229,72,77,.4);background:rgba(229,72,77,.08)}
+  .badge.purple{color:#d8caff;border-color:rgba(166,132,255,.4);background:rgba(166,132,255,.08)}
+
+  .spark-row{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+  .spark-row .cap{font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+  .spark{display:flex;align-items:flex-end;gap:4px;height:34px}
+  .spark i{width:9px;background:linear-gradient(180deg,var(--gold-2),var(--gold));border-radius:2px 2px 0 0;opacity:.85;
+    animation:grow 1s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes grow{from{height:0!important;opacity:0}}
+
+  .cta{display:flex;gap:10px;margin-top:16px;position:relative;z-index:2}
+  .btn{
+    flex:1;font-family:var(--font-m);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:12px;
+    padding:12px;border-radius:10px;border:1px solid var(--gold);cursor:pointer;transition:.22s;
+    background:linear-gradient(180deg,var(--gold-2),var(--gold));color:#0a0d14;
+  }
+  .btn.ghost{background:transparent;color:var(--gold-2);border-color:var(--line)}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 10px 22px -8px rgba(212,175,55,.6)}
+  .btn.ghost:hover{border-color:var(--gold);background:rgba(212,175,55,.08)}
+
+  .src{margin-top:12px;font-size:9.5px;color:#565b68;letter-spacing:.05em;text-align:center;position:relative;z-index:2}
+
+  /* ---------- BATTLE VIEW ---------- */
+  .battle-title{text-align:center;margin-bottom:26px}
+  .battle-title h2{font-family:var(--font-d);font-weight:900;font-size:clamp(24px,5vw,38px);letter-spacing:.22em;
+    background:linear-gradient(180deg,var(--gold-2),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .battle-title p{color:var(--muted);font-size:12px;letter-spacing:.2em;text-transform:uppercase;margin-top:6px}
+
+  .fighters{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center;margin-bottom:30px}
+  @media(max-width:640px){.fighters{grid-template-columns:1fr;gap:10px}}
+  .fighter{
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:16px;
+    padding:18px;text-align:center;position:relative;overflow:hidden;
+  }
+  .fighter.a{border-color:rgba(201,150,43,.45)}
+  .fighter.b{border-color:rgba(229,72,77,.4)}
+  .fighter .port{height:120px;border-radius:12px;margin-bottom:12px;display:grid;place-items:center;
+    background:radial-gradient(80% 70% at 50% 25%,#26324a,#131926 70%)}
+  .fighter .port svg{height:96px;opacity:.9}
+  .fighter h4{font-family:var(--font-d);font-weight:700;font-size:16px;letter-spacing:.03em}
+  .fighter .g{font-size:11px;color:var(--muted);letter-spacing:.08em;margin-top:5px;display:flex;align-items:center;justify-content:center;gap:6px}
+  .fighter .rk{position:absolute;top:12px;right:12px;font-family:var(--font-d);font-weight:900;font-size:15px;
+    width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:#0a0d14}
+  .fighter.a .rk{background:radial-gradient(circle at 30% 25%,var(--s-glow),var(--gold))}
+  .fighter.b .rk{background:radial-gradient(circle at 30% 25%,#ff8a8d,#c9363b);color:#160809}
+  .vs{font-family:var(--font-d);font-weight:900;font-size:34px;color:var(--gold-2);
+    text-shadow:0 0 24px rgba(212,175,55,.6);letter-spacing:.05em}
+  @media(max-width:640px){.vs{justify-self:center}}
+
+  .rounds{display:grid;gap:12px;max-width:720px;margin:0 auto}
+  .round{display:grid;grid-template-columns:40px 1fr 40px;gap:12px;align-items:center}
+  .round .an{text-align:right;font-weight:700;font-family:var(--font-d);font-size:16px;transition:color .4s}
+  .round .bn{text-align:left;font-weight:700;font-family:var(--font-d);font-size:16px;transition:color .4s}
+  .tug{position:relative;height:34px;border-radius:9px;background:#0c1018;border:1px solid rgba(255,255,255,.05);overflow:hidden}
+  .tug .lbl{position:absolute;inset:0;display:grid;place-items:center;font-size:10.5px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--muted);z-index:3}
+  .tug .sideA,.tug .sideB{position:absolute;top:0;bottom:0;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+  .tug .sideA{left:0;background:linear-gradient(90deg,rgba(201,150,43,.55),rgba(201,150,43,.12))}
+  .tug .sideB{right:0;background:linear-gradient(270deg,rgba(229,72,77,.55),rgba(229,72,77,.12))}
+  .round.awin .an{color:var(--gold-2)} .round.bwin .bn{color:#ff9a9d}
+  .round .arrow{opacity:0;transition:opacity .5s .6s}
+  .round.awin .arrow.la,.round.bwin .arrow.rb{opacity:1}
+  .arrow{font-size:12px}
+
+  .scoreboard{max-width:720px;margin:26px auto 0;text-align:center;
+    border:1px solid var(--line);border-radius:16px;padding:22px;background:linear-gradient(180deg,var(--panel-2),var(--panel));position:relative;overflow:hidden}
+  .scoreboard .score{font-family:var(--font-d);font-weight:900;font-size:40px;letter-spacing:.1em}
+  .scoreboard .score .a{color:var(--gold-2)} .scoreboard .score .b{color:#ff9a9d} .scoreboard .score .x{color:var(--muted);font-size:26px;margin:0 12px}
+  .winner{margin-top:12px;font-family:var(--font-d);font-weight:700;font-size:20px;letter-spacing:.08em;color:var(--gold-2)}
+  .winner .ko{display:inline-block;margin-left:8px;color:#fff;background:var(--red);font-size:13px;padding:3px 9px;border-radius:6px;
+    font-family:var(--font-m);letter-spacing:.1em;animation:ko .5s cubic-bezier(.3,1.6,.5,1) both}
+  @keyframes ko{from{transform:scale(0) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}
+  .share{margin-top:16px;font-family:var(--font-m);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:12px;
+    padding:11px 22px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--gold-2);cursor:pointer;transition:.2s}
+  .share:hover{border-color:var(--gold);background:rgba(212,175,55,.08)}
+  .disclaimer{max-width:720px;margin:16px auto 0;text-align:center;font-size:10.5px;color:#565b68;letter-spacing:.04em}
+
+  .foot{margin-top:70px;text-align:center;color:#4a4f5c;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  .foot b{color:var(--gold)}
+
+  /* ---------- INSIGHTS VIEW ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  @media(max-width:820px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .kpi .k-lbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .kpi .k-val{font-family:var(--font-d);font-weight:900;font-size:32px;color:var(--gold-2);line-height:1.15;margin-top:6px}
+  .kpi .k-sub{font-size:10.5px;color:var(--muted);margin-top:4px}
+  .kpi .k-sub .up{color:var(--win)} .kpi .k-sub .down{color:#ff9a9d}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .panel{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:12px}
+  .panel h3{font-family:var(--font-d);font-weight:700;font-size:15px;letter-spacing:.05em;color:var(--gold-2)}
+  .panel .sub{font-size:11px;color:var(--muted);margin:4px 0 14px}
+
+  /* stacked guild bars */
+  .grow{display:grid;grid-template-columns:44px 1fr 34px;gap:10px;align-items:center;margin-bottom:9px;font-size:11.5px}
+  .grow .gn{font-weight:700;letter-spacing:.06em;text-align:right}
+  .gbar{display:flex;height:22px;border-radius:6px;overflow:hidden;gap:2px;background:transparent}
+  .gseg{height:100%;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);border-radius:3px;cursor:default;transition:filter .15s}
+  .gseg:hover{filter:brightness(1.3)}
+  .grow .gt{color:var(--muted);font-size:11px}
+  .tier-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;font-size:10.5px;color:var(--muted)}
+  .tier-legend span{display:inline-flex;align-items:center;gap:5px}
+  .tier-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+
+  /* tile map */
+  .metric-row{display:flex;gap:6px;margin-bottom:14px}
+  .mbtn{font-family:var(--font-m);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:6px 12px;border-radius:8px;
+    border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;transition:.2s}
+  .mbtn.active{color:#0a0d14;background:linear-gradient(180deg,var(--gold-2),var(--gold));border-color:var(--gold)}
+  .tilemap{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:340px}
+  .uf{aspect-ratio:1;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;letter-spacing:.04em;
+    color:var(--ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.09);cursor:default;transition:transform .12s}
+  .uf:hover{transform:scale(1.12);z-index:2}
+  .uf.dark-txt{color:#0a0d14}
+  .maplegend{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:10px;color:var(--muted)}
+  .maplegend .ramp{flex:0 0 120px;height:8px;border-radius:4px;background:linear-gradient(90deg,#3a2f18,#f6e39b)}
+
+  /* scatter */
+  .scatter-wrap{position:relative}
+  .scatter-wrap svg{width:100%;height:auto;display:block}
+  .sc-legend{display:flex;gap:16px;margin-top:10px;font-size:10.5px;color:var(--muted);flex-wrap:wrap}
+  .sc-legend span{display:inline-flex;align-items:center;gap:6px}
+  .sc-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+  /* fame / shame lists */
+  .lrow{display:grid;grid-template-columns:24px 1fr auto 40px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px}
+  .lrow:last-child{border-bottom:0}
+  .lrow .pos{font-family:var(--font-d);font-weight:900;color:var(--muted)}
+  .lrow .nm b{display:block;font-size:12.5px}
+  .lrow .nm small{color:var(--muted);font-size:10.5px}
+  .lrow .tg{font-size:10px;padding:3px 7px;border-radius:6px;border:1px solid}
+  .lrow .tg.s{color:var(--gold-2);border-color:rgba(212,175,55,.5);background:rgba(212,175,55,.08)}
+  .lrow .tg.f{color:#f7b9bb;border-color:rgba(229,72,77,.4);background:rgba(229,72,77,.08)}
+  .lrow .sc{font-family:var(--font-d);font-weight:900;text-align:right;font-size:15px}
+  .panel.fame h3{color:var(--gold-2)} .panel.shame h3{color:#ff9a9d}
+
+  /* shared tooltip */
+  #tip{position:fixed;z-index:50;pointer-events:none;background:#0a0d14;border:1px solid var(--gold);border-radius:8px;
+    padding:8px 11px;font-size:11px;line-height:1.5;color:var(--ink);box-shadow:0 8px 24px rgba(0,0,0,.6);
+    opacity:0;transition:opacity .12s;max-width:220px}
+  #tip b{color:var(--gold-2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <h1>PLENÁRIA</h1>
+      <small>O RPG da Política Brasileira</small>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-view="card">🃏 Card</button>
+      <button class="tab" data-view="battle">⚔️ Batalha</button>
+      <button class="tab" data-view="insights">📊 Insights</button>
+    </div>
+  </header>
+
+  <!-- ============ CARD VIEW ============ -->
+  <section class="view active" id="view-card">
+    <div class="card-stage">
+
+      <!-- THE CARD -->
+      <div class="card" id="theCard">
+        <div class="card-inner">
+          <div class="card-top">
+            <!-- Brasão da Guilda PON -->
+            <svg class="brasao" viewBox="0 0 46 54" aria-label="Brasão PON">
+              <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#f4e2a1"/><stop offset="1" stop-color="#c9962b"/></linearGradient></defs>
+              <path d="M23 2 44 9v20c0 13-9 20-21 23C11 49 2 42 2 29V9z" fill="#12161f" stroke="url(#pg)" stroke-width="2"/>
+              <path d="M23 2 44 9v20c0 13-9 20-21 23C11 49 2 42 2 29V9z" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1" transform="scale(.9) translate(2.5,2.5)"/>
+              <text x="23" y="30" text-anchor="middle" font-family="Cinzel" font-weight="900" font-size="15" fill="url(#pg)">PON</text>
+              <path d="M14 34h18" stroke="url(#pg)" stroke-width="1.5"/>
+            </svg>
+            <div class="tier-badge"><span>S</span><small>91 OPS</small></div>
+          </div>
+
+          <div class="portrait">
+            <svg class="silhouette" viewBox="0 0 120 150" fill="none">
+              <circle cx="60" cy="46" r="30" fill="#3a4a68"/>
+              <path d="M12 150c0-33 22-52 48-52s48 19 48 52z" fill="#3a4a68"/>
+            </svg>
+            <span class="frame-tag">CÂMARA · 2023–2026</span>
+          </div>
+
+          <div class="id-row">
+            <div>
+              <h3>Marina Vasconcelos</h3>
+              <div class="meta">Deputada Federal · SP · Guilda PON</div>
+            </div>
+            <div class="ops"><b>91</b><small>OPS</small></div>
+          </div>
+
+          <div class="stats" id="statsCard">
+            <div class="stat"><span class="ic">⚔️</span><span class="lbl">Ataque</span><span class="track"><i class="fill" data-w="82"></i></span><span class="val">82</span></div>
+            <div class="stat"><span class="ic">🛡️</span><span class="lbl">Stamina</span><span class="track"><i class="fill" data-w="90"></i></span><span class="val">90</span></div>
+            <div class="stat"><span class="ic">📜</span><span class="lbl">Técnica</span><span class="track"><i class="fill" data-w="61"></i></span><span class="val">61</span></div>
+            <div class="stat"><span class="ic">🎯</span><span class="lbl">Eficiência</span><span class="track"><i class="fill" data-w="78"></i></span><span class="val">78</span></div>
+            <div class="stat"><span class="ic">📢</span><span class="lbl">Influência</span><span class="track"><i class="fill low" data-w="34"></i></span><span class="val">34</span></div>
+            <div class="stat"><span class="ic">🪙</span><span class="lbl">Economia</span><span class="track"><i class="fill" data-w="88"></i></span><span class="val">88</span></div>
+          </div>
+
+          <div class="card-foot">
+            <div class="titles">
+              <span class="badge green" title="Ataque ≥ 75 e Stamina ≥ 75, mas Influência < 30 — entrega muito e aparece pouco.">🔧 Operário Silencioso</span>
+              <span class="badge green" title="Economia ≥ 85 e OPS ≥ 60 — entrega bem gastando pouco do teto de benefícios.">🧺 Guardião do Cofre</span>
+              <span class="badge purple" title="1º mandato com OPS ≥ 70 — novato de alto desempenho.">🎓 Aprendiz Promissor</span>
+            </div>
+            <div class="spark-row">
+              <div class="spark" id="sparkCard"></div>
+              <span class="cap">Produção anual<br>(consistente)</span>
+            </div>
+          </div>
+
+          <div class="cta">
+            <button class="btn" data-go="battle">⚔️ Batalhar</button>
+            <button class="btn ghost">📊 Detalhes</button>
+          </div>
+          <div class="src">Fonte: Dados Abertos Câmara + Portal da Transparência + Instagram Graph API · atualizado 05/07/2026</div>
+        </div>
+      </div>
+
+      <!-- EXPLAINER -->
+      <div class="stage-note">
+        <h2>O "Character Card"</h2>
+        <p>A moldura muda de cor conforme o <span class="key">Tier</span> — aqui o <span class="key">dourado holográfico</span> sinaliza <span class="key">Rank S</span> (OPS ≥ 88 + todos os gates aprovados). Tiers baixos ganham moldura cinza e rachada.</p>
+        <p>As <span class="key">barras de atributo</span> animam ao abrir o card. A barra de <span class="key">Influência</span> fica vermelha por ser o ponto fraco — e é justamente o que rende o título <span class="key">Operário Silencioso</span> em vez de "Blogueiro de Plenário".</p>
+        <p>Cada <span class="key">título</span> é clicável (passe o mouse) e mostra a regra factual que o concedeu — transparência é o escudo reputacional do produto.</p>
+        <div class="legend">
+          <div><b>⚔️ Ataque</b> — projetos aprovados/promulgados (peso 25%)</div>
+          <div><b>🛡️ Stamina</b> — presença + votações nominais (20%)</div>
+          <div><b>🎯 Eficiência</b> — aprovados ÷ apresentados (20%)</div>
+          <div><b>📜 Técnica</b> — relatorias por comissão (15%)</div>
+          <div><b>🪙 Economia</b> — frugalidade nos benefícios: cota, moradia, passagens, gabinete (10%)</div>
+          <div><b>📢 Influência</b> — engajamento no Instagram (10%)</div>
+        </div>
+        <p style="margin-top:16px"><span class="key">🐉 Dragão do Tesouro</span> — quem usa ≥ 95% do teto em 3+ linhas de benefício por 9+ meses ganha esse título negativo (e perde o gate do Tier S), mesmo que produza bem.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BATTLE VIEW ============ -->
+  <section class="view" id="view-battle">
+    <div class="battle-title">
+      <h2>⚔ BATALHA ⚔</h2>
+      <p>Comparador 1 vs 1 — cada atributo é um round</p>
+    </div>
+
+    <div class="fighters">
+      <div class="fighter a">
+        <div class="rk">S</div>
+        <div class="port"><svg viewBox="0 0 120 150" fill="none"><circle cx="60" cy="46" r="30" fill="#3a4a68"/><path d="M12 150c0-33 22-52 48-52s48 19 48 52z" fill="#3a4a68"/></svg></div>
+        <h4>Marina Vasconcelos</h4>
+        <div class="g">🛡️ Guilda PON · Dep. · SP</div>
+      </div>
+      <div class="vs">VS</div>
+      <div class="fighter b">
+        <div class="rk">B</div>
+        <div class="port"><svg viewBox="0 0 120 150" fill="none"><circle cx="60" cy="46" r="30" fill="#4a3a42"/><path d="M12 150c0-33 22-52 48-52s48 19 48 52z" fill="#4a3a42"/></svg></div>
+        <h4>Rui Albuquerque</h4>
+        <div class="g">🛡️ Guilda FPU · Sen. · BA</div>
+        <div class="titles" style="justify-content:center;margin-top:10px">
+          <span class="badge red" title="Usou ≥ 95% do teto em 3+ linhas de benefício por 9+ meses — Tier S bloqueado.">🐉 Dragão do Tesouro</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rounds" id="rounds">
+      <!-- filled by JS -->
+    </div>
+
+    <div class="scoreboard">
+      <div class="score"><span class="a">4</span><span class="x">×</span><span class="b">2</span></div>
+      <div class="winner">🏆 Vencedora: Marina Vasconcelos <span class="ko">K.O.!</span></div>
+      <button class="share">📲 Compartilhar resultado</button>
+    </div>
+    <div class="disclaimer">⚠︎ Comparação entre casas diferentes (Deputado × Senador): atributos normalizados por percentil dentro de cada casa.</div>
+  </section>
+
+  <!-- ============ INSIGHTS VIEW ============ -->
+  <section class="view" id="view-insights">
+    <div class="battle-title">
+      <h2>📊 INSIGHTS</h2>
+      <p>Análises avançadas do reino — dados fictícios</p>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="k-lbl">Políticos Tier S</div><div class="k-val">12</div><div class="k-sub"><span class="up">▲ 3</span> vs. período anterior</div></div>
+      <div class="kpi"><div class="k-lbl">OPS médio nacional</div><div class="k-val">54</div><div class="k-sub"><span class="down">▼ 2 pts</span> no semestre</div></div>
+      <div class="kpi"><div class="k-lbl">🏹 Caçadores de Votos</div><div class="k-val">37</div><div class="k-sub">detectados no ciclo eleitoral</div></div>
+      <div class="kpi"><div class="k-lbl">📱 Blogueiros de Plenário</div><div class="k-val">23</div><div class="k-sub"><span class="up">▲ 5</span> — engajamento sobe, plenário esvazia</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <h3>🏆 Ranking de Guildas</h3>
+        <div class="sub">Composição de membros por Tier — ordenado por nº de Rank S</div>
+        <div id="guildBars"></div>
+        <div class="tier-legend" id="tierLegend"></div>
+      </div>
+
+      <div class="panel">
+        <h3>🗺️ Mapa do Reino</h3>
+        <div class="sub" id="mapSub">OPS médio por UF — passe o mouse nos estados</div>
+        <div class="metric-row">
+          <button class="mbtn active" data-metric="ops">OPS médio</button>
+          <button class="mbtn" data-metric="blog">📱 Blogueiros de Plenário</button>
+        </div>
+        <div class="tilemap" id="tilemap"></div>
+        <div class="maplegend"><span id="mapLo">baixo</span><span class="ramp"></span><span id="mapHi">alto</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>💸 Gasto × Entrega</h3>
+      <div class="sub">Cota parlamentar média mensal vs. OPS — o quadrante sombreado marca os <b style="color:#ff9a9d">Nobres Gastadores</b> (gasta muito, entrega pouco)</div>
+      <div class="scatter-wrap"><svg id="scatter" viewBox="0 0 720 300" role="img" aria-label="Dispersão de gasto de cota por OPS"></svg></div>
+      <div class="sc-legend">
+        <span><i style="background:var(--gold)"></i> Parlamentar</span>
+        <span><i style="background:var(--red)"></i> 💸 Nobre Gastador (flag ativa)</span>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel fame">
+        <h3>📈 Hall da Fama</h3>
+        <div class="sub">Top 5 nacional por OPS</div>
+        <div id="fameList"></div>
+      </div>
+      <div class="panel shame">
+        <h3>📉 Muro da Vergonha</h3>
+        <div class="sub">Bottom 5 nacional por OPS</div>
+        <div id="shameList"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="tip"></div>
+
+  <div class="foot">Mockup de produto · dados fictícios · fórmula pública e auditável · <b>PLENÁRIA</b></div>
+</div>
+
+<script>
+  const rounds = [
+    {name:'⚔️ Ataque',    a:82, b:61},
+    {name:'🛡️ Stamina',   a:90, b:95},
+    {name:'🎯 Eficiência', a:78, b:40},
+    {name:'📜 Técnica',    a:61, b:55},
+    {name:'📢 Influência', a:34, b:88},
+    {name:'🪙 Economia',   a:88, b:22},
+  ];
+
+  // build rounds
+  const rc = document.getElementById('rounds');
+  rounds.forEach(r=>{
+    const total = r.a + r.b;
+    const aw = r.a>=r.b;
+    const el = document.createElement('div');
+    el.className = 'round ' + (aw?'awin':'bwin');
+    el.innerHTML = `
+      <div class="an">${r.a}<div class="arrow la">◀ vence</div></div>
+      <div class="tug">
+        <div class="sideA" data-w="${(r.a/total*100).toFixed(1)}"></div>
+        <div class="sideB" data-w="${(r.b/total*100).toFixed(1)}"></div>
+        <span class="lbl">${r.name}</span>
+      </div>
+      <div class="bn">${r.b}<div class="arrow rb">vence ▶</div></div>`;
+    rc.appendChild(el);
+  });
+
+  // sparkline (consistent production a->b->c->d years)
+  const spark = document.getElementById('sparkCard');
+  [58,62,66,70].forEach((h,i)=>{
+    const bar=document.createElement('i');
+    bar.style.height=h+'%'; bar.style.animationDelay=(i*.12+.3)+'s';
+    spark.appendChild(bar);
+  });
+
+  function animateStats(root){
+    root.querySelectorAll('.fill').forEach((f,i)=>{
+      f.style.width='0';
+      setTimeout(()=>f.style.width=f.dataset.w+'%', 120 + i*90);
+    });
+  }
+  function animateTug(){
+    document.querySelectorAll('.tug .sideA,.tug .sideB').forEach((f,i)=>{
+      f.style.width='0';
+      setTimeout(()=>f.style.width=f.dataset.w+'%', 150 + i*70);
+    });
+  }
+
+  /* ================= INSIGHTS ================= */
+  const tip = document.getElementById('tip');
+  function tipShow(html,e){ tip.innerHTML=html; tip.style.opacity=1;
+    tip.style.left=Math.min(e.clientX+14,window.innerWidth-240)+'px'; tip.style.top=(e.clientY+14)+'px'; }
+  function tipHide(){ tip.style.opacity=0; }
+
+  // Rampa sequencial dourada (validada: lightness monotônica; degraus escuros usam relief: borda + rótulo + tooltip)
+  const TIER_COLORS = {S:'#f6e39b',A:'#e0b84a',B:'#c9962b',C:'#9a7a1e',D:'#6b5518',F:'#55442a'};
+  const TIERS = ['S','A','B','C','D','F'];
+
+  // ---- Ranking de Guildas (stacked) ----
+  const guilds = [
+    {sigla:'PON', tiers:{S:4,A:12,B:18,C:10,D:5,F:2}},
+    {sigla:'LVR', tiers:{S:3,A:10,B:12,C:8, D:4,F:1}},
+    {sigla:'BST', tiers:{S:2,A:9, B:16,C:12,D:6,F:3}},
+    {sigla:'FPU', tiers:{S:2,A:8, B:14,C:16,D:9,F:4}},
+    {sigla:'ACD', tiers:{S:1,A:6, B:10,C:14,D:11,F:6}},
+    {sigla:'MRD', tiers:{S:0,A:4, B:8, C:15,D:12,F:8}},
+  ];
+  const maxTotal = Math.max(...guilds.map(g=>TIERS.reduce((s,t)=>s+g.tiers[t],0)));
+  const gb = document.getElementById('guildBars');
+  guilds.forEach(g=>{
+    const total = TIERS.reduce((s,t)=>s+g.tiers[t],0);
+    const row = document.createElement('div'); row.className='grow';
+    const bar = document.createElement('div'); bar.className='gbar';
+    bar.style.width = (total/maxTotal*100)+'%';
+    TIERS.forEach(t=>{
+      const n = g.tiers[t]; if(!n) return;
+      const seg = document.createElement('div'); seg.className='gseg';
+      seg.style.flex = n; seg.style.background = TIER_COLORS[t];
+      seg.onmousemove = e=>tipShow(`<b>Guilda ${g.sigla}</b><br>Tier ${t}: ${n} membros (${Math.round(n/total*100)}%)`,e);
+      seg.onmouseleave = tipHide;
+      bar.appendChild(seg);
+    });
+    row.innerHTML = `<div class="gn">${g.sigla}</div>`;
+    row.appendChild(bar);
+    row.insertAdjacentHTML('beforeend',`<div class="gt">${total}</div>`);
+    gb.appendChild(row);
+  });
+  document.getElementById('tierLegend').innerHTML =
+    TIERS.map(t=>`<span><i style="background:${TIER_COLORS[t]}"></i>Tier ${t}</span>`).join('');
+
+  // ---- Mapa do Reino (tile cartogram) ----
+  // {UF: [col,row, opsMedio, blogueiros]}
+  const UFS = {
+    RR:[2,1,42,1], AP:[4,1,39,0],
+    AM:[1,2,51,2], PA:[3,2,47,3], MA:[5,2,44,2], CE:[6,2,58,3], RN:[7,2,49,1],
+    AC:[1,3,37,1], RO:[2,3,45,0], TO:[4,3,50,1], PI:[5,3,52,1], PE:[6,3,61,4], PB:[7,3,46,2],
+    MT:[3,4,55,2], DF:[4,4,63,5], BA:[5,4,57,6], AL:[6,4,35,2], SE:[7,4,41,1],
+    MS:[3,5,48,1], GO:[4,5,53,2], MG:[5,5,66,7], ES:[6,5,59,2],
+    SP:[4,6,71,9], RJ:[5,6,62,8],
+    PR:[4,7,68,3],
+    SC:[4,8,72,2],
+    RS:[4,9,64,4],
+  };
+  const tilemap = document.getElementById('tilemap');
+  tilemap.style.gridTemplateColumns='repeat(7,1fr)';
+  tilemap.style.gridTemplateRows='repeat(9,1fr)';
+  function lerp(a,b,t){return a+(b-a)*t}
+  function rampColor(t){ // #3a2f18 -> #f6e39b
+    const c1=[58,47,24], c2=[246,227,155];
+    return `rgb(${c1.map((v,i)=>Math.round(lerp(v,c2[i],t))).join(',')})`;
+  }
+  let metric='ops';
+  function renderMap(){
+    tilemap.innerHTML='';
+    const vals = Object.values(UFS).map(u=>metric==='ops'?u[2]:u[3]);
+    const lo=Math.min(...vals), hi=Math.max(...vals);
+    document.getElementById('mapLo').textContent=lo;
+    document.getElementById('mapHi').textContent=hi;
+    document.getElementById('mapSub').textContent = metric==='ops'
+      ? 'OPS médio por UF — passe o mouse nos estados'
+      : 'Nº de "Blogueiros de Plenário" por UF — passe o mouse';
+    Object.entries(UFS).forEach(([uf,[c,r,ops,blog]])=>{
+      const v = metric==='ops'?ops:blog;
+      const t = (v-lo)/(hi-lo||1);
+      const cell=document.createElement('div'); cell.className='uf'+(t>.55?' dark-txt':'');
+      cell.style.gridColumn=c; cell.style.gridRow=r;
+      cell.style.background=rampColor(t);
+      cell.textContent=uf;
+      cell.onmousemove=e=>tipShow(`<b>${uf}</b><br>OPS médio: ${ops}<br>📱 Blogueiros: ${blog}`,e);
+      cell.onmouseleave=tipHide;
+      tilemap.appendChild(cell);
+    });
+  }
+  renderMap();
+  document.querySelectorAll('.mbtn').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('.mbtn').forEach(x=>x.classList.toggle('active',x===b));
+    metric=b.dataset.metric; renderMap();
+  });
+
+  // ---- Scatter Gasto × Entrega ----
+  const NOMES=['Almeida','Barros','Castro','Duarte','Esteves','Farias','Gomes','Horta','Ibrahim','Justo',
+    'Klein','Lacerda','Moura','Nunes','Osório','Prado','Queiroz','Ramos','Sales','Teles',
+    'Uchoa','Viana','Wanderley','Xavier','Ypiranga','Zagallo','Bittar','Coimbra'];
+  let seed=42; const rnd=()=>((seed=seed*16807%2147483647)/2147483647);
+  const pontos = NOMES.map(n=>{
+    const gasto = 15+rnd()*115;                 // R$ mil/mês
+    const ops   = Math.max(8,Math.min(96, 95-gasto*.35+(rnd()-0.5)*46));
+    return {n, gasto, ops, flag: gasto>85 && ops<40};
+  });
+  // outliers manuais no quadrante crítico (garante flags visíveis no mockup)
+  [['Vilaça',108,18],['Camargo',96,31],['Gusmão',124,26],['Peçanha',90,36]]
+    .forEach(([n,gasto,ops])=>pontos.push({n,gasto,ops,flag:true}));
+  (function drawScatter(){
+    const svg=document.getElementById('scatter');
+    const W=720,H=300,m={l:46,r:16,t:12,b:34};
+    const X=g=>m.l+(g/140)*(W-m.l-m.r), Y=o=>H-m.b-(o/100)*(H-m.t-m.b);
+    let s='';
+    // quadrante Nobre Gastador (gasto>85, ops<40)
+    s+=`<rect x="${X(85)}" y="${Y(40)}" width="${X(140)-X(85)}" height="${Y(0)-Y(40)}" fill="rgba(229,72,77,.07)" stroke="rgba(229,72,77,.25)" stroke-dasharray="4 4"/>`;
+    s+=`<text x="${X(112)}" y="${Y(6)}" text-anchor="middle" font-size="9" fill="#ff9a9d" letter-spacing="1.5">💸 NOBRES GASTADORES</text>`;
+    // grid + eixos (recessivos)
+    [0,25,50,75,100].forEach(o=>{
+      s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(o)}" y2="${Y(o)}" stroke="rgba(255,255,255,.05)"/>`;
+      s+=`<text x="${m.l-8}" y="${Y(o)+3}" text-anchor="end" font-size="9" fill="#8a8f9e">${o}</text>`;
+    });
+    [0,35,70,105,140].forEach(g=>{
+      s+=`<text x="${X(g)}" y="${H-m.b+16}" text-anchor="middle" font-size="9" fill="#8a8f9e">${g}</text>`;
+    });
+    s+=`<text x="${(m.l+W-m.r)/2}" y="${H-4}" text-anchor="middle" font-size="9" fill="#8a8f9e" letter-spacing="1.5">GASTO DE COTA (R$ MIL / MÊS)</text>`;
+    s+=`<text x="12" y="${(m.t+H-m.b)/2}" text-anchor="middle" font-size="9" fill="#8a8f9e" letter-spacing="1.5" transform="rotate(-90 12 ${(m.t+H-m.b)/2})">OPS</text>`;
+    // pontos (ring de 2px da cor da superfície p/ sobreposição)
+    pontos.forEach((p,i)=>{
+      s+=`<circle data-i="${i}" cx="${X(p.gasto)}" cy="${Y(p.ops)}" r="5.5"
+        fill="${p.flag?'#e5484d':'#c9962b'}" stroke="#161b28" stroke-width="2" style="cursor:default"/>`;
+    });
+    svg.innerHTML=s;
+    svg.querySelectorAll('circle').forEach(c=>{
+      const p=pontos[+c.dataset.i];
+      c.onmousemove=e=>tipShow(`<b>${p.n}</b><br>Gasto: R$ ${p.gasto.toFixed(0)} mil/mês<br>OPS: ${p.ops.toFixed(0)}${p.flag?'<br>💸 <b>Nobre Gastador</b>':''}`,e);
+      c.onmouseleave=tipHide;
+      c.onmouseenter=()=>c.setAttribute('r','8');
+      c.addEventListener('mouseleave',()=>c.setAttribute('r','5.5'));
+    });
+  })();
+
+  // ---- Hall da Fama / Muro da Vergonha ----
+  const fame=[
+    {n:'Marina Vasconcelos',d:'Dep. · SP · PON',s:91,t:'S'},
+    {n:'Otávio Brandão',d:'Sen. · SC · LVR',s:90,t:'S'},
+    {n:'Cecília Marques',d:'Dep. · MG · BST',s:89,t:'S'},
+    {n:'Heitor Sampaio',d:'Dep. · PR · PON',s:88,t:'S'},
+    {n:'Luiza Frota',d:'Sen. · PE · LVR',s:88,t:'S'},
+  ];
+  const shame=[
+    {n:'Aristides Vilaça',d:'Dep. · RJ · MRD',s:14,t:'F'},
+    {n:'Nabor Camargo',d:'Dep. · AL · ACD',s:17,t:'F'},
+    {n:'Zuleica Pontes',d:'Sen. · AP · MRD',s:19,t:'F'},
+    {n:'Belmiro Gusmão',d:'Dep. · BA · FPU',s:22,t:'F'},
+    {n:'Iolanda Peçanha',d:'Dep. · SP · ACD',s:26,t:'F'},
+  ];
+  function fillList(id,rows){
+    document.getElementById(id).innerHTML = rows.map((r,i)=>`
+      <div class="lrow">
+        <span class="pos">${i+1}</span>
+        <span class="nm"><b>${r.n}</b><small>${r.d}</small></span>
+        <span class="tg ${r.t==='S'?'s':'f'}">Tier ${r.t}</span>
+        <span class="sc" style="color:${r.t==='S'?'var(--gold-2)':'#ff9a9d'}">${r.s}</span>
+      </div>`).join('');
+  }
+  fillList('fameList',fame); fillList('shameList',shame);
+
+  // tab / view switching
+  function show(view){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===view));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+view).classList.add('active');
+    if(view==='card') animateStats(document.getElementById('statsCard'));
+    if(view==='battle') animateTug();
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>show(t.dataset.view));
+  document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(b.dataset.go));
+
+  // initial (aceita #card / #battle / #insights na URL)
+  const initial = location.hash.replace('#','');
+  show(['card','battle','insights'].includes(initial) ? initial : 'card');
+</script>
+</body>
+</html>
