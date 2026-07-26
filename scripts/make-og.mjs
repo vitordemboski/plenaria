@@ -89,6 +89,23 @@ function cardSite({ bg, title, subtitle }) {
   );
 }
 
+/** Corpo do título pelo comprimento do nome, e o LADRILHO do gradiente.
+ *  O dourado é um degradê vertical (claro→bronze) pensado para UMA linha: numa
+ *  segunda linha o texto caía na ponta escura e saía marrom ao lado da primeira.
+ *  Repetindo o gradiente a cada linha (`backgroundSize` na altura da linha +
+ *  `repeat-y`), toda linha recebe a rampa inteira. Título de uma linha fica
+ *  idêntico ao de antes — o ladrilho tem o tamanho da própria linha. */
+const NOME_LH = 1.1;
+function estiloNome(nome) {
+  const fs = nome.length > 26 ? 34 : nome.length > 21 ? 38 : nome.length > 17 ? 42 : 46;
+  return {
+    fontSize: `${fs}px`, lineHeight: NOME_LH,
+    backgroundImage: GOLD_GRAD, backgroundSize: `100% ${Math.round(fs * NOME_LH)}px`,
+    backgroundRepeat: 'repeat-y',
+    color: 'transparent', backgroundClip: 'text', WebkitBackgroundClip: 'text',
+  };
+}
+
 /** uma linha de atributo: rótulo · percentil · número bruto */
 function linhaStat({ label, valor, nota }) {
   return h('div', { style: { display: 'flex', alignItems: 'baseline', width: '100%', marginBottom: '15px' } },
@@ -157,17 +174,12 @@ function cardPolitico({ p, foto, stats, credito }) {
             // linhas faz o conteúdo passar dos 518px e o satori encolhe os flex items
             // — a caixa do nome comprimia para uma linha e a segunda saía cortada ao
             // meio ("CARLOS HENRIQUE / GAGUIM" com a metade de baixo faltando).
-            flexShrink: 0,
-            // e a rampa de tamanho dá folga antes disso: 46px quebra a partir de ~18
-            // caracteres na coluna de 712px
-            fontSize: p.nome.length > 26 ? '34px' : p.nome.length > 21 ? '38px' : p.nome.length > 17 ? '42px' : '46px',
-            lineHeight: 1.1, letterSpacing: '0.5px',
-            color: 'transparent', backgroundImage: GOLD_GRAD,
-            backgroundClip: 'text', WebkitBackgroundClip: 'text',
+            flexShrink: 0, letterSpacing: '0.5px',
+            ...estiloNome(p.nome),
           },
         }, p.nome.toUpperCase()),
         h('div', { style: { display: 'flex', marginTop: '8px', fontSize: '17px', fontWeight: 600, color: '#7d8290', letterSpacing: '0.5px' } }, p.sub),
-        h('div', { style: { display: 'flex', width: '100%', height: '1px', background: `${GOLD_RULE}99`, margin: '16px 0 14px' } }),
+        h('div', { style: { display: 'flex', width: '100%', height: '1px', background: `${GOLD_RULE}99`, margin: '22px 0 16px', flexShrink: 0 } }),
 
         // Poder + Tier — ou o motivo de estar fora do ranking, nunca Tier F no lugar
         p.semRanking
@@ -197,9 +209,9 @@ function cardPolitico({ p, foto, stats, credito }) {
 
         // rodapé colado no fim da coluna: crédito + fórmula + domínio
         h('div', { style: { display: 'flex', flexDirection: 'column', marginTop: 'auto', paddingTop: '18px', flexShrink: 0 } },
-          h('div', { style: { display: 'flex', fontSize: '14px', color: '#4d525e' } },
+          h('div', { style: { display: 'flex', fontSize: '14px', color: '#8a90a0' } },
             [credito ? `Foto: ${credito}` : null, 'fórmula em /como-calculamos'].filter(Boolean).join('  ·  ')),
-          h('div', { style: { display: 'flex', marginTop: '6px', fontSize: '18px', fontWeight: 600, color: '#565b68' } }, 'plenariarpg.com'),
+          h('div', { style: { display: 'flex', marginTop: '6px', fontSize: '18px', fontWeight: 600, color: '#98a0b0' } }, 'plenariarpg.com'),
         ),
       ),
     ),
@@ -296,15 +308,12 @@ function cardGuilda({ g, crest, stats }) {
         h('div', {
           style: {
             display: 'flex', fontFamily: 'Cinzel', fontWeight: 900,
-            flexShrink: 0, // ver a nota no cardPolitico
-            fontSize: g.nome.length > 26 ? '34px' : g.nome.length > 21 ? '38px' : g.nome.length > 17 ? '42px' : '46px',
-            lineHeight: 1.1, letterSpacing: '0.5px',
-            color: 'transparent', backgroundImage: GOLD_GRAD,
-            backgroundClip: 'text', WebkitBackgroundClip: 'text',
+            flexShrink: 0, letterSpacing: '0.5px', // ver a nota no cardPolitico
+            ...estiloNome(g.nome),
           },
         }, g.nome.toUpperCase()),
         h('div', { style: { display: 'flex', marginTop: '8px', fontSize: '17px', fontWeight: 600, color: '#7d8290', letterSpacing: '0.5px' } }, g.sub),
-        h('div', { style: { display: 'flex', width: '100%', height: '1px', background: `${GOLD_RULE}99`, margin: '16px 0 14px' } }),
+        h('div', { style: { display: 'flex', width: '100%', height: '1px', background: `${GOLD_RULE}99`, margin: '22px 0 16px', flexShrink: 0 } }),
 
         g.semRoster
           ? h('div', { style: { display: 'flex', marginBottom: '16px', fontSize: '19px', fontWeight: 600, color: '#c6a256' } },
@@ -332,15 +341,13 @@ function cardGuilda({ g, crest, stats }) {
         h('div', { style: { display: 'flex', flexDirection: 'column', width: '100%', flexShrink: 0 } },
           ...stats.map(linhaStat)),
 
-        g.composicao && h('div', { style: { display: 'flex', flexShrink: 0, marginTop: '10px', fontSize: '17px', fontWeight: 600, color: GOLD_SUB, letterSpacing: '0.5px' } }, g.composicao),
-
         h('div', { style: { display: 'flex', flexDirection: 'column', marginTop: 'auto', paddingTop: '18px', flexShrink: 0 } },
-          h('div', { style: { display: 'flex', fontSize: '14px', color: '#4d525e' } },
+          h('div', { style: { display: 'flex', fontSize: '14px', color: '#8a90a0' } },
             // sem crédito de foto: não há foto. O que precisa ser dito é o que os
             // números são — sem isso a peça exibiria percentil sem dizer de quê.
             stats.length ? `Atributos: média dos percentis ${g.membros === 1 ? 'do único membro' : `dos ${g.membros} membros`}  ·  fórmula em /como-calculamos`
                          : 'fórmula em /como-calculamos'),
-          h('div', { style: { display: 'flex', marginTop: '6px', fontSize: '18px', fontWeight: 600, color: '#565b68' } }, 'plenariarpg.com'),
+          h('div', { style: { display: 'flex', marginTop: '6px', fontSize: '18px', fontWeight: 600, color: '#98a0b0' } }, 'plenariarpg.com'),
         ),
       ),
     ),
@@ -410,16 +417,6 @@ async function ogDoParlamentar(p, statKeys) {
   });
 }
 
-/** "2 deputados · 1 senador" — só quando a bancada tem as DUAS casas. Com casa
- *  única a linha repetiria o "N parlamentares" do subtítulo e ainda se confundia
- *  com colocação ("3 na Câmara" lido como terceiro lugar). */
-function composicaoDaBancada(bancada) {
-  const d = bancada.filter((p) => p.casa === 'camara').length;
-  const sen = bancada.length - d;
-  if (!d || !sen) return null;
-  return `${d} ${d === 1 ? 'deputado' : 'deputados'}  ·  ${sen} ${sen === 1 ? 'senador' : 'senadores'}`;
-}
-
 async function ogDaGuilda(g, todos, statKeys, tierCortes) {
   const membros = todos.filter((p) => p.partido === g.sigla && !(p.mandatoParcial || p.presidenteCasa));
   const semRoster = membros.length === 0;
@@ -442,7 +439,6 @@ async function ogDaGuilda(g, todos, statKeys, tierCortes) {
       nome: g.nome, sigla: g.sigla, cor: g.cor ?? '#d4af37',
       sub: `Guilda ${g.sigla} · ${bancada.length} ${bancada.length === 1 ? 'parlamentar' : 'parlamentares'}`,
       membros: membros.length,
-      composicao: composicaoDaBancada(bancada),
       opsMedio, tier: semRoster ? null : tierDaGuilda(opsMedio, tierCortes), semRoster,
     },
     crest,
