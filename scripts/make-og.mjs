@@ -192,11 +192,11 @@ function cardPolitico({ p, foto, stats, credito }) {
               }, p.tier),
             ),
 
-        h('div', { style: { display: 'flex', flexDirection: 'column', width: '100%' } },
+        h('div', { style: { display: 'flex', flexDirection: 'column', width: '100%', flexShrink: 0 } },
           ...stats.map(linhaStat)),
 
         // rodapé colado no fim da coluna: crédito + fórmula + domínio
-        h('div', { style: { display: 'flex', flexDirection: 'column', marginTop: 'auto' } },
+        h('div', { style: { display: 'flex', flexDirection: 'column', marginTop: 'auto', paddingTop: '18px', flexShrink: 0 } },
           h('div', { style: { display: 'flex', fontSize: '14px', color: '#4d525e' } },
             [credito ? `Foto: ${credito}` : null, 'fórmula em /como-calculamos'].filter(Boolean).join('  ·  ')),
           h('div', { style: { display: 'flex', marginTop: '6px', fontSize: '18px', fontWeight: 600, color: '#565b68' } }, 'plenariarpg.com'),
@@ -275,7 +275,11 @@ function cardGuilda({ g, crest, stats }) {
           style: {
             display: 'flex', position: 'absolute', width: '300px', justifyContent: 'center',
             // a sigla vai no meio da fita: y=31.75 de 54 no viewBox
-            marginTop: `${Math.round(CREST_H * (31.75 / CREST_VB_H - 0.5))}px`,
+            // 34.4 e não 31.75 (o centro geométrico da fita): o satori centraliza a
+            // CAIXA do texto, e a caixa tem folga de entrelinha acima das maiúsculas —
+            // centrar a caixa na fita deixava a sigla montada na borda de cima. O valor
+            // é o mesmo `y` do <text> do GuildCrest.tsx, onde ele é a BASELINE.
+            marginTop: `${Math.round(CREST_H * (34.4 / CREST_VB_H - 0.5))}px`,
             fontWeight: 700, letterSpacing: '0.5px', color: '#f4e2a1',
             // sigla longa (SOLIDARIEDADE, REPUBLICANOS) tem de caber na fita
             fontSize: g.sigla.length > 11 ? '25px' : g.sigla.length > 8 ? '31px' : '38px',
@@ -320,12 +324,12 @@ function cardGuilda({ g, crest, stats }) {
             ),
 
         // sem roster os atributos seriam média de ninguém — nenhuma linha, como no ShareButton
-        h('div', { style: { display: 'flex', flexDirection: 'column', width: '100%' } },
+        h('div', { style: { display: 'flex', flexDirection: 'column', width: '100%', flexShrink: 0 } },
           ...stats.map(linhaStat)),
 
-        h('div', { style: { display: 'flex', marginTop: '6px', marginBottom: '14px', fontSize: '17px', fontWeight: 600, color: GOLD_SUB, letterSpacing: '0.5px' } }, g.composicao),
+        g.composicao && h('div', { style: { display: 'flex', flexShrink: 0, marginTop: '10px', fontSize: '17px', fontWeight: 600, color: GOLD_SUB, letterSpacing: '0.5px' } }, g.composicao),
 
-        h('div', { style: { display: 'flex', flexDirection: 'column', marginTop: 'auto' } },
+        h('div', { style: { display: 'flex', flexDirection: 'column', marginTop: 'auto', paddingTop: '18px', flexShrink: 0 } },
           h('div', { style: { display: 'flex', fontSize: '14px', color: '#4d525e' } },
             // sem crédito de foto: não há foto. O que precisa ser dito é o que os
             // números são — sem isso a peça exibiria percentil sem dizer de quê.
@@ -401,6 +405,16 @@ async function ogDoParlamentar(p, statKeys) {
   });
 }
 
+/** "2 deputados · 1 senador" — só quando a bancada tem as DUAS casas. Com casa
+ *  única a linha repetiria o "N parlamentares" do subtítulo e ainda se confundia
+ *  com colocação ("3 na Câmara" lido como terceiro lugar). */
+function composicaoDaBancada(bancada) {
+  const d = bancada.filter((p) => p.casa === 'camara').length;
+  const sen = bancada.length - d;
+  if (!d || !sen) return null;
+  return `${d} ${d === 1 ? 'deputado' : 'deputados'}  ·  ${sen} ${sen === 1 ? 'senador' : 'senadores'}`;
+}
+
 async function ogDaGuilda(g, todos, statKeys, tierCortes) {
   const membros = todos.filter((p) => p.partido === g.sigla && !(p.mandatoParcial || p.presidenteCasa));
   const semRoster = membros.length === 0;
@@ -423,10 +437,7 @@ async function ogDaGuilda(g, todos, statKeys, tierCortes) {
       nome: g.nome, sigla: g.sigla, cor: g.cor ?? '#d4af37',
       sub: `Guilda ${g.sigla} · ${bancada.length} ${bancada.length === 1 ? 'parlamentar' : 'parlamentares'}`,
       membros: membros.length,
-      composicao: [
-        bancada.filter((p) => p.casa === 'camara').length && `${bancada.filter((p) => p.casa === 'camara').length} na Câmara`,
-        bancada.filter((p) => p.casa === 'senado').length && `${bancada.filter((p) => p.casa === 'senado').length} no Senado`,
-      ].filter(Boolean).join('  ·  '),
+      composicao: composicaoDaBancada(bancada),
       opsMedio, tier: semRoster ? null : tierDaGuilda(opsMedio, tierCortes), semRoster,
     },
     crest,
