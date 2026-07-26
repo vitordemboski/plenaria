@@ -10,6 +10,10 @@ data/*.json
 public/data/*.json
 # fotos oficiais baixadas dos portais (reproduzíveis via `npm run fotos`, ~10MB)
 public/fotos/
+# cards de compartilhamento por parlamentar (reproduzíveis via `npm run og`, ~39MB).
+# A barra final é essencial: sem ela isto casaria também `public/og.jpg`, que é o
+# card do site e É versionado.
+public/og/
 # cache de downloads dos Dados Abertos (~750MB) — reproduzível por `npm run data:real`.
 # Note o `/*` em vez de `data/raw/`: com a barra final o git nem entra no diretório,
 # e qualquer exceção futura (`!data/raw/algo.csv`) seria ignorada em silêncio.

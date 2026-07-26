@@ -18,6 +18,9 @@ export interface Politician {
   fotoUrl?: string;
   /** placeholder da foto: WebP 12×13 em data-URI. Fora do index.json de propósito. */
   fotoLqip?: string;
+  /** card 1200×630 de compartilhamento (`npm run og`). Presente = o arquivo EXISTE;
+   *  ausente = a página cai no card do site (og:image 404 não mostra cartão nenhum). */
+  ogImage?: string;
   primeiroMandato: boolean;
   stats: Stats;
   ops: number;
@@ -96,6 +99,9 @@ export interface Guild {
    *  juízo editorial, não dado factual. O eixo governo/oposição que exibimos é
    *  medido (voto × orientação da bancada do Governo), não atribuído. */
   espectro: null;
+  /** card 1200×630 de compartilhamento (`npm run og`) — mesma semântica do
+   *  `ogImage` do Politician: presente = o arquivo existe. */
+  ogImage?: string;
 }
 
 /** data/meta.json — declara o que o gerador produziu. A UI se adapta por ele:
@@ -108,6 +114,9 @@ export interface DataMeta {
   /** data em que o gerador rodou (diagnóstico; não é exibido ao leitor) */
   geradoEm?: string;
   availableStats: StatKey[];
+  /** piso de Poder de cada Tier (F é o resto). Emitido pelo gerador para que a UI
+   *  classifique a MÉDIA da guilda com a mesma tabela dos parlamentares. */
+  tierCortes: Record<Exclude<Tier, 'F'>, number>;
   pesos: Partial<Record<StatKey, number>>;
   /** pesos específicos por casa (o Senado não tem Fiscalização nem Alinhamento, por ex.) */
   pesosPorCasa?: Record<Casa, Partial<Record<StatKey, number>>>;

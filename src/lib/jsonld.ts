@@ -61,7 +61,7 @@ export function personLd(p: Politician) {
       // o mesmo rótulo que a página se recusa a exibir, só que sem ninguém ler o aviso.
       ...(p.mandatoParcial || p.presidenteCasa
         ? [{ '@type': 'PropertyValue', name: 'Tier',
-             value: `sem Tier — ${p.presidenteCasa ? 'presidência da Casa' : 'mandato parcial'}, fora do ranking` }]
+             value: `sem Tier — ${p.presidenteCasa ? 'presidência da Casa nesta legislatura' : 'mandato parcial'}, fora do ranking` }]
         : [
             { '@type': 'PropertyValue', name: 'Poder', value: p.ops },
             // Tier como texto: `value` numérico convidaria a tratá-lo como estrela.

@@ -27,14 +27,18 @@ export function pageMeta({
   title,
   description,
   path,
+  image,
 }: {
   title?: string;
   description: string;
   path: string;
+  /** cartão próprio da rota; sem ele vai o do site */
+  image?: string;
 }): Metadata {
   // O template '%s · PLENÁRIA' do layout raiz só vale para o `title` da página;
   // og:title é texto absoluto, então o sufixo é aplicado à mão.
   const ogTitle = title ? `${title} · ${SITE_NAME}` : SITE_TITLE;
+  const og = image ? { ...OG_IMAGE, url: image, alt: ogTitle } : OG_IMAGE;
   return {
     ...(title ? { title } : {}),
     description,
@@ -43,14 +47,14 @@ export function pageMeta({
       type: 'website',
       siteName: SITE_NAME,
       locale: 'pt_BR',
-      images: [OG_IMAGE],
+      images: [og],
       title: ogTitle,
       description,
       url: path,
     },
     twitter: {
       card: 'summary_large_image',
-      images: [OG_IMAGE.url],
+      images: [og.url],
       title: ogTitle,
       description,
     },

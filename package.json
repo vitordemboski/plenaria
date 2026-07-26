@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "data:real": "node scripts/ingest-real.mjs && node scripts/fetch-fotos.mjs",
-    "data:fresh": "node scripts/ingest-real.mjs --fresh && node scripts/fetch-fotos.mjs",
+    "data:real": "node scripts/ingest-real.mjs && node scripts/fetch-fotos.mjs && node scripts/make-og.mjs",
+    "data:fresh": "node scripts/ingest-real.mjs --fresh && node scripts/fetch-fotos.mjs && node scripts/make-og.mjs",
     "fotos": "node scripts/fetch-fotos.mjs",
     "og": "node scripts/make-og.mjs",
     "social:template": "node scripts/social-template.mjs",

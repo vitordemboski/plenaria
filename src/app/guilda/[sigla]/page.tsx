@@ -34,6 +34,7 @@ export async function generateMetadata({ params }: { params: Promise<{ sigla: st
     title: `Guilda ${g.sigla} — ${g.nome}`,
     description: `A carta de facção do ${g.sigla} (${g.nome}): Poder médio, distribuição de tiers e os ${n} parlamentares da bancada.`,
     path: `/guilda/${sigla}/`,
+    image: g.ogImage,
   });
 }
 

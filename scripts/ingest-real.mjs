@@ -464,9 +464,16 @@ function percentileRank(sorted, v) {
 // sem descer os cortes junto o Tier S encolheria de 11 para 5 por efeito colateral —
 // redefinir "lendário" tem de ser decisão explícita, não carona de normalização.
 // Calibração = preservar o tamanho das bandas anteriores.
-const PODER_TIER_S = 85;
+// Piso de cada Tier. EMITIDO no meta.json (`tierCortes`) porque a UI também precisa
+// classificar — o Tier da GUILDA sai da média da bancada, calculada em build-time.
+// Havia uma segunda tabela hardcodada no guild-stats.ts que ficou nos valores
+// pré-recalibração: uma guilda com Poder médio 86 saía Tier A enquanto um
+// parlamentar com 86 era Tier S. Uma tabela, um lugar.
+const TIER_CORTES = { S: 85, A: 73, B: 58, C: 45, D: 31 };
+const PODER_TIER_S = TIER_CORTES.S;
 function tierDe(ops) {
-  return ops >= PODER_TIER_S ? 'S' : ops >= 73 ? 'A' : ops >= 58 ? 'B' : ops >= 45 ? 'C' : ops >= 31 ? 'D' : 'F';
+  const t = Object.keys(TIER_CORTES).find((k) => ops >= TIER_CORTES[k]);
+  return t ?? 'F';
 }
 
 // ---------- pesos do Poder, POR CASA ----------
@@ -1816,6 +1823,7 @@ const meta = {
   availableStats: full.some((p) => p.rawNumbers.influencia)
     ? ['ataque', 'stamina', 'eficiencia', 'tecnica', 'economia', 'fiscalizacao', 'influencia', 'comando', 'alinhamento']
     : ['ataque', 'stamina', 'eficiencia', 'tecnica', 'economia', 'fiscalizacao', 'comando', 'alinhamento'],
+  tierCortes: TIER_CORTES,
   pesos: pesosNormalizados('camara'),
   pesosPorCasa: {
     camara: pesosNormalizados('camara'),

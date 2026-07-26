@@ -29,3 +29,12 @@
   for = "/data/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# Cards de compartilhamento por parlamentar. NÃO são `immutable`, ao contrário de
+# /fotos/*: a URL é keyed por slug, mas o CONTEÚDO tem os números da última
+# ingestão — `immutable` por um ano congelaria dado velho na borda. 24h acompanha
+# a cadência real dos dados (batch, no máximo diária).
+[[headers]]
+  for = "/og/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"

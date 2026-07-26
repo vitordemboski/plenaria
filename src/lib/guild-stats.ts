@@ -1,4 +1,4 @@
-import { politicians, guilds, SCORING_STAT_META, foraDoRanking } from './data';
+import { politicians, guilds, SCORING_STAT_META, foraDoRanking, meta } from './data';
 import type { Guild, StatKey, Tier } from './types';
 
 export interface GuildStats extends Guild {
@@ -15,13 +15,21 @@ export interface GuildStats extends Guild {
   ranqueavel: boolean;
 }
 
+/**
+ * Tier da guilda a partir do Poder MÉDIO da bancada — mesma tabela dos
+ * parlamentares, vinda do `meta.json` (`tierCortes`).
+ *
+ * Era uma segunda tabela hardcodada aqui, e ela ficou nos valores anteriores à
+ * recalibração feita quando a Técnica virou escala log: uma guilda com Poder médio
+ * 86 aparecia como Tier A enquanto um parlamentar com Poder 86 era Tier S. Os
+ * cortes de Tier são ABSOLUTOS (ver CLAUDE.md) — não pode haver duas tabelas.
+ */
 export function guildTierOf(ops: number): Tier {
-  if (ops >= 88) return 'S';
-  if (ops >= 75) return 'A';
-  if (ops >= 60) return 'B';
-  if (ops >= 45) return 'C';
-  if (ops >= 30) return 'D';
-  return 'F';
+  const cortes = meta.tierCortes;
+  // falha alto em vez de assumir um corte: `data/` velho classificaria guildas com
+  // uma tabela que não existe mais, e o erro seria invisível (o Tier "parece" certo)
+  if (!cortes) throw new Error('meta.json sem `tierCortes` — rode `npm run data:real`');
+  return (Object.keys(cortes) as Exclude<Tier, 'F'>[]).find((t) => ops >= cortes[t]) ?? 'F';
 }
 
 /** Agregados por guilda, computados em build-time (Server Components). */

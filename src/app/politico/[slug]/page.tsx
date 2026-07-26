@@ -35,9 +35,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return pageMeta({
     title: fora ? p.nome : `${p.nome} — Tier ${p.tier}`,
     description: fora
-      ? `${p.nome} (${p.partido}-${p.uf}), ${casaLabel(p.casa)}: sem Tier — ${p.presidenteCasa ? 'preside a Casa' : 'mandato parcial'}, fora do ranking. Atividade e gasto de cota a partir dos dados oficiais.`
+      ? `${p.nome} (${p.partido}-${p.uf}), ${casaLabel(p.casa)}: sem Tier — ${p.presidenteCasa ? 'presidência da Casa nesta legislatura' : 'mandato parcial'}, fora do ranking. Atividade e gasto de cota a partir dos dados oficiais.`
       : `${p.nome} (${p.partido}-${p.uf}), ${casaLabel(p.casa)}: Poder ${p.ops}, Tier ${p.tier} (${TIER_LABEL[p.tier]}). Atributos, títulos e gasto de cota a partir dos dados oficiais.`,
     path: `/politico/${slug}/`,
+    image: p.ogImage,
   });
 }
 
@@ -85,7 +86,7 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
   const meses = p.mesesExercicio != null ? Math.round(p.mesesExercicio) : null;
   const mesesTxt = meses != null ? `${meses} ${meses === 1 ? 'mês' : 'meses'} em exercício` : 'exercício parcial';
   const motivoFora = !fora ? undefined
-    : p.presidenteCasa ? 'presidência da Casa' : `mandato parcial · ${mesesTxt}`;
+    : p.presidenteCasa ? 'presidência da Casa nesta legislatura' : `mandato parcial · ${mesesTxt}`;
 
   return (
     <main className="carta-stage">
@@ -149,7 +150,7 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
                   ausência não se lê como decisão editorial, se lê como dado faltando. */}
               {fora && (
                 <div className="futc-faixa">
-                  {p.presidenteCasa ? 'Presidência da Casa'
+                  {p.presidenteCasa ? 'Presidência na legislatura'
                     : `Mandato parcial${meses != null ? ` · ${meses} ${meses === 1 ? 'mês' : 'meses'}` : ''}`}
                 </div>
               )}
@@ -239,11 +240,12 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
 
       {fora ? (
         <div className="panel fora-panel">
-          <h3>{p.presidenteCasa ? '🪑' : '🕓'} Sem Tier — {p.presidenteCasa ? 'presidência da Casa' : 'mandato parcial'}</h3>
+          <h3>{p.presidenteCasa ? '🪑' : '🕓'} Sem Tier — {p.presidenteCasa ? 'presidência da Casa nesta legislatura' : 'mandato parcial'}</h3>
           <p className="fora-por">
             {p.presidenteCasa ? (
-              <>Quem preside a {casaLabel(p.casa)} não vota (salvo desempate e votação secreta), nem autora ou
-              relata como os demais: o dever institucional do cargo suprime justamente a atividade que medimos.</>
+              <>{p.nome.split(' ')[0]} exerce ou exerceu a presidência da {casaLabel(p.casa)} nesta legislatura.
+              Quem ocupa o cargo não vota (salvo desempate e votação secreta), nem autora ou relata como os demais:
+              o dever institucional suprime justamente a atividade que medimos.</>
             ) : (
               <>{p.nome.split(' ')[0]} esteve em exercício efetivo por{' '}
               <b>{meses != null ? `cerca de ${meses} ${meses === 1 ? 'mês' : 'meses'}` : 'pouco tempo'}</b>{' '}

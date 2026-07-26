@@ -10,6 +10,7 @@ Leia `docs/product-spec.md` para o produto e `docs/architecture.md` para a arqui
 | `npm run data:real` | Ingesta DADOS REAIS (Câmara + Senado) — cache em `data/raw/` (~1GB); já roda o `fotos` no fim. Do zero leva ~1h (a API da Câmara devolve 504 em rajada); com cache quente, minutos |
 | `npm run data:fresh` | O mesmo com `--fresh`: ignora o TTL e re-baixa TODA fonte volátil (ver "Validade do cache" abaixo) |
 | `npm run fotos` | Baixa as fotos oficiais p/ `public/fotos/` como **WebP** (~8MB) e repõe os `fotoUrl` p/ caminho local |
+| `npm run og` | Gera os cards de compartilhamento: `public/og.jpg` (site), `public/og/<slug>.jpg` (parlamentar) e `og/guilda-<sigla>.jpg` (guilda) — 615 imagens, ~41MB; já roda no fim do `data:real`. `--only=<slug>`/`--guildas`/`--site` p/ iterar |
 | `npm run social:template` | Gera/atualiza o esqueleto de `data/social.csv` com handles oficiais |
 | `npm run social:discover` | Descobre handles não declarados à Câmara |
 | `npm run social:fetch` | Preenche seguidores do Instagram em `data/social.csv` via Apify (`APIFY_TOKEN`) — **PAGO** |
@@ -157,6 +158,14 @@ Armadilhas conhecidas das APIs:
   do `p.fotoUrl`, e recusa cache local com largura < 300px: `public/fotos/` é gitignored,
   logo o cache é por máquina, e uma miniatura é um download bem-sucedido — sem a
   checagem de largura, quem já tivesse rodado ficaria com os 134 borrados para sempre.
+- **O card OG por parlamentar segue as regras da imagem do ShareButton** (sem título/selo,
+  número bruto ao lado de cada percentil, sem Tier p/ quem está fora do ranking, crédito da
+  foto NA imagem). Duas armadilhas do satori: ele não decodifica WebP (a foto é convertida
+  com sharp antes) e não desenha emoji sem asset extra. `ogImage` só é gravado no
+  politicians.json/guilds.json para quem renderizou — a UI não deriva do slug porque `og:image`
+  404 faz o scraper não mostrar cartão nenhum, pior que o card genérico. O card de GUILDA não
+  leva bruto por atributo: média de percentis não tem bruto único (o ShareButton também não
+  passa `nota` na variante guilda), então o rodapé diz o que o número é.
 - O mesmo script emite o **`fotoLqip`**: um WebP 12×13 em data-URI (~185B) que a janela
   da carta pinta como `background` enquanto a foto não chega — sem ele a moldura piscava
   do gradiente escuro p/ a foto clara. Três armadilhas: (1) **fundo branco fixo não
@@ -249,7 +258,9 @@ Armadilhas conhecidas das APIs:
   deputada com mais leis aprovadas da casa. Por isso a escala é ancorada na mediana
   (=50): mudou a normalização, confira a fração da casa abaixo de 40 CONTRA a dos
   atributos percentílicos antes de dar por pronto. Cuidado gêmeo: os cortes de Tier são
-  ABSOLUTOS e valem para as duas casas, então uma escala que desloque uma casa mais que a
+  ABSOLUTOS, valem para as duas casas e vivem SÓ em `meta.tierCortes` (uma segunda
+  tabela no guild-stats.ts ficou na calibração antiga e dava Tier A p/ guilda com
+  Poder médio 86 enquanto parlamentar com 86 era S), então uma escala que desloque uma casa mais que a
   outra embute "senador vale mais que deputado" no Poder. É a âncora na mediana que
   neutraliza isso — uma reta entre extremos deslocava a Stamina +2,1 na Câmara × +3,8 no
   Senado, a ancorada desloca +0,56 × +0,94. Não descarte uma correção medindo a variante
