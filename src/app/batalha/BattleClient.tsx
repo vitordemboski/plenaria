@@ -20,6 +20,16 @@ const ALL_ROUNDS: { key: StatKey; icon: string; label: string }[] = [
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+/**
+ * Mesma regra do `foraDoRanking` de @/lib/data — repetida aqui de propósito: aquele
+ * módulo importa os JSONs inteiros, e esta é uma ilha client (entrariam no bundle).
+ *
+ * Sem este filtro a Batalha duelava quem tomou posse há 5 meses contra quem tem 41
+ * de mandato, exibindo o Tier F e o Poder que a ficha da própria pessoa se recusa a
+ * mostrar — e o resultado ainda virava imagem compartilhável.
+ */
+const foraDoRanking = (p: PoliticianIndex) => !!p.mandatoParcial || !!p.presidenteCasa;
+
 // durações da sequência de batalha — precisam casar com os keyframes
 // clash-a/clash-b, round-in e board-slam definidos em globals.css
 const CLASH_MS = 900;
@@ -324,13 +334,17 @@ export function BattleClient() {
       // rounds só com atributos que PONTUAM: os informativos (Influência) não decidem luta
       const informativos = new Set(m.statsInformativos ?? []);
       setRounds(ALL_ROUNDS.filter((r) => m.availableStats.includes(r.key) && !informativos.has(r.key)));
-      data.sort((x, y) => x.nome.localeCompare(y.nome));
-      setList(data);
+      // filtra ANTES de guardar: o mesmo array alimenta seletor, sorteio, deep link
+      // (?a=slug) e a média das guildas — filtrar em cada ponto de uso deixaria o
+      // próximo a ser escrito de fora.
+      const ranqueaveis = data.filter((p) => !foraDoRanking(p));
+      ranqueaveis.sort((x, y) => x.nome.localeCompare(y.nome));
+      setList(ranqueaveis);
       setGuilds(gs);
       const a = params.get('a'), b = params.get('b');
       const ga = params.get('ga'), gb = params.get('gb');
-      if (a && data.some((p) => p.slug === a)) setSlugA(a);
-      if (b && data.some((p) => p.slug === b)) setSlugB(b);
+      if (a && ranqueaveis.some((p) => p.slug === a)) setSlugA(a);
+      if (b && ranqueaveis.some((p) => p.slug === b)) setSlugB(b);
       if (ga && gs.some((g) => g.sigla === ga)) setGuildA(ga);
       if (gb && gs.some((g) => g.sigla === gb)) setGuildB(gb);
       if ((ga || gb) && !a && !b) setMode('guild');

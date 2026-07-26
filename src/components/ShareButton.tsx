@@ -17,6 +17,12 @@ export interface ShareCardData {
   /** `nota` é o número BRUTO em uma linha ("R$ 46 mil/mês de cota"): sem ele, a
    *  imagem afirma um percentil e não mostra o dado de onde ele saiu. */
   stats?: { icon: string; label: string; value: number; nota?: string }[];
+  /** Fora do ranking (mandato parcial / presidência da Casa): a imagem sai SEM Tier e
+   *  SEM Poder, com este texto no lugar ("mandato parcial · 5 meses em exercício").
+   *  A ficha já exibe "—" para essa gente; a peça que circula sozinha, longe do site,
+   *  não pode afirmar um Tier F que a própria plataforma se recusa a atribuir — e o
+   *  Tier F aqui não é avaliação ruim, é ausência de mandato medido. */
+  semRanking?: string;
   /** crédito da foto oficial ("Câmara dos Deputados" / "Agência Senado") — as duas
    *  casas licenciam a imagem com atribuição obrigatória (CC BY na Câmara), e esta
    *  imagem circula SOZINHA, longe do rodapé do site: é aqui que o crédito importa. */
@@ -332,10 +338,15 @@ async function montarCanvas(card: ShareCardData): Promise<HTMLCanvasElement | nu
     opsGrad.addColorStop(1, '#9a7a1e');
     ctx.fillStyle = tier === 'F' ? '#b8b09a' : opsGrad;
     ctx.font = `900 ${S(50)}px ${display}`;
-    if (card.ops !== undefined) ctx.fillText(String(card.ops), railCx, Y(66));
+    if (card.ops !== undefined) {
+      ctx.fillText(String(card.ops), railCx, Y(66));
+    } else {
+      ctx.fillStyle = '#6f7686';
+      ctx.fillText('—', railCx, Y(62));
+    }
     ctx.fillStyle = '#8a8f9e';
     ctx.font = `600 ${S(9)}px ${mono}`;
-    ctx.fillText((card.opsLabel ?? 'Poder').toUpperCase(), railCx, Y(80));
+    ctx.fillText((card.semRanking ? 'sem tier' : card.opsLabel ?? 'Poder').toUpperCase(), railCx, Y(80));
     const pos = card.variant === 'guilda' ? 'GLD' : card.sub?.startsWith('Sen') ? 'SEN' : 'DEP';
     ctx.fillStyle = '#e8e3d3';
     ctx.font = `700 ${S(19)}px ${display}`;
@@ -432,6 +443,27 @@ async function montarCanvas(card: ShareCardData): Promise<HTMLCanvasElement | nu
     ctx.fillRect(X(120), dy - 0.75, S(42), 1.5);
     ctx.fillRect(X(178), dy - 0.75, S(42), 1.5);
 
+    // faixa "sem Tier" cruzando o pé do retrato — mesma posição e mesma cor da
+    // faixa da ficha (.futc-faixa): a imagem É a carta, e as duas não podem
+    // contar histórias diferentes.
+    if (card.semRanking) {
+      const fy = Y(212), fh = S(20), fx = cx0 + S(3), fw2 = cw - S(6);
+      const faixa = ctx.createLinearGradient(fx, 0, fx + fw2, 0);
+      faixa.addColorStop(0, 'rgba(28,20,48,0.72)');
+      faixa.addColorStop(0.3, 'rgba(74,52,122,0.88)');
+      faixa.addColorStop(0.7, 'rgba(74,52,122,0.88)');
+      faixa.addColorStop(1, 'rgba(28,20,48,0.72)');
+      ctx.fillStyle = faixa;
+      ctx.fillRect(fx, fy, fw2, fh);
+      ctx.fillStyle = 'rgba(166,132,255,0.55)';
+      ctx.fillRect(fx, fy, fw2, 1.5);
+      ctx.fillRect(fx, fy + fh - 1.5, fw2, 1.5);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e2d8ff';
+      ctx.font = `600 ${S(8)}px ${mono}`;
+      ctx.fillText(fitText(ctx, card.semRanking.toUpperCase(), fw2 - S(16)), X(170), fy + fh / 2 + S(3));
+    }
+
     // grade de atributos 2 colunas com divisor central
     if (card.stats?.length) {
       const rows = Math.ceil(card.stats.length / 2);
@@ -471,6 +503,7 @@ async function montarCanvas(card: ShareCardData): Promise<HTMLCanvasElement | nu
       ctx.fillStyle = '#f4e2a1';
       ctx.fillText(txt, X(170), py + phh / 2 + S(4));
     }
+
   }
 
   // rodapé: crédito da foto + fórmula, e só então o link da ficha. O crédito vive
@@ -722,6 +755,19 @@ async function desenharStory(card: ShareCardData): Promise<Blob | null> {
 
   // ---- strip Poder | Tier ----
   const stripBase = 770, xa = SW * 0.34, xb = SW * 0.66;
+  if (card.semRanking) {
+    // fora do ranking: uma placa única no lugar do par Poder|Tier. Dois traços
+    // lado a lado pareceriam falha de renderização, não uma decisão editorial.
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(166,132,255,0.09)';
+    roundRect(ctx, CL, stripBase - 74, CW, 118, 20); ctx.fill();
+    ctx.strokeStyle = 'rgba(166,132,255,0.4)'; ctx.lineWidth = 1.5;
+    roundRect(ctx, CL, stripBase - 74, CW, 118, 20); ctx.stroke();
+    ctx.fillStyle = '#a684ff'; ctx.font = `900 46px ${display}`;
+    ctx.fillText('SEM TIER', SW / 2, stripBase - 18);
+    ctx.fillStyle = '#8a8f9e'; ctx.font = `600 23px ${mono}`;
+    ctx.fillText(fitText(ctx, card.semRanking, CW - 60), SW / 2, stripBase + 22);
+  } else {
   ctx.fillStyle = 'rgba(212,175,55,0.25)';
   ctx.fillRect(SW / 2 - 0.75, stripBase - 52, 1.5, 92);
   ctx.textAlign = 'center';
@@ -737,6 +783,7 @@ async function desenharStory(card: ShareCardData): Promise<Blob | null> {
   ctx.fillText(tier || '—', xb, stripBase);
   ctx.fillStyle = '#8a8f9e'; ctx.font = `600 22px ${mono}`;
   ctx.fillText((card.story?.tierLabel ?? 'Tier').toUpperCase(), xb, stripBase + 38);
+  }
 
   // ---- nome + divisor heráldico + sub ----
   ctx.textAlign = 'center'; ctx.fillStyle = '#e8e3d3';

@@ -56,9 +56,17 @@ export function personLd(p: Politician) {
     affiliation: { '@type': 'Organization', name: p.partido },
     workLocation: { '@type': 'AdministrativeArea', name: UF_NOME[p.uf] ?? p.uf },
     additionalProperty: [
-      { '@type': 'PropertyValue', name: 'Poder', value: p.ops },
-      // Tier como texto: `value` numérico convidaria a tratá-lo como estrela.
-      { '@type': 'PropertyValue', name: 'Tier', value: `${p.tier} (${TIER_LABEL[p.tier]})` },
+      // Fora do ranking (mandato parcial/presidência da Casa) não publica Poder nem
+      // Tier NEM AQUI: o JSON-LD é lido por máquina e alimenta resultado rico — seria
+      // o mesmo rótulo que a página se recusa a exibir, só que sem ninguém ler o aviso.
+      ...(p.mandatoParcial || p.presidenteCasa
+        ? [{ '@type': 'PropertyValue', name: 'Tier',
+             value: `sem Tier — ${p.presidenteCasa ? 'presidência da Casa' : 'mandato parcial'}, fora do ranking` }]
+        : [
+            { '@type': 'PropertyValue', name: 'Poder', value: p.ops },
+            // Tier como texto: `value` numérico convidaria a tratá-lo como estrela.
+            { '@type': 'PropertyValue', name: 'Tier', value: `${p.tier} (${TIER_LABEL[p.tier]})` },
+          ]),
       ...stats,
     ],
   };

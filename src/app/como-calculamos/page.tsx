@@ -190,6 +190,13 @@ export default function MethodologyPage() {
           Câmara/Senado, robusto a licenças curtas — não confundir com gastar pouco ou faltar a votações.
         </p>
         <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+          <span className="key">&quot;Fora do ranking&quot; vale em todo lugar, não só na Tier List:</span> quem
+          está sem Tier não recebe título, não entra na média da guilda, não pode ser escalado na Batalha, e a
+          imagem de compartilhamento da ficha sai <b>sem Tier e sem Poder</b> — com a faixa do motivo no lugar.
+          O Poder de quem mal esteve em exercício é baixo porque falta mandato medido, não porque o trabalho foi
+          ruim; deixá-lo circular numa imagem, longe desta explicação, seria publicar a conclusão errada.
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--muted)' }}>
           <span className="key">Presidência da Casa também fica fora do ranking:</span> quem preside a Câmara ou o
           Senado não vota (salvo desempate/secreto), nem autora ou relata como os demais — o cargo institucional
           suprime justamente a atividade que medimos (Stamina, Ataque, Técnica de uma vez). Comparar o presidente a

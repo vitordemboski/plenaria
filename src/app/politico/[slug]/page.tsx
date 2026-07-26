@@ -28,9 +28,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const p = getPolitician(slug);
   if (!p) return {};
+  // Fora do ranking não leva Tier nem Poder NO TÍTULO nem na descrição: é este texto
+  // que o Google indexa e que o WhatsApp mostra no preview do link — a superfície que
+  // mais circula sem a página junto.
+  const fora = foraDoRanking(p);
   return pageMeta({
-    title: `${p.nome} — Tier ${p.tier}`,
-    description: `${p.nome} (${p.partido}-${p.uf}), ${casaLabel(p.casa)}: Poder ${p.ops}, Tier ${p.tier} (${TIER_LABEL[p.tier]}). Atributos, títulos e gasto de cota a partir dos dados oficiais.`,
+    title: fora ? p.nome : `${p.nome} — Tier ${p.tier}`,
+    description: fora
+      ? `${p.nome} (${p.partido}-${p.uf}), ${casaLabel(p.casa)}: sem Tier — ${p.presidenteCasa ? 'preside a Casa' : 'mandato parcial'}, fora do ranking. Atividade e gasto de cota a partir dos dados oficiais.`
+      : `${p.nome} (${p.partido}-${p.uf}), ${casaLabel(p.casa)}: Poder ${p.ops}, Tier ${p.tier} (${TIER_LABEL[p.tier]}). Atributos, títulos e gasto de cota a partir dos dados oficiais.`,
     path: `/politico/${slug}/`,
   });
 }
@@ -74,6 +80,13 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
 
   const tierClass = fora ? 'fora tier-F' : `tier-${p.tier}`;
 
+  // meses em exercício arredondados — a mesma frase serve ao aviso da ficha e à
+  // imagem de compartilhamento, que não pode divergir do que a página afirma.
+  const meses = p.mesesExercicio != null ? Math.round(p.mesesExercicio) : null;
+  const mesesTxt = meses != null ? `${meses} ${meses === 1 ? 'mês' : 'meses'} em exercício` : 'exercício parcial';
+  const motivoFora = !fora ? undefined
+    : p.presidenteCasa ? 'presidência da Casa' : `mandato parcial · ${mesesTxt}`;
+
   return (
     <main className="carta-stage">
       <JsonLd data={personLd(p)} />
@@ -90,21 +103,26 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
             <div className="futc-in">
               <div className="futc-head">
                 <div className="futc-rail">
-                  <b className="futc-ops">{p.ops}</b>
-                  <span className="futc-ops-lbl">Poder</span>
+                  {/* o Poder de quem está fora do ranking não vai à carta: é o número
+                      deprimido pelo tempo fora do exercício, e é dele que sairia o Tier */}
+                  <b className={`futc-ops${fora ? ' vazio' : ''}`} title={fora ? motivoFora : undefined}>
+                    {fora ? '—' : p.ops}
+                  </b>
+                  <span className="futc-ops-lbl">{fora ? 'sem tier' : 'Poder'}</span>
                   <span className="futc-pos">{p.casa === 'camara' ? 'DEP' : 'SEN'}</span>
                   <i className="futc-rail-sep" />
-                  <span
-                    className={`futc-tier${gate ? ' gate' : ''}`}
-                    title={
-                      fora ? 'Fora do ranking — sem Tier'
-                      : gate ? `Tier S bloqueado por: ${gate} — rebaixado para A`
-                      : `Tier ${p.tier} · ${TIER_LABEL[p.tier]}`
-                    }
-                  >
-                    {fora ? '—' : p.tier}
-                    {gate && <i className="lock" aria-hidden>🔒</i>}
-                  </span>
+                  {!fora && (
+                    <span
+                      className={`futc-tier${gate ? ' gate' : ''}`}
+                      title={
+                        gate ? `Tier S bloqueado por: ${gate} — rebaixado para A`
+                        : `Tier ${p.tier} · ${TIER_LABEL[p.tier]}`
+                      }
+                    >
+                      {p.tier}
+                      {gate && <i className="lock" aria-hidden>🔒</i>}
+                    </span>
+                  )}
                 </div>
                 <div
                   className="futc-photo"
@@ -125,6 +143,16 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
               {/* h1 da página — a classe carrega a tipografia, a tag não muda pixel */}
               <h1 className="futc-name">{p.nome}</h1>
               <div className="futc-rule" />
+
+              {/* faixa: o estado "fora do ranking" tem que ser legível de longe. Sem
+                  ela, a carta só se distingue por um traço no lugar do Poder — e uma
+                  ausência não se lê como decisão editorial, se lê como dado faltando. */}
+              {fora && (
+                <div className="futc-faixa">
+                  {p.presidenteCasa ? 'Presidência da Casa'
+                    : `Mandato parcial${meses != null ? ` · ${meses} ${meses === 1 ? 'mês' : 'meses'}` : ''}`}
+                </div>
+              )}
 
               <div
                 className="futc-stats"
@@ -172,18 +200,25 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
       </div>
 
       <div className="carta-cta">
-        <Link className="btn" href={`/batalha/?a=${p.slug}`}>⚔️ Batalhar</Link>
+        {/* quem está fora do ranking não entra na Batalha — o link levaria a um
+            seletor que ignora o ?a= e pareceria bug */}
+        {!fora && <Link className="btn" href={`/batalha/?a=${p.slug}`}>⚔️ Batalhar</Link>}
         <Link className="btn ghost" href="/como-calculamos/">📐 Fórmula</Link>
         <ShareButton
           className="btn ghost"
-          title={`${p.nome} — Tier ${p.tier} · PLENÁRIA`}
-          text={`🃏 ${p.nome} é Tier ${p.tier} (Poder ${p.ops}) na PLENÁRIA! #PLENARIA`}
+          title={fora ? `${p.nome} · PLENÁRIA` : `${p.nome} — Tier ${p.tier} · PLENÁRIA`}
+          text={fora
+            ? `🃏 ${p.nome} na PLENÁRIA — sem Tier (${motivoFora}). #PLENARIA`
+            : `🃏 ${p.nome} é Tier ${p.tier} (Poder ${p.ops}) na PLENÁRIA! #PLENARIA`}
           card={{
             variant: 'politico',
             heading: p.nome,
             sub: `${casaLabel(p.casa, true)} · ${p.uf} · ${p.partido}`,
-            tier: p.tier,
-            ops: p.ops,
+            // fora do ranking sai SEM Tier e SEM Poder: a ficha mostra "—", e a
+            // imagem circula sozinha — as duas têm de dizer a mesma coisa.
+            tier: fora ? undefined : p.tier,
+            ops: fora ? undefined : p.ops,
+            semRanking: motivoFora,
             fotoUrl: p.fotoUrl,
             fotoCredito: p.casa === 'senado' ? 'Agência Senado' : 'Câmara dos Deputados',
             // A imagem NÃO leva títulos — nem os elogiosos. Um selo viaja sem a regra
@@ -196,24 +231,38 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
             story: {
               rank: fora ? undefined : `#${rank} de ${ranqueados.length}`,
               destaque: fora ? undefined : `TOP ${topPct}% da ${casaLabel(p.casa)} por Poder`,
-              tierLabel: TIER_LABEL[p.tier],
+              tierLabel: fora ? undefined : TIER_LABEL[p.tier],
             },
           }}
         />
       </div>
 
       {fora ? (
-        <div className="panel carta-note">
-          {p.presidenteCasa ? (
-            <>🪑 <b>Presidência da Casa — sem Tier.</b> Quem preside a {casaLabel(p.casa)} não vota (salvo desempate/secreto),
-            nem autora ou relata como os demais — o cargo institucional suprime justamente a atividade que medimos.
-            Fica fora da Tier List e dos rankings; os números da carta são informativos.</>
-          ) : (
-            <>🕓 <b>Mandato parcial — sem Tier.</b> Esteve em exercício efetivo por{' '}
-            {p.mesesExercicio != null ? `só ~${Math.round(p.mesesExercicio)} ${Math.round(p.mesesExercicio) === 1 ? 'mês' : 'meses'}` : 'pouco tempo'}{' '}
-            no período — amostra pequena demais para ranquear com justiça. Fica fora da Tier List e dos rankings;
-            os números da carta são informativos.</>
-          )}
+        <div className="panel fora-panel">
+          <h3>{p.presidenteCasa ? '🪑' : '🕓'} Sem Tier — {p.presidenteCasa ? 'presidência da Casa' : 'mandato parcial'}</h3>
+          <p className="fora-por">
+            {p.presidenteCasa ? (
+              <>Quem preside a {casaLabel(p.casa)} não vota (salvo desempate e votação secreta), nem autora ou
+              relata como os demais: o dever institucional do cargo suprime justamente a atividade que medimos.</>
+            ) : (
+              <>{p.nome.split(' ')[0]} esteve em exercício efetivo por{' '}
+              <b>{meses != null ? `cerca de ${meses} ${meses === 1 ? 'mês' : 'meses'}` : 'pouco tempo'}</b>{' '}
+              nesta legislatura, contra os 41 meses de quem tomou posse no início — amostra curta demais para
+              comparar com justiça.</>
+            )}
+          </p>
+          {/* o ponto que faltava: o leitor vê Stamina 0 e conclui "faltou a tudo",
+              quando o 0 mede um período em que ele não estava sentado na cadeira. */}
+          <p className="fora-aviso">
+            <b>Os números acima não são uma avaliação de desempenho.</b> Eles cobrem só o período medido, então
+            atributos baixos ou zerados aqui refletem o <b>tempo fora do exercício</b>, não o trabalho de quem
+            está no cargo. Por isso {p.nome.split(' ')[0]} fica fora da Tier List, dos rankings, das médias de
+            guilda e da Batalha, não recebe títulos — e o card compartilhado sai sem Tier e sem Poder.
+          </p>
+          <p className="fora-fonte">
+            Critério em <Link href="/como-calculamos/">como calculamos</Link>: menos de 12 meses em exercício
+            efetivo sai do ranking. Dado de posse e exercício: {meta.fonte}.
+          </p>
         </div>
       ) : (
         <div className="panel carta-rank">
