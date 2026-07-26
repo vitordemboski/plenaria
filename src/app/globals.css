@@ -859,3 +859,19 @@ a.kpi-link:hover { border-color: var(--gold-2); }
 /* painel que ocupa a linha inteira dentro de um .grid2 (ex.: "A Sabatina" nos
    Insights — o texto explicativo é longo e não cabe em meia coluna) */
 .grid2 > .panel.span2 { grid-column: 1 / -1; }
+
+/* ---------- zoom de foco no iOS — PRECISA FICAR NO FIM DO ARQUIVO ----------
+   O Safari do iPhone dá zoom na página ao focar QUALQUER campo com font-size < 16px
+   e não desfaz ao desfocar: o leitor fica com a página deslocada, tendo que
+   despinçar na mão. Os campos do site são 12–13px, então todos disparavam isso.
+   A "solução" comum (`maximum-scale=1` no viewport) mata o pinch-zoom da página
+   inteira e é falha de acessibilidade; 16px só em ponteiro grosso corrige a causa.
+
+   Por que no fim e não junto de cada campo: os seletores aqui têm a MESMA
+   especificidade das declarações originais (`.picker input`, `.fighter input`…),
+   então quem estiver por último no arquivo vence. Escrito lá em cima, o bloco não
+   surtia efeito nenhum — e o sintoma é exatamente "não mudou nada".
+   Regra única: campo focável novo entra AQUI também, nunca antes deste ponto. */
+@media (pointer: coarse) {
+  .search, .uf-filter, .map-select, .fighter select, .fighter input, .picker input { font-size: 16px; }
+}
