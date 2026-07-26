@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { InsightsShell, buildSectionNodes, availableSectionIds, SECTION_META } from '../sections';
+import { InsightsShell, buildSectionNodes, availableSectionIds, SECTION_META, sectionDesc } from '../sections';
+import { JsonLd } from '@/components/JsonLd';
+import { breadcrumbLd } from '@/lib/jsonld';
+import { pageMeta } from '@/lib/seo';
 
 /**
  * Uma seção do Insights por rota (Atributos, Guildas, Gasto × Entrega, Perfil,
@@ -15,7 +18,11 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ secao: string }> }): Promise<Metadata> {
   const { secao } = await params;
   const s = SECTION_META.find((m) => m.id === secao);
-  return { title: s ? `Insights · ${s.title}` : 'Insights', alternates: { canonical: `/insights/${secao}/` } };
+  return pageMeta({
+    title: s ? `Insights · ${s.title}` : 'Insights',
+    description: sectionDesc(secao) || sectionDesc('panorama'),
+    path: `/insights/${secao}/`,
+  });
 }
 
 export default async function InsightsSecaoPage({ params }: { params: Promise<{ secao: string }> }) {
@@ -23,5 +30,14 @@ export default async function InsightsSecaoPage({ params }: { params: Promise<{ 
   const nodes = buildSectionNodes();
   const node = nodes[secao];
   if (!node || secao === 'panorama') notFound();
-  return <InsightsShell activeId={secao}>{node}</InsightsShell>;
+  const s = SECTION_META.find((m) => m.id === secao);
+  return (
+    <InsightsShell activeId={secao}>
+      <JsonLd data={breadcrumbLd([
+        { nome: 'Insights', path: '/insights/' },
+        { nome: s?.title ?? secao, path: `/insights/${secao}/` },
+      ])} />
+      {node}
+    </InsightsShell>
+  );
 }

@@ -1,8 +1,14 @@
-import type { Metadata } from 'next';
-import { AVAILABLE_STAT_META, titleDefs, meta, TIER_LABEL, TIER_ORDER } from '@/lib/data';
+import { AVAILABLE_STAT_META, politicians, titleDefs, meta, TIER_LABEL, TIER_ORDER } from '@/lib/data';
+import { JsonLd } from '@/components/JsonLd';
+import { datasetLd } from '@/lib/jsonld';
+import { pageMeta } from '@/lib/seo';
 import { REPO_URL } from '@/lib/site';
 
-export const metadata: Metadata = { title: 'Como calculamos', alternates: { canonical: '/como-calculamos/' } };
+export const metadata = pageMeta({
+  title: 'Como calculamos',
+  description: 'A fórmula do Poder aberta atributo por atributo: de onde vem cada número, como ele é normalizado dentro da casa e qual regra factual dispara cada título.',
+  path: '/como-calculamos/',
+});
 
 /**
  * Página de metodologia — o escudo reputacional do produto.
@@ -29,8 +35,9 @@ export default function MethodologyPage() {
 
   return (
     <main style={{ maxWidth: 760, margin: '0 auto' }}>
+      <JsonLd data={datasetLd(politicians.length)} />
       <div className="page-title">
-        <h2>COMO CALCULAMOS</h2>
+        <h1>COMO CALCULAMOS</h1>
         <p>Fórmula pública, auditável e versionada</p>
       </div>
 

@@ -7,6 +7,10 @@ import { GuildCrest } from '@/components/GuildCrest';
 import { ReadingDisclaimer } from '@/components/ReadingDisclaimer';
 import { ShareButton } from '@/components/ShareButton';
 import { TitleBadge } from '@/components/TitleBadge';
+import { JsonLd } from '@/components/JsonLd';
+import { breadcrumbLd, personLd } from '@/lib/jsonld';
+import { pageMeta } from '@/lib/seo';
+import { UF_NOME } from '@/lib/uf';
 import { guildSlug } from '@/lib/slug';
 import type { StatKey } from '@/lib/types';
 
@@ -24,11 +28,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const p = getPolitician(slug);
   if (!p) return {};
-  return {
+  return pageMeta({
     title: `${p.nome} — Tier ${p.tier}`,
-    description: `${casaLabel(p.casa)} · ${p.uf} · Guilda ${p.partido} · Poder ${p.ops} (${TIER_LABEL[p.tier]})`,
-    alternates: { canonical: `/politico/${slug}/` },
-  };
+    description: `${p.nome} (${p.partido}-${p.uf}), ${casaLabel(p.casa)}: Poder ${p.ops}, Tier ${p.tier} (${TIER_LABEL[p.tier]}). Atributos, títulos e gasto de cota a partir dos dados oficiais.`,
+    path: `/politico/${slug}/`,
+  });
 }
 
 /** abreviações de 3 letras no espírito PAC/SHO/PAS das cartas de futebol */
@@ -72,6 +76,11 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
 
   return (
     <main className="carta-stage">
+      <JsonLd data={personLd(p)} />
+      <JsonLd data={breadcrumbLd([
+        { nome: UF_NOME[p.uf] ?? p.uf, path: `/estado/${p.uf}/` },
+        { nome: p.nome, path: `/politico/${p.slug}/` },
+      ])} />
       {/* moldura de leitura antes de qualquer número (ver ReadingDisclaimer) */}
       <ReadingDisclaimer />
 
@@ -113,7 +122,8 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
                 </div>
               </div>
 
-              <div className="futc-name">{p.nome}</div>
+              {/* h1 da página — a classe carrega a tipografia, a tag não muda pixel */}
+              <h1 className="futc-name">{p.nome}</h1>
               <div className="futc-rule" />
 
               <div
@@ -144,7 +154,9 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
               </div>
 
               <div className="futc-foot">
-                <span className="plate" title={`Estado: ${p.uf}`}>{p.uf}</span>
+                {/* link: as 27 páginas de estado só eram alcançáveis pelos Insights,
+                    e é o que torna o breadcrumb (Início › Estado › nome) verdadeiro */}
+                <Link href={`/estado/${p.uf}/`} className="plate" title={`Bancada de ${p.uf}`}>{p.uf}</Link>
                 <Link
                   href={`/guilda/${guildSlug(p.partido)}/`}
                   className="crest-link"

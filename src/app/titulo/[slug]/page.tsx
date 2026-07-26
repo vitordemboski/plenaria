@@ -2,6 +2,9 @@ import { notFound } from 'next/navigation';
 import { politicians, titleDefs, getTitle, casaLabel, meta } from '@/lib/data';
 import type { StatKey } from '@/lib/types';
 import { PoliticianLink } from '@/components/PoliticianLink';
+import { JsonLd } from '@/components/JsonLd';
+import { breadcrumbLd } from '@/lib/jsonld';
+import { pageMeta } from '@/lib/seo';
 
 /**
  * Página de título — lista todos os parlamentares que carregam o título,
@@ -22,7 +25,18 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const t = getTitle(slug);
   if (!t) return {};
-  return { title: semEmoji(t.label), description: t.regra, alternates: { canonical: `/titulo/${slug}/` } };
+  // A description descreve a PÁGINA, não é a regra: como regra (467 chars no
+  // "Blogueiro de Plenário") o Google cortava em ~155, justo antes da cláusula que
+  // absolve — selo vermelho sem a parte que o limita é acusação descontextualizada.
+  // A regra íntegra fica no topo da página.
+  const n = politicians.filter((p) => p.titles.includes(slug)).length;
+  const quantos = n === 1 ? '1 parlamentar carrega' : `${n} parlamentares carregam`;
+  const label = semEmoji(t.label);
+  return pageMeta({
+    title: label,
+    description: `${quantos} o título ${label} na legislatura atual. Veja a regra factual completa que o dispara e o número bruto de cada um.`,
+    path: `/titulo/${slug}/`,
+  });
 }
 
 // atributo cujo dado bruto explica o título — vira a linha factual de cada parlamentar
@@ -47,8 +61,13 @@ export default async function TitlePage({ params }: { params: Promise<{ slug: st
 
   return (
     <main>
+      <JsonLd data={breadcrumbLd([
+        { nome: 'Insights', path: '/insights/' },
+        { nome: 'Títulos', path: '/insights/titulos/' },
+        { nome: semEmoji(titulo.label), path: `/titulo/${slug}/` },
+      ])} />
       <div className="page-title">
-        <h2>{titulo.label.toUpperCase()}</h2>
+        <h1>{titulo.label.toUpperCase()}</h1>
         <p>{titulo.regra}</p>
       </div>
 

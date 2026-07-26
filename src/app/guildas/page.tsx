@@ -1,11 +1,15 @@
-import type { Metadata } from 'next';
 import { PrefetchLink } from '@/components/PrefetchLink';
 import { getGuildStats } from '@/lib/guild-stats';
 import { GuildCrest } from '@/components/GuildCrest';
-import { TIER_ORDER, TIER_LABEL, meta } from '@/lib/data';
+import { TIER_ORDER, TIER_LABEL, guilds, meta } from '@/lib/data';
+import { pageMeta } from '@/lib/seo';
 import { guildSlug } from '@/lib/slug';
 
-export const metadata: Metadata = { title: 'Guildas', alternates: { canonical: '/guildas/' } };
+export const metadata = pageMeta({
+  title: 'Guildas',
+  description: `As ${guilds.length} facções (partidos) do reino ranqueadas por Poder médio, com a distribuição de tiers e o gasto de cota de cada bancada.`,
+  path: '/guildas/',
+});
 
 const ARCHETYPE: Record<string, string> = {
   esquerda: 'Facção da Vanguarda',
@@ -25,7 +29,7 @@ export default function GuildsPage() {
   return (
     <main>
       <div className="page-title">
-        <h2>GUILDAS</h2>
+        <h1>GUILDAS</h1>
         <p>As {stats.length} facções do reino, ranqueadas pelo Poder médio</p>
       </div>
 

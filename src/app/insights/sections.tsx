@@ -27,14 +27,27 @@ const fmtMilReais = (mil: number) =>
  * resolve a disponibilidade real (Governo e Títulos são condicionais aos dados).
  */
 export const SECTION_META = [
-  { id: 'panorama', label: '📈 Panorama', title: 'Panorama' },
-  { id: 'atributos', label: '🏅 Atributos', title: 'Atributos' },
-  { id: 'guildas', label: '🛡️ Guildas', title: 'Guildas' },
-  { id: 'gastos', label: '💸 Gasto × Entrega', title: 'Gasto × Entrega' },
-  { id: 'perfil', label: '👥 Perfil', title: 'Perfil' },
-  { id: 'governo', label: '🏛️ Governo × Oposição', title: 'Governo × Oposição' },
-  { id: 'titulos', label: '🎖️ Títulos', title: 'Títulos' },
+  { id: 'panorama', label: '📈 Panorama', title: 'Panorama',
+    desc: 'A legislatura em números: distribuição de tiers, médias por casa e os extremos do Poder nas duas casas.' },
+  { id: 'atributos', label: '🏅 Atributos', title: 'Atributos',
+    desc: 'Quem lidera cada atributo do Poder — Ataque, Stamina, Eficiência, Técnica e Economia — na Câmara e no Senado.' },
+  { id: 'guildas', label: '🛡️ Guildas', title: 'Guildas',
+    desc: 'Ranking das guildas (partidos) por Poder médio e por gasto de cota, com a composição de tiers de cada bancada.' },
+  { id: 'gastos', label: '💸 Gasto × Entrega', title: 'Gasto × Entrega',
+    desc: 'O cruzamento entre gasto de cota CEAP/CEAPS e entrega legislativa, parlamentar por parlamentar e por casa.' },
+  { id: 'perfil', label: '👥 Perfil', title: 'Perfil',
+    desc: 'Quem compõe o Congresso: renovação, gênero, sabatinas e a distribuição das bancadas por estado.' },
+  { id: 'governo', label: '🏛️ Governo × Oposição', title: 'Governo × Oposição',
+    desc: 'Alinhamento com a orientação da bancada do Governo, deputado por deputado — métrica informativa, que não pontua no Poder.' },
+  { id: 'titulos', label: '🎖️ Títulos', title: 'Títulos',
+    desc: 'Todos os títulos em circulação, a regra factual que dispara cada um e quem os carrega hoje.' },
 ] as const;
+
+/** descrição da seção, para o <meta description> das rotas de Insights.
+ *  Vive junto do SECTION_META para não divergir do conteúdo da aba. */
+export function sectionDesc(id: string): string {
+  return SECTION_META.find((s) => s.id === id)?.desc ?? '';
+}
 
 /** Governo × Oposição só existe na Câmara (única casa que publica orientação de
  *  bancada) — a UI se adapta por meta.availableStats, nunca por suposição. */
@@ -464,7 +477,7 @@ export function InsightsShell({ activeId, children }: { activeId: string; childr
   return (
     <main>
       <div className="page-title">
-        <h2>INSIGHTS</h2>
+        <h1>INSIGHTS</h1>
         <p>Análises do reino — {meta.fonte}</p>
       </div>
 

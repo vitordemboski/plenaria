@@ -6,7 +6,10 @@ import { GuildCrest } from '@/components/GuildCrest';
 import { PoliticianLink } from '@/components/PoliticianLink';
 import { ShareButton } from '@/components/ShareButton';
 import { TitleBadge } from '@/components/TitleBadge';
+import { JsonLd } from '@/components/JsonLd';
+import { breadcrumbLd } from '@/lib/jsonld';
 import { guildTierOf } from '@/lib/guild-stats';
+import { pageMeta } from '@/lib/seo';
 import { guildSlug } from '@/lib/slug';
 import type { Tier, StatKey } from '@/lib/types';
 
@@ -26,7 +29,12 @@ export async function generateMetadata({ params }: { params: Promise<{ sigla: st
   const { sigla } = await params;
   const g = guildDoSlug(sigla);
   if (!g) return {};
-  return { title: `Guilda ${g.sigla} — ${g.nome}`, description: `Carta de facção da guilda ${g.nome} na PLENÁRIA.`, alternates: { canonical: `/guilda/${sigla}/` } };
+  const n = politicians.filter((p) => p.partido === g.sigla).length;
+  return pageMeta({
+    title: `Guilda ${g.sigla} — ${g.nome}`,
+    description: `A carta de facção do ${g.sigla} (${g.nome}): Poder médio, distribuição de tiers e os ${n} parlamentares da bancada.`,
+    path: `/guilda/${sigla}/`,
+  });
 }
 
 /** abreviações de 3 letras, mesmas da carta de parlamentar */
@@ -82,6 +90,10 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
 
   return (
     <main>
+      <JsonLd data={breadcrumbLd([
+        { nome: 'Guildas', path: '/guildas/' },
+        { nome: `Guilda ${guild.sigla}`, path: `/guilda/${slug}/` },
+      ])} />
       <div className="carta-stage">
         <div className="carta-hero">
           <div className={`futc-glow${tier === 'S' || tier === 'A' ? ` glow-${tier}` : ''}`}>
@@ -105,7 +117,8 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
                   </div>
                 </div>
 
-                <div className={`futc-name${guild.nome.length > 24 ? ' futc-name-sm' : ''}`}>{guild.nome}</div>
+                {/* h1 da página — ver a nota gêmea em politico/[slug]/page.tsx */}
+                <h1 className={`futc-name${guild.nome.length > 24 ? ' futc-name-sm' : ''}`}>{guild.nome}</h1>
                 <div className="futc-rule" />
 
                 <div

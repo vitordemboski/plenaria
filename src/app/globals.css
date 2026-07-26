@@ -56,7 +56,7 @@ button { font: inherit; cursor: pointer; }
   flex-wrap: wrap; gap: 14px; margin-bottom: 30px;
 }
 .brand { display: flex; align-items: baseline; gap: 12px; }
-.brand h1 a, .brand .logo {
+.brand .brandmark a {
   font-family: var(--font-display), serif; font-weight: 900; letter-spacing: 0.14em;
   font-size: clamp(22px, 4vw, 34px);
   background: linear-gradient(180deg, var(--gold-2), var(--gold) 55%, #9a7a1e);
@@ -81,14 +81,14 @@ button { font: inherit; cursor: pointer; }
     background: linear-gradient(90deg, transparent, var(--gold), transparent);
   }
   .brand { flex-direction: column; align-items: center; gap: 0; }
-  /* PLENÁRIA menor e com filetes laterais — lê como marca, não como H1 */
-  .brand h1 { display: flex; align-items: center; gap: 12px; }
-  .brand h1::before, .brand h1::after {
+  /* PLENÁRIA menor e com filetes laterais — lê como marca (e não é h1) */
+  .brand .brandmark { display: flex; align-items: center; gap: 12px; }
+  .brand .brandmark::before, .brand .brandmark::after {
     content: ""; width: 20px; height: 1px; opacity: 0.7;
   }
-  .brand h1::before { background: linear-gradient(90deg, transparent, var(--gold-2)); }
-  .brand h1::after { background: linear-gradient(90deg, var(--gold-2), transparent); }
-  .brand h1 a { font-size: 17px; letter-spacing: 0.34em; }
+  .brand .brandmark::before { background: linear-gradient(90deg, transparent, var(--gold-2)); }
+  .brand .brandmark::after { background: linear-gradient(90deg, var(--gold-2), transparent); }
+  .brand .brandmark a { font-size: 17px; letter-spacing: 0.34em; }
   /* a legenda "O RPG da Política Brasileira" some no mobile: era o 2º subtítulo
      que criava o efeito de "double title" */
   .brand small { display: none; }
@@ -138,7 +138,7 @@ button { font: inherit; cursor: pointer; }
 
 /* ---------- page titles ---------- */
 .page-title { text-align: center; margin-bottom: 26px; }
-.page-title h2 {
+.page-title h1 {
   font-family: var(--font-display), serif; font-weight: 900; letter-spacing: 0.18em;
   font-size: clamp(22px, 5vw, 34px);
   background: linear-gradient(180deg, var(--gold-2), var(--gold));

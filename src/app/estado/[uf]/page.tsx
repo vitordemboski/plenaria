@@ -1,16 +1,10 @@
 import { notFound } from 'next/navigation';
 import { politicians, casaLabel, foraDoRanking } from '@/lib/data';
 import { PoliticianLink } from '@/components/PoliticianLink';
-
-const UF_NOME: Record<string, string> = {
-  AC: 'Acre', AL: 'Alagoas', AM: 'Amazonas', AP: 'Amapá', BA: 'Bahia',
-  CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás',
-  MA: 'Maranhão', MG: 'Minas Gerais', MS: 'Mato Grosso do Sul', MT: 'Mato Grosso',
-  PA: 'Pará', PB: 'Paraíba', PE: 'Pernambuco', PI: 'Piauí', PR: 'Paraná',
-  RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RO: 'Rondônia', RR: 'Roraima',
-  RS: 'Rio Grande do Sul', SC: 'Santa Catarina', SE: 'Sergipe', SP: 'São Paulo',
-  TO: 'Tocantins',
-};
+import { JsonLd } from '@/components/JsonLd';
+import { breadcrumbLd } from '@/lib/jsonld';
+import { pageMeta } from '@/lib/seo';
+import { UF_NOME } from '@/lib/uf';
 
 /**
  * Página do estado — a bancada completa da UF (deputados + senadores)
@@ -23,7 +17,12 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ uf: string }> }) {
   const { uf } = await params;
   const nome = UF_NOME[uf] ?? uf;
-  return { title: nome, description: `A bancada de ${nome} ranqueada por Poder`, alternates: { canonical: `/estado/${uf}/` } };
+  const n = politicians.filter((p) => p.uf === uf).length;
+  return pageMeta({
+    title: nome,
+    description: `Os ${n} parlamentares de ${nome} — deputados e senadores — ranqueados por Poder, com tier, atributos e títulos de cada um.`,
+    path: `/estado/${uf}/`,
+  });
 }
 
 export default async function StatePage({ params }: { params: Promise<{ uf: string }> }) {
@@ -36,10 +35,13 @@ export default async function StatePage({ params }: { params: Promise<{ uf: stri
 
   const opsMedio = bancada.length ? Math.round(bancada.reduce((s, p) => s + p.ops, 0) / bancada.length) : 0;
 
+  const nomeUf = UF_NOME[uf] ?? uf;
+
   return (
     <main>
+      <JsonLd data={breadcrumbLd([{ nome: nomeUf, path: `/estado/${uf}/` }])} />
       <div className="page-title">
-        <h2>{(UF_NOME[uf] ?? uf).toUpperCase()}</h2>
+        <h1>{nomeUf.toUpperCase()}</h1>
         <p>{bancada.length} parlamentares · Poder médio da bancada: {opsMedio}</p>
       </div>
 

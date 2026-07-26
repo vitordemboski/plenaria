@@ -302,6 +302,14 @@ como contestar. O contato ali precisa ser um endereço que alguém realmente lê
   têm `higherIsBetter`: use `null` para o que é neutro. Alinhamento com o Governo é
   neutro — pintar "mais governista = verde" (ou = vermelho) seria a plataforma tomando
   partido pela paleta, contrabandeando o juízo que a métrica se recusa a fazer.
+- **`metadata` de rota sai do `pageMeta` (`src/lib/seo.ts`), nunca à mão:** o merge do
+  Next é RASO — declarar `openGraph` na página apaga a `og:image` do layout, e
+  `openGraph`/`twitter` não herdam o `title` da própria página. Erro silencioso; se
+  mexeu, confira no HTML de `out/`, não no código.
+- **Poder e Tier nunca viram `AggregateRating`/`Review` no JSON-LD** (`src/lib/jsonld.ts`):
+  rating sobre pessoa não é elegível no Google e seria a plataforma pondo NOTA numa
+  pessoa em formato de máquina. Mesmo princípio da cor neutra acima — estrela na SERP
+  julga mais que cor. Números vão como `PropertyValue`, Tier como texto.
 
 ## Verificação
 
@@ -312,3 +320,5 @@ Eficiência, Fiscalização nem Alinhamento, e é o melhor teste de que a UI est
 adaptando pelo `meta.json` em vez de hardcodar atributos.
 Atenção: o Chrome headless no macOS força largura mínima de janela ~500px — para testar
 mobile de verdade, use um iframe de 390px ou o DevTools device mode.
+Mexeu em metadado/JSON-LD? Varra o `out/`: 1 `<h1>` por página, `og:title` sem duplicata,
+URLs do sitemap existindo em disco, JSON-LD parseável e sem `ratingValue`.

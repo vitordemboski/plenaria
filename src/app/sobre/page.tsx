@@ -1,9 +1,13 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { meta } from '@/lib/data';
+import { pageMeta } from '@/lib/seo';
 import { REPO_URL } from '@/lib/site';
 
-export const metadata: Metadata = { title: 'Sobre, privacidade e correções', alternates: { canonical: '/sobre/' } };
+export const metadata = pageMeta({
+  title: 'Sobre, privacidade e correções',
+  description: 'Quem publica a PLENÁRIA, de onde vêm os dados, sob que base legal são tratados e como pedir a correção de qualquer número exibido.',
+  path: '/sobre/',
+});
 
 /**
  * Página institucional — o par da /como-calculamos: lá está COMO o número sai,
@@ -31,7 +35,7 @@ export default function SobrePage() {
   return (
     <main style={{ maxWidth: 760, margin: '0 auto' }}>
       <div className="page-title">
-        <h2>SOBRE</h2>
+        <h1>SOBRE</h1>
         <p>Quem publica, de onde vêm os dados e como pedir correção</p>
       </div>
 

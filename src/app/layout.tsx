@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Script from 'next/script';
 import SiteNav from '@/components/SiteNav';
 import { meta } from '@/lib/data';
+import { OG_IMAGE, SITE_DESC, SITE_NAME, SITE_TITLE, SITE_URL } from '@/lib/seo';
 import { REPO_URL } from '@/lib/site';
 import './globals.css';
 import './tiers.css';
@@ -19,28 +20,27 @@ const cfBeaconToken = process.env.NEXT_PUBLIC_CF_BEACON_TOKEN;
 const display = Cinzel({ subsets: ['latin'], weight: ['700', '900'], variable: '--font-display' });
 const mono = Sometype_Mono({ subsets: ['latin'], weight: ['400', '600', '700'], variable: '--font-mono' });
 
-const SITE_DESC =
-  'Cards de personagem, tiers, guildas e batalhas 1v1 gerados a partir dos Dados Abertos da Câmara e do Senado. Fórmula pública e auditável.';
-
+// Só os PADRÕES (hoje valem para o 404): toda rota monta os seus com `pageMeta`,
+// porque o merge de metadata do Next é raso. Ver src/lib/seo.ts.
 export const metadata: Metadata = {
   // Domínio canônico do site. Serve de base para o canonical de cada rota (o
   // `alternates.canonical` de cada página é relativo e resolvido contra isto).
-  metadataBase: new URL('https://plenariarpg.com'),
-  title: { default: 'PLENÁRIA — O RPG da Política Brasileira', template: '%s · PLENÁRIA' },
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_TITLE, template: `%s · ${SITE_NAME}` },
   description: SITE_DESC,
   openGraph: {
     type: 'website',
-    siteName: 'PLENÁRIA',
-    title: 'PLENÁRIA — O RPG da Política Brasileira',
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
     description: SITE_DESC,
     locale: 'pt_BR',
-    images: [{ url: '/og.jpg', width: 1200, height: 630, alt: 'PLENÁRIA — O RPG da Política Brasileira' }],
+    images: [OG_IMAGE],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'PLENÁRIA — O RPG da Política Brasileira',
+    title: SITE_TITLE,
     description: SITE_DESC,
-    images: ['/og.jpg'],
+    images: [OG_IMAGE.url],
   },
 };
 
@@ -54,7 +54,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="wrap">
           <header className="site-header">
             <div className="brand">
-              <h1><Link href="/">PLENÁRIA</Link></h1>
+              {/* NÃO é <h1>: o h1 de cada página é o assunto dela. Como marca
+                  repetida em 673 páginas, deixava as fichas sem heading próprio. */}
+              <div className="brandmark"><Link href="/">PLENÁRIA</Link></div>
               <small>O RPG da Política Brasileira</small>
             </div>
             <SiteNav />

@@ -1,7 +1,12 @@
-import type { Metadata } from 'next';
-import { InsightsShell, buildSectionNodes } from './sections';
+import { InsightsShell, buildSectionNodes, sectionDesc } from './sections';
+import { pageMeta } from '@/lib/seo';
 
-export const metadata: Metadata = { title: 'Insights', alternates: { canonical: '/insights/' } };
+// mesma descrição do Panorama (esta rota É o Panorama) — vem do SECTION_META p/ não divergir
+export const metadata = pageMeta({
+  title: 'Insights',
+  description: sectionDesc('panorama'),
+  path: '/insights/',
+});
 
 /**
  * Dashboard de Insights — dados 100% pré-computados no build (data/insights.json).

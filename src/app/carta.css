@@ -167,6 +167,9 @@
 }
 .futc-foot .crest-link { display: grid; place-items: center; transition: 0.2s; }
 .futc-foot .crest-link:hover { transform: translateY(-2px) scale(1.06); }
+/* a plate da UF é link; o `a { color: inherit }` global já mantém a cor */
+a.plate { transition: 0.2s; }
+a.plate:hover { border-color: var(--gold-2); background: rgba(212, 175, 55, 0.14); }
 
 /* ------------------------------------------------------------
    Materiais por tier (mesma escala de tiers.css, na silhueta nova)
