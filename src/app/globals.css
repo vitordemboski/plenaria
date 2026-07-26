@@ -800,7 +800,12 @@ a.kpi-link:hover { border-color: var(--gold-2); }
 .panel h3.cor-green { color: #7ee0b0; }
 .panel h3.cor-red { color: var(--red-soft); }
 .panel h3.cor-purple { color: #c9b8ff; }
-.title-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+/* auto-FIT, não auto-fill: com `fill`, o grid cria todas as trilhas que cabem e as
+   vazias continuam ocupando 1fr — a seção Críticos (4 títulos numa faixa que comporta
+   5) sobrava uma trilha fantasma à direita, e os cards não chegavam à borda. `fit`
+   colapsa a trilha vazia e os 4 esticam. Máximo de 9 títulos por seção (verdes), então
+   não há risco de um card único virar uma faixa larga demais. */
+.title-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .title-card {
   display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit;
   background: var(--panel); border: 1px solid var(--line); border-left-width: 3px;
