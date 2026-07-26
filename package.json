@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "data:real": "node scripts/ingest-real.mjs && node scripts/fetch-fotos.mjs",
+    "data:fresh": "node scripts/ingest-real.mjs --fresh && node scripts/fetch-fotos.mjs",
     "fotos": "node scripts/fetch-fotos.mjs",
     "og": "node scripts/make-og.mjs",
     "social:template": "node scripts/social-template.mjs",

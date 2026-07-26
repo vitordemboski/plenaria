@@ -8,6 +8,7 @@ Leia `docs/product-spec.md` para o produto e `docs/architecture.md` para a arqui
 | Comando | O que faz |
 |---|---|
 | `npm run data:real` | Ingesta DADOS REAIS (Câmara + Senado) — cache em `data/raw/` (~1GB); já roda o `fotos` no fim. Do zero leva ~1h (a API da Câmara devolve 504 em rajada); com cache quente, minutos |
+| `npm run data:fresh` | O mesmo com `--fresh`: ignora o TTL e re-baixa TODA fonte volátil (ver "Validade do cache" abaixo) |
 | `npm run fotos` | Baixa as fotos oficiais p/ `public/fotos/` como **WebP** (~8MB) e repõe os `fotoUrl` p/ caminho local |
 | `npm run social:template` | Gera/atualiza o esqueleto de `data/social.csv` com handles oficiais |
 | `npm run social:discover` | Descobre handles não declarados à Câmara |
@@ -83,6 +84,17 @@ guardados na conta do Apify, e **ler dataset já computado é grátis** (só re-
 Foi assim que a coleta de 2026-07-06 foi restaurada sem gastar um centavo.
 
 Armadilhas conhecidas das APIs:
+- **Cache com validade — reingerir NÃO garante dado novo.** O `cached()` servia
+  qualquer arquivo existente para sempre: com `data/raw/` populado, `data:real` só
+  recalculava sobre dados velhos (log 100% `[cache]`, zero byte baixado) e ainda
+  carimbava a data de hoje no `meta.json`. Hoje o volátil (bulks, cota, votações,
+  autorias, Senado) expira em 24h (`PLENARIA_CACHE_TTL_H`; `--fresh` ignora), e
+  `dep-hist-*`/`dep-legs-*` (504 em rajada) e `relatores-historico.json` (~24 mil
+  chamadas) são PERMANENTES — só voltam se o arquivo sumir. Efeito colateral disso:
+  relatoria nova em proposição antiga não aparece sem apagar o `relatores-historico`.
+- **`updatedAt` é a data da fonte mais velha**, não a da execução (essa é `geradoEm`).
+  O dado é tão atual quanto sua parte mais velha, e é o `updatedAt` que ~673 páginas
+  exibem ao leitor.
 - **CSV dos Dados Abertos NÃO se parseia com `split`.** As ementas contêm quebras de
   linha DENTRO das aspas: um `text.split('\n')` parte o registro ao meio e as colunas
   saem deslocadas — 6,69% das linhas de `proposicoes-2025.csv` (7.592 de 113.427).

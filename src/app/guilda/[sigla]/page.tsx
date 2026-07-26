@@ -67,15 +67,25 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
       return [s.key, Math.round(base.reduce((sum, p) => sum + p.stats[s.key], 0) / (base.length || 1))];
     }),
   ) as Record<StatKey, number>;
+  // guilda sem NENHUM ranqueável: Poder médio 0 e Tier F seriam ausência de gente
+  // medida lida como desempenho ruim — mesma armadilha do mandato parcial
+  const semRoster = members.length === 0;
   const opsMedio = opsMedioDe(guild.sigla);
   const tier = guildTierOf(opsMedio);
   const pesoDe = (k: string) => Math.round(((meta.pesos as Record<string, number>)[k] ?? 0) * 100);
 
-  // posição no ranking de guildas por Poder médio — derivável 100% dos dados
-  const rank = 1 + guilds.filter((g) => opsMedioDe(g.sigla) > opsMedio).length;
+  // posição no ranking de guildas por Poder médio — derivável 100% dos dados.
+  // O universo são as guildas COM roster: incluir as sem membro ranqueável no
+  // denominador ("#12 de 22") contaria guilda que nem está sendo ranqueada.
+  const guildasRanqueaveis = guilds.filter((g) =>
+    politicians.some((p) => p.partido === g.sigla && !foraDoRanking(p)));
+  const rank = 1 + guildasRanqueaveis.filter((g) => opsMedioDe(g.sigla) > opsMedio).length;
 
-  const nCamara = members.filter((p) => p.casa === 'camara').length;
-  const nSenado = members.filter((p) => p.casa === 'senado').length;
+  // sem roster o rodapé contaria "0 DEP · 0 SEN" numa guilda que TEM parlamentar —
+  // a carta já não ranqueia nada ali, então conta a bancada inteira
+  const paraContagem = semRoster ? parciais : members;
+  const nCamara = paraContagem.filter((p) => p.casa === 'camara').length;
+  const nSenado = paraContagem.filter((p) => p.casa === 'senado').length;
 
   const byTier = new Map<Tier, typeof members>(TIER_ORDER.map((t) => [t, []]));
   for (const p of members) byTier.get(p.tier)!.push(p);
@@ -96,18 +106,20 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
       ])} />
       <div className="carta-stage">
         <div className="carta-hero">
-          <div className={`futc-glow${tier === 'S' || tier === 'A' ? ` glow-${tier}` : ''}`}>
-            <div className={`futc tier-${tier}`}>
+          <div className={`futc-glow${!semRoster && (tier === 'S' || tier === 'A') ? ` glow-${tier}` : ''}`}>
+            <div className={`futc ${semRoster ? 'fora tier-F' : `tier-${tier}`}`}>
               <div className="futc-in">
                 <div className="futc-head">
                   <div className="futc-rail">
-                    <b className="futc-ops">{opsMedio}</b>
-                    <span className="futc-ops-lbl">Poder médio</span>
+                    <b className={`futc-ops${semRoster ? ' vazio' : ''}`}>{semRoster ? '—' : opsMedio}</b>
+                    <span className="futc-ops-lbl">{semRoster ? 'sem tier' : 'Poder médio'}</span>
                     <span className="futc-pos">GLD</span>
                     <i className="futc-rail-sep" />
-                    <span className="futc-tier" title={`Tier ${tier} · ${TIER_LABEL[tier]} (pelo Poder médio)`}>
-                      {tier}
-                    </span>
+                    {!semRoster && (
+                      <span className="futc-tier" title={`Tier ${tier} · ${TIER_LABEL[tier]} (pelo Poder médio)`}>
+                        {tier}
+                      </span>
+                    )}
                   </div>
                   <div
                     className="futc-photo futc-crestwin"
@@ -121,6 +133,11 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
                 <h1 className={`futc-name${guild.nome.length > 24 ? ' futc-name-sm' : ''}`}>{guild.nome}</h1>
                 <div className="futc-rule" />
 
+                {semRoster && <div className="futc-faixa">Sem membros ranqueáveis</div>}
+
+                {/* sem roster a grade sairia "0 ATQ · 0 STA · 0 EFI…" — média de
+                    ninguém, lida como bancada péssima. Melhor não afirmar nada. */}
+                {!semRoster && (
                 <div
                   className="futc-stats"
                   style={{ gridTemplateRows: `repeat(${Math.ceil(SCORING_STAT_META.length / 2)}, auto)` }}
@@ -143,6 +160,7 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
                     );
                   })}
                 </div>
+                )}
 
                 <div className="futc-foot">
                   <span className="plate" title={`${nCamara} na Câmara dos Deputados`}>{nCamara} DEP</span>
@@ -155,36 +173,62 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
         </div>
 
         <div className="carta-cta">
-          <Link className="btn" href={`/batalha/?ga=${guild.sigla}`}>⚔️ Batalhar</Link>
+          {/* guilda sem roster não entra na Batalha — o ?ga= cairia num seletor que a ignora */}
+          {!semRoster && <Link className="btn" href={`/batalha/?ga=${guild.sigla}`}>⚔️ Batalhar</Link>}
           <Link className="btn ghost" href="/insights/">📊 Insights</Link>
           <ShareButton
             className="btn ghost"
             title={`Guilda ${guild.sigla} — ${guild.nome} · PLENÁRIA`}
-            text={`🛡️ A guilda ${guild.sigla} é Tier ${tier} (Poder médio ${opsMedio}, ${members.length} membros) na PLENÁRIA! #PLENARIA`}
+            text={semRoster
+              ? `🛡️ A guilda ${guild.sigla} na PLENÁRIA — sem membros ranqueáveis. #PLENARIA`
+              : `🛡️ A guilda ${guild.sigla} é Tier ${tier} (Poder médio ${opsMedio}, ${members.length} membros) na PLENÁRIA! #PLENARIA`}
             card={{
               variant: 'guilda',
               heading: guild.nome,
               sub: `Guilda ${guild.sigla} · ${members.length} membros`,
-              tier,
-              ops: opsMedio,
+              tier: semRoster ? undefined : tier,
+              ops: semRoster ? undefined : opsMedio,
+              semRanking: semRoster ? 'sem membros ranqueáveis' : undefined,
               opsLabel: 'Poder médio',
               accent: guild.cor,
               sigla: guild.sigla,
-              stats: SCORING_STAT_META.map((s) => ({ icon: s.icon, label: s.label, value: avgStats[s.key] })),
+              // sem roster os atributos seriam 0 — média de ninguém circulando como avaliação
+              stats: semRoster ? undefined
+                : SCORING_STAT_META.map((s) => ({ icon: s.icon, label: s.label, value: avgStats[s.key] })),
               story: {
-                rank: `#${rank} de ${guilds.length} guildas`,
-                destaque: `${members.length} membros · por Poder médio`,
-                tierLabel: TIER_LABEL[tier],
+                rank: semRoster ? undefined : `#${rank} de ${guildasRanqueaveis.length} guildas`,
+                destaque: semRoster ? undefined : `${members.length} membros · por Poder médio`,
+                tierLabel: semRoster ? undefined : TIER_LABEL[tier],
               },
             }}
           />
         </div>
 
-        <div className="panel carta-rank">
-          <div className="big">#{rank} de {guilds.length} guildas</div>
-          <p className="sub">por Poder médio · Tier {tier} — {TIER_LABEL[tier]} · {members.length} membros ranqueados</p>
-        </div>
+        {semRoster ? (
+          <div className="panel fora-panel">
+            <h3>🕓 Sem membros ranqueáveis</h3>
+            <p className="fora-por">
+              {parciais.length === 1
+                ? `O único parlamentar da guilda está fora do ranking`
+                : `Todos os ${parciais.length} parlamentares da guilda estão fora do ranking`}
+              {' '}— mandato parcial ou presidência da Casa. Estão listados abaixo, com a ficha completa.
+            </p>
+            <p className="fora-aviso">
+              <b>Isto não é um resultado ruim da guilda.</b> Poder médio e Tier saem da média dos membros
+              ranqueáveis; sem nenhum, não há o que medir — então a guilda fica fora do ranking de guildas e
+              da Batalha, em vez de aparecer em último lugar com Poder 0.
+            </p>
+          </div>
+        ) : (
+          <div className="panel carta-rank">
+            <div className="big">#{rank} de {guildasRanqueaveis.length} guildas</div>
+            <p className="sub">por Poder médio · Tier {tier} — {TIER_LABEL[tier]} · {members.length} membros ranqueados</p>
+          </div>
+        )}
 
+        {/* painéis que só existem com roster: sem membros, todos ficariam com o
+            título e o corpo vazio, o que parece dado faltando */}
+        {!semRoster && (<>
         <div className="panel">
           <h3>🏰 Composição por tier</h3>
           <p className="sub">quantos membros a guilda tem em cada rank</p>
@@ -245,6 +289,7 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
             Atributos = média dos {members.length} membros · {meta.fonte}
           </div>
         </div>
+        </>)}
       </div>
 
       {/* roster completo */}

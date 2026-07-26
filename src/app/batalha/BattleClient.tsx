@@ -367,7 +367,12 @@ export function BattleClient() {
     window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
   }, [mode, slugA, slugB, guildA, guildB, list.length]);
 
-  const guildAggs = useMemo(() => aggregateGuilds(guilds, list), [guilds, list]);
+  // guilda sem membro ranqueável entra com Poder médio 0 e perderia todo duelo por
+  // não ter ninguém medido — some do seletor, como os parlamentares fora do ranking
+  const guildAggs = useMemo(
+    () => aggregateGuilds(guilds, list).filter((g) => g.membros > 0),
+    [guilds, list],
+  );
 
   const a = useMemo(() => list.find((p) => p.slug === slugA), [list, slugA]);
   const b = useMemo(() => list.find((p) => p.slug === slugB), [list, slugB]);

@@ -102,7 +102,11 @@ export interface Guild {
  *  nunca hardcode suposições sobre quais atributos existem. */
 export interface DataMeta {
   fonte: string;
+  /** data da FONTE mais velha usada na ingestão — é o que o site exibe.
+   *  Não confundir com `geradoEm`: recalcular sobre cache não atualiza dado. */
   updatedAt: string;
+  /** data em que o gerador rodou (diagnóstico; não é exibido ao leitor) */
+  geradoEm?: string;
   availableStats: StatKey[];
   pesos: Partial<Record<StatKey, number>>;
   /** pesos específicos por casa (o Senado não tem Fiscalização nem Alinhamento, por ex.) */

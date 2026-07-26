@@ -1,13 +1,13 @@
 import { PrefetchLink } from '@/components/PrefetchLink';
 import { getGuildStats } from '@/lib/guild-stats';
 import { GuildCrest } from '@/components/GuildCrest';
-import { TIER_ORDER, TIER_LABEL, guilds, meta } from '@/lib/data';
+import { TIER_ORDER, TIER_LABEL, meta } from '@/lib/data';
 import { pageMeta } from '@/lib/seo';
 import { guildSlug } from '@/lib/slug';
 
 export const metadata = pageMeta({
   title: 'Guildas',
-  description: `As ${guilds.length} facções (partidos) do reino ranqueadas por Poder médio, com a distribuição de tiers e o gasto de cota de cada bancada.`,
+  description: `As facções (partidos) do reino ranqueadas por Poder médio, com a distribuição de tiers e o gasto de cota de cada bancada.`,
   path: '/guildas/',
 });
 
@@ -22,9 +22,15 @@ const ARCHETYPE: Record<string, string> = {
  * 100% estática, cada card linka para /guilda/[sigla]/.
  */
 export default function GuildsPage() {
-  const stats = getGuildStats().sort(
+  // Guilda sem NENHUM membro ranqueável (ex.: a DC, com um único deputado empossado
+  // há menos de um mês) sai do ranking: seu Poder médio é 0 por ausência de gente
+  // medida, e ranqueá-la a colocaria em último lugar afirmando desempenho ruim onde
+  // não há desempenho medido — o mesmo erro do Tier F em parlamentar de mandato parcial.
+  const todas = getGuildStats();
+  const stats = todas.filter((g) => g.ranqueavel).sort(
     (a, b) => b.opsMedio - a.opsMedio || b.tierCounts.S - a.tierCounts.S,
   );
+  const semRoster = todas.filter((g) => !g.ranqueavel);
 
   return (
     <main>
@@ -59,6 +65,28 @@ export default function GuildsPage() {
           </PrefetchLink>
         ))}
       </div>
+
+      {semRoster.length > 0 && (
+        <div className="panel fora-panel" style={{ marginTop: 18 }}>
+          <h3>🕓 Fora do ranking de guildas</h3>
+          <p className="fora-por">
+            {semRoster.length === 1 ? 'Esta guilda não tem' : 'Estas guildas não têm'} nenhum parlamentar
+            ranqueável — todos os seus membros estão fora do ranking (mandato parcial ou presidência da
+            Casa). Sem ninguém medido, não há Poder médio nem Tier a atribuir.
+          </p>
+          <div className="gcard-fora">
+            {semRoster.map((g) => (
+              <PrefetchLink key={g.sigla} href={`/guilda/${guildSlug(g.sigla)}/`} className="gcard-fora-item">
+                <GuildCrest sigla={g.sigla} cor={g.cor} size={34} />
+                <span>
+                  <b>{g.nome}</b>
+                  <small>{g.sigla} · {g.fora} {g.fora === 1 ? 'parlamentar, fora do ranking' : 'parlamentares, todos fora do ranking'}</small>
+                </span>
+              </PrefetchLink>
+            ))}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

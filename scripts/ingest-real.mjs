@@ -21,7 +21,7 @@
  *
  * Uso:  npm run data:real
  */
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, statSync, utimesSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,10 +42,53 @@ mkdirSync(OUT_PUBLIC, { recursive: true });
 const API = 'https://dadosabertos.camara.leg.br';
 const YEARS = [2023, 2024, 2025, 2026];
 
-async function cached(name, url, { json = false, method = 'GET', body: reqBody } = {}) {
+/**
+ * Validade do cache bruto. Antes NÃO existia: `if (existsSync(file))` servia o
+ * arquivo para sempre, então `npm run data:real` com `data/raw/` populado só
+ * RECALCULAVA sobre dados velhos — e ainda carimbava a data de hoje no meta.json.
+ * Uma execução inteira podia não baixar um único byte sem que nada avisasse.
+ *
+ * Duas classes de cache, porque nem todo arquivo custa o mesmo:
+ *  - VOLÁTIL (padrão): bulks, cota, votações, autorias. Expira em TTL_H horas.
+ *  - PERMANENTE: histórico de exercício (513 chamadas com 504 em rajada) e
+ *    relatorias por proposição (~24 mil). Só re-baixa se o arquivo sumir —
+ *    expirá-los por tempo transformaria toda ingestão na rodada de ~1h, com o
+ *    risco de abortar por 504. Para forçá-los, apague os arquivos à mão.
+ */
+const FRESH = process.argv.includes('--fresh');
+const TTL_H = Number(process.env.PLENARIA_CACHE_TTL_H ?? 24);
+/** mtimes das fontes voláteis realmente usadas — base do updatedAt honesto */
+const mtimesFontes = [];
+/** puro de propósito: é chamado duas vezes por arquivo (cachedGentil + cached) */
+function cacheServe(file, permanente = false) {
+  if (!existsSync(file)) return false;
+  if (permanente) return true;
+  if (FRESH) return false;
+  return Date.now() - statSync(file).mtimeMs <= TTL_H * 3600e3;
+}
+/**
+ * Data que o site exibe como "atualizado em": a da fonte volátil MAIS VELHA usada.
+ * Sem fonte nenhuma registrada (impossível na prática), cai para hoje.
+ */
+function dataDasFontes() {
+  if (!mtimesFontes.length) return new Date().toISOString().slice(0, 10);
+  const maisVelha = Math.min(...mtimesFontes);
+  const dias = Math.floor((Date.now() - maisVelha) / 86400e3);
+  if (dias >= 2) console.log(`[fontes] a mais velha tem ${dias} dias — updatedAt reflete ela, não a data de hoje`);
+  return new Date(maisVelha).toISOString().slice(0, 10);
+}
+
+/** anota a idade da fonte volátil que alimentou esta execução */
+function registraFonte(file, permanente) {
+  if (permanente) return; // fonte imutável não define quão atual o site está
+  mtimesFontes.push(existsSync(file) ? statSync(file).mtimeMs : Date.now());
+}
+
+async function cached(name, url, { json = false, method = 'GET', body: reqBody, permanente = false } = {}) {
   const file = join(RAW, name);
-  if (existsSync(file)) {
+  if (cacheServe(file, permanente)) {
     console.log(`[cache] ${name}`);
+    registraFonte(file, permanente);
     return readFileSync(file, 'utf8');
   }
   console.log(`[fetch] ${url}`);
@@ -57,6 +100,7 @@ async function cached(name, url, { json = false, method = 'GET', body: reqBody }
   if (!res.ok) throw new Error(`${res.status} ${url}`);
   const body = await res.text();
   writeFileSync(file, body);
+  registraFonte(file, permanente);
   return body;
 }
 
@@ -367,18 +411,25 @@ async function fetchCeap() {
     const zipName = `Ano-${y}.csv.zip`;
     const csvName = `Ano-${y}.csv`;
     const csvPath = join(RAW, csvName);
-    if (!existsSync(csvPath)) {
+    if (!cacheServe(csvPath)) {
       const zipPath = join(RAW, zipName);
-      if (!existsSync(zipPath)) {
+      // o zip segue a validade do csv: expirar um e reaproveitar o outro
+      // descompactaria de novo exatamente o mesmo conteúdo velho
+      if (!cacheServe(zipPath)) {
         const url = `https://www.camara.leg.br/cotas/${zipName}`;
         console.log(`[fetch] ${url}`);
         const res = await fetch(url);
         if (!res.ok) { console.log(`[skip] CEAP ${y} indisponível`); continue; }
         writeFileSync(zipPath, Buffer.from(await res.arrayBuffer()));
       }
+      registraFonte(zipPath, false);
       execSync(`unzip -o -q ${JSON.stringify(zipPath)} -d ${JSON.stringify(RAW)}`);
+      // o unzip PRESERVA o mtime gravado no arquivo — o csv nasceria "velho" e
+      // expiraria na execução seguinte, re-baixando 4 zips a cada rodada
+      utimesSync(csvPath, new Date(), new Date());
     } else {
       console.log(`[cache] ${csvName}`);
+      registraFonte(csvPath, false);
     }
     const { header, rows } = parseCsv(readFileSync(csvPath, 'utf8'));
     const iId = header.indexOf('ideCadastro');
@@ -500,9 +551,9 @@ const corDe = (sigla) => {
 // ---------- 4b. Ficha civil + comissões (Câmara) ----------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** cached() com pausa quando é fetch de verdade — laços de 500+ requests */
-async function cachedGentil(name, url) {
-  const miss = !existsSync(join(RAW, name));
-  const body = await cached(name, url, { json: true });
+async function cachedGentil(name, url, { permanente = false } = {}) {
+  const miss = !cacheServe(join(RAW, name), permanente);
+  const body = await cached(name, url, { json: true, permanente });
   if (miss) await sleep(60);
   return JSON.parse(body);
 }
@@ -529,7 +580,10 @@ const LEGISLATURAS = Array.from({ length: 20 }, (_, i) => 38 + i).join(',');
  *  esgotar as tentativas, é para explodir mesmo — melhor abortar que corromper. */
 async function cachedRetry(name, url, tentativas = 8) {
   for (let i = 1; ; i++) {
-    try { return await cachedGentil(name, url); }
+    // permanente: são as 513 chamadas que estouram em 504 sob carga. Expirá-las
+    // por tempo faria TODA ingestão correr o risco de abortar (ver comentário do
+    // cacheServe) — para refazer, apague os `dep-hist-*.json` à mão.
+    try { return await cachedGentil(name, url, { permanente: true }); }
     catch (e) {
       if (i >= tentativas || !/^5\d\d /.test(e.message ?? '')) throw e;
       console.log(`  [retry ${i}/${tentativas - 1}] ${e.message}`);
@@ -717,13 +771,14 @@ async function fetchSenado(socialMap) {
   for (const y of YEARS) {
     const name = `ceaps-${y}.csv`;
     const file = join(RAW, name);
-    if (!existsSync(file)) {
+    if (!cacheServe(file)) {
       const url = `https://www.senado.leg.br/transparencia/LAI/verba/despesa_ceaps_${y}.csv`;
       console.log(`[fetch] ${url}`);
       const res = await fetch(url);
       if (!res.ok) { console.log(`[skip] CEAPS ${y}`); continue; }
       writeFileSync(file, Buffer.from(await res.arrayBuffer()));
     } else console.log(`[cache] ${name}`);
+    registraFonte(file, false);
     const text = readFileSync(file, 'latin1');
     const lines = text.split('\n');
     // 1ª linha é "ÚLTIMA ATUALIZAÇÃO..."; a 2ª é o cabeçalho
@@ -1516,7 +1571,12 @@ const guildRanking = GUILDS.map((g) => {
   const members = RANK.filter((p) => p.partido === g.sigla);
   const tiers = Object.fromEntries(TIERS.map((t) => [t, members.filter((p) => p.tier === t).length]));
   return { ...g, total: members.length, tiers };
-}).sort((a, b) => b.tiers.S - a.tiers.S || b.tiers.A - a.tiers.A);
+})
+  // guilda sem NENHUM ranqueável (ex.: a DC, cujo único deputado tomou posse há
+  // menos de um mês) viraria uma barra vazia no gráfico de composição — e o gráfico
+  // é sobre composição por tier, que ela não tem
+  .filter((g) => g.total > 0)
+  .sort((a, b) => b.tiers.S - a.tiers.S || b.tiers.A - a.tiers.A);
 
 const UFS = [...new Set(full.map((p) => p.uf))].sort();
 const ufAgg = UFS.map((uf) => {
@@ -1745,7 +1805,14 @@ const index = full.map((p) => ({
 
 const meta = {
   fonte: 'Dados Abertos da Câmara e do Senado',
-  updatedAt: new Date().toISOString().slice(0, 10),
+  // Data da FONTE mais velha que alimentou esta execução — não a data de execução.
+  // `new Date()` aqui carimbava "atualizado em hoje" mesmo quando a rodada só
+  // recalculou sobre cache de duas semanas atrás: o rodapé de ~673 páginas e a
+  // /sobre afirmavam ao leitor um frescor que o dado não tinha. O dado é tão atual
+  // quanto sua parte mais velha, então é o MÍNIMO, não o máximo.
+  updatedAt: dataDasFontes(),
+  /** quando o gerador rodou — separado, porque não é o que o leitor quer saber */
+  geradoEm: new Date().toISOString().slice(0, 10),
   availableStats: full.some((p) => p.rawNumbers.influencia)
     ? ['ataque', 'stamina', 'eficiencia', 'tecnica', 'economia', 'fiscalizacao', 'influencia', 'comando', 'alinhamento']
     : ['ataque', 'stamina', 'eficiencia', 'tecnica', 'economia', 'fiscalizacao', 'comando', 'alinhamento'],
