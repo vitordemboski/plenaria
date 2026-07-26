@@ -220,7 +220,11 @@ const tierDaGuilda = (ops, cortes) =>
  *  o `<text>` da sigla: o librsvg (que o sharp usa) não resolve a fonte do site e
  *  a sigla sairia num tipo qualquer. Ela é escrita depois, pelo satori, na fita. */
 const CREST_H = 236; // cabe na janela de 318px COM a fita, que é mais larga que o escudo
-const CREST_VB_W = 66, CREST_VB_H = 54; // viewBox do brasão: a fita passa das bordas do escudo
+const CREST_VB_W = 66, CREST_VB_H = 54;
+const CREST_ESC = CREST_H / CREST_VB_H;      // viewBox → px
+const FITA_Y0 = 25, FITA_Y1 = 38.5;          // banderola no viewBox (ver GuildCrest.tsx)
+const JANELA_H = 518;                        // altura útil da janela do brasão
+const CREST_TOP = (JANELA_H - CREST_H) / 2;  // o brasão é centrado na janela // viewBox do brasão: a fita passa das bordas do escudo
 async function crestPng(cor, alturaPx) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(alturaPx * CREST_VB_W / CREST_VB_H)}" height="${alturaPx}" viewBox="-10 0 ${CREST_VB_W} ${CREST_VB_H}">
     <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
@@ -270,16 +274,17 @@ function cardGuilda({ g, crest, stats }) {
         },
       },
         h('img', { src: crest, width: Math.round(CREST_H * CREST_VB_W / CREST_VB_H), height: CREST_H, style: { position: 'absolute' } }),
-        // a sigla vai na fita do brasão: y=31.75 de 54 no viewBox ≈ 58,8% da altura
+        // A sigla é ancorada no RETÂNGULO da fita, não centrada no brasão com um
+        // empurrãozinho: a fita fica em y=25..38.5 do viewBox, abaixo do meio, e
+        // qualquer nudge tem de ser recalibrado a cada mudança de tamanho. Aqui a
+        // caixa É a fita (o pai tem position:relative), então o alinhamento é
+        // geométrico e vale para qualquer CREST_H.
         h('div', {
           style: {
-            display: 'flex', position: 'absolute', width: '300px', justifyContent: 'center',
-            // a sigla vai no meio da fita: y=31.75 de 54 no viewBox
-            // 34.4 e não 31.75 (o centro geométrico da fita): o satori centraliza a
-            // CAIXA do texto, e a caixa tem folga de entrelinha acima das maiúsculas —
-            // centrar a caixa na fita deixava a sigla montada na borda de cima. O valor
-            // é o mesmo `y` do <text> do GuildCrest.tsx, onde ele é a BASELINE.
-            marginTop: `${Math.round(CREST_H * (34.4 / CREST_VB_H - 0.5))}px`,
+            display: 'flex', position: 'absolute',
+            top: `${Math.round(CREST_TOP + FITA_Y0 * CREST_ESC)}px`,
+            height: `${Math.round((FITA_Y1 - FITA_Y0) * CREST_ESC)}px`,
+            left: 0, right: 0, alignItems: 'center', justifyContent: 'center',
             fontWeight: 700, letterSpacing: '0.5px', color: '#f4e2a1',
             // sigla longa (SOLIDARIEDADE, REPUBLICANOS) tem de caber na fita
             fontSize: g.sigla.length > 11 ? '25px' : g.sigla.length > 8 ? '31px' : '38px',
