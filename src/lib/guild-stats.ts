@@ -22,7 +22,7 @@ export interface GuildStats extends Guild {
  * Era uma segunda tabela hardcodada aqui, e ela ficou nos valores anteriores à
  * recalibração feita quando a Técnica virou escala log: uma guilda com Poder médio
  * 86 aparecia como Tier A enquanto um parlamentar com Poder 86 era Tier S. Os
- * cortes de Tier são ABSOLUTOS (ver CLAUDE.md) — não pode haver duas tabelas.
+ * cortes de Tier são ABSOLUTOS (ver AGENTS.md) — não pode haver duas tabelas.
  */
 export function guildTierOf(ops: number): Tier {
   const cortes = meta.tierCortes;

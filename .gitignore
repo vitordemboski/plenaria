@@ -26,6 +26,9 @@ data/raw/*
 # ambiente
 .env*
 !.env.example
+# config pessoal de agente (permissões da máquina de cada um). Estava coberto só
+# pelo gitignore GLOBAL do autor — que nenhum contribuidor tem.
+.claude/settings.local.json
 .DS_Store
 
 # Local Netlify folder

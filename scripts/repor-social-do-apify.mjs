@@ -14,7 +14,7 @@
  * tokens do nome precisam aparecer em fullName+username; desempate por
  * verificado > bio política > mais seguidores. Se aquele arquivo mudar, mude aqui.
  *
- * NUNCA grava 0 para quem não achou (regra do CLAUDE.md): a linha fica em branco
+ * NUNCA grava 0 para quem não achou (regra do AGENTS.md): a linha fica em branco
  * e o parlamentar simplesmente não tem o atributo (o Poder renormaliza).
  *
  * Uso: node scripts/repor-social-do-apify.mjs

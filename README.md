@@ -42,7 +42,8 @@ npm run social:discover # busca perfil pelo nome p/ quem não declarou handle (A
 
 ```
 plenaria/
-├── CLAUDE.md                  ← instruções p/ agentes (leia antes de mexer)
+├── AGENTS.md                  ← instruções p/ agentes de IA (leia antes de mexer)
+├── CLAUDE.md                  ← só importa o AGENTS.md (compat. Claude Code)
 ├── docs/
 │   ├── product-spec.md        ← especificação de produto (fórmula, títulos, schema)
 │   └── architecture.md        ← arquitetura, decisões e fontes de dados

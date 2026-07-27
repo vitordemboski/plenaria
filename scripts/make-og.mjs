@@ -12,7 +12,7 @@
 //   npm run og -- --guildas         só os cards de guilda
 //
 // O card do parlamentar obedece às MESMAS regras da imagem do ShareButton, que
-// são regras de produto, não de estilo (ver CLAUDE.md e ShareCardData):
+// são regras de produto, não de estilo (ver AGENTS.md e ShareCardData):
 //   · NENHUM título/selo — selo viaja sem a regra, sem o bruto e sem o canal de
 //     correção; fora do site é rótulo sem prova. No lugar vai o próprio dado.
 //   · cada atributo leva o número BRUTO (`rawCurto`) ao lado do percentil, senão
