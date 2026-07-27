@@ -129,6 +129,15 @@ export default function MethodologyPage() {
           (para onde a verba foi: escritório, passagens, combustível, divulgação…) e o maior fornecedor —
           tudo <span className="key">informativo</span>: descreve o gasto, mas não altera a nota (que é só o
           gasto mensal médio). Os valores são líquidos (estornos abatidos), somando o mesmo total da Economia.
+          O fornecedor é agregado pelo <span className="key">CNPJ</span>, não pelo nome: a fonte grava a razão
+          social em texto livre, e um mesmo CNPJ aparece com dezenas de grafias — somar por nome subestimaria
+          a fatia. Nos Insights, o mesmo dado vira o ranking nacional de empresas que receberam da cota
+          (só CNPJ: lançamento em CPF é pessoa física e não entra em ranking público). Quando o maior
+          fornecedor de um parlamentar é <span className="key">pessoa física</span> — em geral o locador
+          do escritório ou um prestador de serviço do gabinete — publicamos o valor, o percentual e o que
+          foi contratado, mas <span className="key">não o nome</span>: a pessoa não é agente público, e o
+          que a informação mede é a concentração do gasto, que o percentual já diz. O lançamento segue
+          público na fonte oficial.
         </p>
       </div>
 

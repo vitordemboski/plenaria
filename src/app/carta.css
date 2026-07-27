@@ -369,6 +369,8 @@ a.plate:hover { border-color: var(--gold-2); background: rgba(212, 175, 55, 0.14
 .cota-leg b { color: var(--ink); font-weight: 700; }
 .cota-forn { font-size: 11px; color: var(--muted); margin: 12px 0 0; }
 .cota-forn b { color: var(--ink); font-weight: 600; }
+/* nota do fornecedor pessoa física: explica a omissão do nome sem competir com o número */
+.cota-forn-nota { display: block; margin-top: 6px; font-size: 10px; line-height: 1.5; opacity: 0.85; }
 /* agregado "Onde o Congresso gasta" (Insights): uma barra por casa */
 .cota-agg { margin-top: 16px; }
 .cota-agg h4 { font-size: 13px; color: var(--gold-2); margin: 0 0 8px; display: flex; align-items: baseline; gap: 8px; }

@@ -80,13 +80,61 @@ export function percentuais(valores, total) {
   return out;
 }
 
+/** só os dígitos do CNPJ/CPF — a pontuação do CEAP vem torta ("085.324.290/0013-1") */
+export const soDigitos = (doc) => String(doc ?? '').replace(/\D/g, '');
+
+/** true p/ CNPJ (14 dígitos). CPF (11) é pessoa física: nunca entra em ranking público. */
+export const ehCnpj = (doc) => soDigitos(doc).length === 14;
+
+/**
+ * true p/ CPF (11 dígitos) — fornecedor PESSOA FÍSICA (em geral o locador do
+ * escritório ou um prestador de serviço do gabinete).
+ *
+ * O nome dessa pessoa NUNCA é emitido. O dado é público na origem (a Câmara o
+ * publica sob a LAI), mas publicidade na origem não dispensa a necessidade na
+ * reutilização: o que o painel informa é CONCENTRAÇÃO ("35% da cota num só
+ * fornecedor, aluguel de escritório"), e o nome não acrescenta nada a essa frase.
+ * Ela não é agente público — e nomeá-la ao lado do parlamentar, com um percentual e
+ * sem explicação, faz o leitor completar sozinho uma acusação que o dado não
+ * sustenta. É a mesma regra dos títulos: rótulo não imputa o que a regra não deriva.
+ */
+export const ehCpf = (doc) => soDigitos(doc).length === 11;
+
+/** 14 dígitos → "08.532.429/0001-31" (a fonte pontua errado; reformatamos do dígito) */
+export function formataCnpj(doc) {
+  const d = soDigitos(doc);
+  return d.length === 14
+    ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
+    : d;
+}
+
+const SEP = '\u0000';
+
+/**
+ * Chave de acumulação de um lançamento de fornecedor. Existe porque o CEAP grava o
+ * NOME em texto livre: um mesmo CNPJ aparece com 81 grafias (Vivo) e até 630
+ * (A&T Turismo). Agrupar por nome estilhaça a empresa e SUBESTIMA a concentração —
+ * era o que acontecia antes: chaveando por CNPJ, 40% dos deputados sobem de fatia
+ * e um caso vai de 23% p/ 63% (R$ 994 mil num só CNPJ espalhados em várias grafias).
+ * Sem documento (SIGEPA não traz), cai no nome — nunca se dropa o lançamento.
+ */
+export const chaveFornecedor = (doc, nome, categoria = '') =>
+  `${soDigitos(doc)}${SEP}${nome}${SEP}${categoria}`;
+
+/** desfaz chaveFornecedor: Map<chave, R$> → [doc, nome, categoria, R$][] */
+export const destrincharFornecedores = (mapa) =>
+  [...(mapa?.entries() ?? [])].map(([k, v]) => {
+    const [doc, nome, categoria = ''] = k.split(SEP);
+    return [doc, nome, categoria, v];
+  });
+
 /**
  * Resume os lançamentos de cota de UM parlamentar. Devolve a lista COMPLETA de
  * categorias (sem truncar) — a dobra em "Outros" p/ exibição fica no consumidor
  * (dobrarCategorias), para os agregados de Insights poderem somar o dado inteiro.
  * @param {Array<[string, number]>} categoriaValores  [rótulo cru, R$] já somados por categoria
- * @param {Array<[string, number]>} fornecedorValores  [nome do fornecedor, R$] já somados
- * @returns {{ total: number, categorias: {categoria: string, valor: number, pct: number}[], fornecedor: {nome: string, valor: number, pct: number} | null }}
+ * @param {Array<[string, string, string, number]>} fornecedorValores  [doc, nome, categoria, R$] já somados
+ * @returns {{ total: number, categorias: {categoria: string, valor: number, pct: number}[], fornecedor: {nome: string, valor: number, pct: number, pessoaFisica?: true} | null }}
  */
 export function resumoCota(categoriaValores, fornecedorValores = []) {
   // agrega por rótulo curto (colapsa as várias "passagens" num só, junta as casas).
@@ -102,15 +150,89 @@ export function resumoCota(categoriaValores, fornecedorValores = []) {
   const p = percentuais(entradas.map(([, v]) => v), total);
   const categorias = entradas.map(([categoria, valor], i) => ({ categoria, valor, pct: p[i] }));
 
+  // maior fornecedor: agrupa por DOCUMENTO (ver chaveFornecedor), não por nome.
+  // O nome exibido é a grafia que concentra mais R$ dentro do mesmo documento.
+  const porDoc = new Map();
+  let totalF = 0;
+  for (const [doc, nome, categoria, valor] of fornecedorValores) {
+    const chave = soDigitos(doc) || nome;
+    let e = porDoc.get(chave);
+    if (!e) porDoc.set(chave, (e = { doc: soDigitos(doc), total: 0, grafias: new Map(), cats: new Map() }));
+    e.total += valor;
+    e.grafias.set(nome, (e.grafias.get(nome) ?? 0) + valor);
+    e.cats.set(categoria, (e.cats.get(categoria) ?? 0) + valor);
+    totalF += valor;
+  }
   let fornecedor = null;
-  const forns = fornecedorValores.filter(([, v]) => v > 0); // ignora fornecedor que só teve estorno
-  if (forns.length) {
-    const totalF = forns.reduce((t, [, v]) => t + v, 0);
-    const [nome, valor] = forns.reduce((max, cur) => (cur[1] > max[1] ? cur : max));
-    if (valor > 0) fornecedor = { nome, valor, pct: totalF > 0 ? Math.round((valor / totalF) * 100) : 0 };
+  // estorno pode zerar/negativar o fornecedor inteiro — esse não concorre
+  const candidatos = [...porDoc.values()].filter((e) => e.total > 0);
+  if (candidatos.length && totalF > 0) {
+    const top = candidatos.reduce((max, cur) => (cur.total > max.total ? cur : max));
+    const maior = (m) => [...m.entries()].reduce((max, cur) => (cur[1] > max[1] ? cur : max))[0];
+    fornecedor = { valor: top.total, pct: Math.round((top.total / totalF) * 100) };
+    if (ehCpf(top.doc)) {
+      // pessoa física: no lugar do nome vai O QUE FOI CONTRATADO (ver ehCpf).
+      // O nome não é gravado no JSON — minimização começa na emissão, não na UI.
+      fornecedor.nome = rotuloCategoria(maior(top.cats));
+      fornecedor.pessoaFisica = true;
+    } else {
+      fornecedor.nome = maior(top.grafias); // grafia com mais R$ dentro do documento
+    }
   }
 
   return { total, categorias, fornecedor };
+}
+
+/** degraus do acumulado exibidos no painel de concentração do mercado da cota */
+const DEGRAUS_CONCENTRACAO = [1, 10, 20, 100];
+
+/**
+ * Agregado nacional das empresas que receberam cota parlamentar.
+ *
+ * Só CNPJ: 3,3% do gasto vai para CPF, e essa lista é gente física (locador do
+ * escritório, prestador de serviço) com nome completo e um único parlamentar —
+ * ranking público de CPF exporia pessoa privada, e o projeto deliberadamente
+ * deixou de ler CPF quando o Karma saiu. Também é por isso que `semCnpjMi` é
+ * emitido: 16% da cota (SIGEPA, que não identifica pessoa jurídica nenhuma, +
+ * lançamentos em CPF) fica FORA do universo, e o painel tem de declarar o
+ * denominador em vez de deixar o leitor achar que o % é do total da cota.
+ *
+ * @param {Iterable<[string, string, string, number]>} lancamentos  [chaveParl, doc, nome, R$]
+ * @param {number} totalCota  total da cota da mesma população (p/ derivar o que ficou fora)
+ * @param {number} [top]  quantas empresas na lista
+ */
+export function rankFornecedores(lancamentos, totalCota, top = 15) {
+  const porCnpj = new Map();
+  for (const [parl, doc, nome, valor] of lancamentos) {
+    if (!ehCnpj(doc)) continue;
+    const d = soDigitos(doc);
+    let e = porCnpj.get(d);
+    if (!e) porCnpj.set(d, (e = { total: 0, grafias: new Map(), parls: new Set() }));
+    e.total += valor;
+    e.grafias.set(nome, (e.grafias.get(nome) ?? 0) + valor);
+    e.parls.add(parl);
+  }
+  const todas = [...porCnpj.entries()]
+    .filter(([, e]) => e.total > 0)
+    .sort((a, b) => b[1].total - a[1].total);
+  const soma = todas.reduce((t, [, e]) => t + e.total, 0);
+  const acumulado = (k) =>
+    soma > 0 ? +((todas.slice(0, k).reduce((t, [, e]) => t + e.total, 0) / soma) * 100).toFixed(1) : 0;
+
+  return {
+    totalMi: +(soma / 1e6).toFixed(1),
+    semCnpjMi: +(Math.max(totalCota - soma, 0) / 1e6).toFixed(1),
+    nEmpresas: todas.length,
+    empresas: todas.slice(0, top).map(([doc, e]) => ({
+      nome: [...e.grafias.entries()].reduce((max, cur) => (cur[1] > max[1] ? cur : max))[0],
+      cnpj: formataCnpj(doc),
+      valorMil: Math.round(e.total / 1000),
+      // 1 casa decimal: com o topo em 1,3% um inteiro arredondaria tudo p/ "1%"
+      pct: soma > 0 ? +((e.total / soma) * 100).toFixed(2) : 0,
+      nParl: e.parls.size,
+    })),
+    concentracao: DEGRAUS_CONCENTRACAO.filter((k) => k <= todas.length).map((k) => ({ top: k, pct: acumulado(k) })),
+  };
 }
 
 /**

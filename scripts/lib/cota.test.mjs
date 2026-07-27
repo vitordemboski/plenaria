@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rotuloCategoria, resumoCota, dobrarCategorias } from './cota.mjs';
+import {
+  rotuloCategoria, resumoCota, dobrarCategorias,
+  chaveFornecedor, destrincharFornecedores, formataCnpj, rankFornecedores,
+} from './cota.mjs';
+
+const CNPJ_A = '11.111.111/1111-11';
+const CNPJ_B = '22.222.222/2222-22';
+const CPF = '123.456.789-00';
+const DIVULG = 'DIVULGAÇÃO DA ATIVIDADE PARLAMENTAR.';
 
 test('rótulo cru da CEAP vira rótulo curto conhecido', () => {
   assert.equal(rotuloCategoria('COMBUSTÍVEIS E LUBRIFICANTES.'), 'Combustível');
@@ -94,14 +102,110 @@ test('maior fornecedor único vem em fornecedor; vazio → null', () => {
   const r = resumoCota(
     [['TELEFONIA', 100]],
     [
-      ['POSTO XYZ LTDA', 700],
-      ['GRÁFICA ABC', 300],
+      [CNPJ_A, 'POSTO XYZ LTDA', 'COMBUSTÍVEIS E LUBRIFICANTES.', 700],
+      [CNPJ_B, 'GRÁFICA ABC', 'DIVULGAÇÃO DA ATIVIDADE PARLAMENTAR.', 300],
     ],
   );
   assert.deepEqual(r.fornecedor, { nome: 'POSTO XYZ LTDA', valor: 700, pct: 70 });
 
   const vazio = resumoCota([['TELEFONIA', 100]], []);
   assert.equal(vazio.fornecedor, null);
+});
+
+test('grafias diferentes do MESMO CNPJ somam (era o bug: agrupava por nome)', () => {
+  const r = resumoCota(
+    [['DIVULGAÇÃO DA ATIVIDADE PARLAMENTAR.', 1000]],
+    [
+      [CNPJ_A, 'Facebook Serviços Online do Brasil Ltda.', DIVULG, 300],
+      [CNPJ_A, 'FACEBOOK SERVICOS ONLINE DO BRASIL LTDA', DIVULG, 250],
+      [CNPJ_A, 'facebook servicos online', DIVULG, 80],
+      [CNPJ_B, 'GRÁFICA ABC', DIVULG, 370],
+    ],
+  );
+  // por nome, o líder seria a GRÁFICA com 37%; por CNPJ é a soma das 3 grafias
+  assert.equal(r.fornecedor.valor, 630);
+  assert.equal(r.fornecedor.pct, 63);
+  // exibe a grafia com mais R$ dentro do documento
+  assert.equal(r.fornecedor.nome, 'Facebook Serviços Online do Brasil Ltda.');
+});
+
+test('lançamento sem documento (SIGEPA) agrupa pelo nome — nunca é dropado', () => {
+  const r = resumoCota(
+    [['PASSAGEM AÉREA - SIGEPA', 500]],
+    [
+      ['', 'TAM', 'PASSAGEM AÉREA - SIGEPA', 300],
+      ['', 'GOL', 'PASSAGEM AÉREA - SIGEPA', 200],
+    ],
+  );
+  assert.deepEqual(r.fornecedor, { nome: 'TAM', valor: 300, pct: 60 });
+});
+
+test('chaveFornecedor/destrinchar sobrevive a nome com espaço e a doc torto', () => {
+  const m = new Map();
+  m.set(chaveFornecedor('085.324.290/0013-1', 'AMORETTO CAFES EXPRESSO LTDA', 'TELEFONIA'), 1467);
+  m.set(chaveFornecedor('', 'TAM'), 900);
+  assert.deepEqual(destrincharFornecedores(m), [
+    ['08532429000131', 'AMORETTO CAFES EXPRESSO LTDA', 'TELEFONIA', 1467],
+    ['', 'TAM', '', 900],
+  ]);
+  assert.deepEqual(destrincharFornecedores(undefined), []);
+});
+
+test('fornecedor PESSOA FÍSICA não leva nome — vai o que foi contratado', () => {
+  const r = resumoCota(
+    [['MANUTENÇÃO DE ESCRITÓRIO DE APOIO À ATIVIDADE PARLAMENTAR', 1_418_225]],
+    [
+      [CPF, 'NOME DE PESSOA FÍSICA', 'MANUTENÇÃO DE ESCRITÓRIO DE APOIO À ATIVIDADE PARLAMENTAR', 494_000],
+      [CNPJ_A, 'GRÁFICA ABC', DIVULG, 300_000],
+    ],
+  );
+  assert.equal(r.fornecedor.pessoaFisica, true);
+  assert.equal(r.fornecedor.nome, 'Escritório'); // rótulo do gasto, não a pessoa
+  assert.equal(r.fornecedor.valor, 494_000);
+  // o nome não pode sobreviver em NENHUM campo do objeto emitido
+  assert.ok(!JSON.stringify(r).includes('NOME DE PESSOA'));
+});
+
+test('CNPJ vencedor mantém a razão social (a minimização é só p/ pessoa física)', () => {
+  const r = resumoCota(
+    [['TELEFONIA', 100]],
+    [
+      [CNPJ_A, 'POSTO XYZ LTDA', 'COMBUSTÍVEIS E LUBRIFICANTES.', 700],
+      [CPF, 'NOME DE PESSOA FÍSICA', 'MANUTENÇÃO DE ESCRITÓRIO DE APOIO À ATIVIDADE PARLAMENTAR', 300],
+    ],
+  );
+  assert.equal(r.fornecedor.nome, 'POSTO XYZ LTDA');
+  assert.equal(r.fornecedor.pessoaFisica, undefined);
+});
+
+test('formataCnpj reformata a partir do dígito (a fonte pontua errado)', () => {
+  assert.equal(formataCnpj('085.324.290/0013-1'), '08.532.429/0001-31');
+  assert.equal(formataCnpj('12345678901'), '12345678901'); // CPF não é reformatado
+});
+
+test('rankFornecedores: só CNPJ, agrupado por documento, com o que ficou fora', () => {
+  const r = rankFornecedores([
+    ['dep-a', CNPJ_A, 'LOCADORA X LTDA', 600_000],
+    ['dep-b', CNPJ_A, 'Locadora X', 400_000],   // outra grafia, outro parlamentar
+    ['dep-a', CNPJ_B, 'GRÁFICA ABC', 300_000],
+    ['dep-a', CPF, 'JOÃO DA SILVA', 250_000],   // pessoa física: fora do ranking
+    ['dep-a', '', 'TAM', 150_000],              // sem documento: fora do ranking
+  ], 2_000_000, 5);
+
+  assert.equal(r.nEmpresas, 2);
+  assert.equal(r.totalMi, 1.3);            // 1,0 mi + 0,3 mi (só CNPJ)
+  assert.equal(r.semCnpjMi, 0.7);          // 2,0 mi de cota − 1,3 mi identificado
+  assert.deepEqual(r.empresas[0], {
+    nome: 'LOCADORA X LTDA', cnpj: '11.111.111/1111-11',
+    valorMil: 1000, pct: 76.92, nParl: 2,
+  });
+  assert.equal(r.empresas[1].nParl, 1);
+  assert.deepEqual(r.concentracao, [{ top: 1, pct: 76.9 }]); // degraus > nEmpresas não aparecem
+});
+
+test('rankFornecedores sem nada não divide por zero', () => {
+  const r = rankFornecedores([], 0);
+  assert.deepEqual(r, { totalMi: 0, semCnpjMi: 0, nEmpresas: 0, empresas: [], concentracao: [] });
 });
 
 test('estorno é abatido (net) e categoria só-estorno some da barra', () => {
@@ -113,8 +217,8 @@ test('estorno é abatido (net) e categoria só-estorno some da barra', () => {
       ['TELEFONIA', -100], // zerou → não entra
     ],
     [
-      ['POSTO XYZ', 400], // já net (o gerador soma por fornecedor antes de chamar)
-      ['GRÁFICA ABC', 0],  // fornecedor só-estorno some
+      [CNPJ_A, 'POSTO XYZ', 'COMBUSTÍVEIS E LUBRIFICANTES.', 400], // já net (o gerador soma antes)
+      [CNPJ_B, 'GRÁFICA ABC', 'DIVULGAÇÃO DA ATIVIDADE PARLAMENTAR.', 0], // só-estorno some
     ],
   );
   assert.equal(r.total, 400);

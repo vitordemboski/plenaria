@@ -58,7 +58,24 @@ export function CotaBreakdown({
       </div>
       {resumo.fornecedor && (
         <p className="cota-forn">
-          Maior fornecedor: <b>{resumo.fornecedor.nome}</b> — {fmtReais(resumo.fornecedor.valor)} ({resumo.fornecedor.pct}% da cota)
+          Maior fornecedor:{' '}
+          {resumo.fornecedor.pessoaFisica ? (
+            // pessoa física: o que foi contratado, não quem é. Ver `ehCpf` em cota.mjs —
+            // nomear quem não é agente público não acrescenta nada ao que o painel mede.
+            <>
+              <b>pessoa física</b> ({resumo.fornecedor.nome.toLowerCase()})
+            </>
+          ) : (
+            <b>{resumo.fornecedor.nome}</b>
+          )}{' '}
+          — {fmtReais(resumo.fornecedor.valor)} ({resumo.fornecedor.pct}% da cota)
+          {resumo.fornecedor.pessoaFisica && (
+            <span className="cota-forn-nota">
+              Fornecedor pessoa física — em geral o locador do escritório ou um prestador de serviço do
+              gabinete. Não publicamos o nome: a pessoa não é agente público, e o que este painel informa
+              é a concentração do gasto, que o percentual já diz. O lançamento é público no {sigla}.
+            </span>
+          )}
         </p>
       )}
     </div>

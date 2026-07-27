@@ -192,6 +192,19 @@ Armadilhas conhecidas das APIs:
   (2) rótulo de categoria desconhecido NUNCA é dropado — cai num rótulo limpo genérico, senão a
   fonte inventa uma categoria nova e ela some da barra em silêncio. As duas casas têm taxonomias
   de categoria diferentes (CEAP granular × CEAPS em ~8 grupos); `rotuloCategoria` normaliza as duas.
+- **Fornecedor se agrega por DOCUMENTO, nunca pelo nome** (a razão social é texto livre: o mesmo
+  CNPJ vem com 81 grafias na Vivo, 630 na A&T Turismo). Agrupar por nome estilhaça a empresa e
+  subestima a concentração: um caso ia de 23% p/ 63% e ficava fora do ranking em silêncio. Sem
+  documento (SIGEPA), cai no nome — nunca se dropa. No ranking NACIONAL de empresas, o % é fatia
+  do universo COM CNPJ (16% da cota não identifica PJ) e o painel de concentração é irmão
+  obrigatório do top 15: a maior empresa tem 1,3% de ~43 mil CNPJs, e o top 15 solto sugere
+  captura — o oposto do dado. Detalhe em docs/product-spec.md §8.
+- **Fornecedor PESSOA FÍSICA não é nomeado, e a minimização é na EMISSÃO** (`ehCpf` grava o rótulo
+  do que foi contratado; o nome não entra em JSON nenhum, com teste). São 23 fichas — locador do
+  escritório, prestador do gabinete. Público na origem não dispensa NECESSIDADE na reutilização: o
+  nome não acrescenta nada ao que o painel afirma ("35% da cota num só fornecedor, aluguel de
+  escritório"), a pessoa não é agente público, e nomeá-la ao lado do parlamentar faz o leitor
+  completar a acusação sozinho. Vale p/ toda superfície nova que exiba fornecedor.
 - **Não reintroduza o auxílio-moradia na Economia.** Investigado e descartado: NÃO está nos Dados
   Abertos (só no portal de transparência). Câmara teria um endpoint interno por ID, mas não
   documentado/versionado; Senado só publica um snapshot mensal por NOME (o mesmo risco de homônimo

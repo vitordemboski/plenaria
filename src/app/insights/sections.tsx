@@ -6,6 +6,7 @@ import { GuildRanking } from '@/components/GuildRanking';
 import { GuildSpendRanking } from '@/components/GuildSpendRanking';
 import { GastoCasas } from '@/components/GastoCasas';
 import { GastoCategorias } from '@/components/GastoCategorias';
+import { FornecedoresCota } from '@/components/FornecedoresCota';
 import { MapExplorer } from '@/components/MapExplorer';
 import { TitlesGallery } from '@/components/TitlesGallery';
 import { InsightsTabs } from '@/components/InsightsTabs';
@@ -69,7 +70,8 @@ export function availableSectionIds(): string[] {
 export function buildSectionNodes(): Record<string, React.ReactNode> {
   const { kpis, guildRanking, scatter, fama, vergonha, leis, sabatina, renovacao, genero,
     gastoPorCasa, guildGasto, termometro, dissidentes, topFiscais, politicaScatter,
-    gastoCategorias, topDivulgacao, divulgacaoInfluencia, concentracaoFornecedor } = insights;
+    gastoCategorias, topDivulgacao, divulgacaoInfluencia, concentracaoFornecedor,
+    fornecedoresCota } = insights;
   const totalParlamentares = guildRanking.reduce((s, g) => s + g.total, 0);
   const mapView = buildMapView();
   const famById = (id: string) => mapView.families.filter((f) => f.id === id);
@@ -225,18 +227,24 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
       <div className="panel">
         <h3>🎯 Concentração de fornecedor</h3>
         <div className="sub">
-          Quem concentra a maior fatia da cota num <b>único fornecedor</b>. Factual e informativo:
-          concentração <b>não</b> é irregularidade — um fornecedor só costuma ser o aluguel do
-          escritório ou a agência de publicidade contratada.
+          Quem concentra a maior fatia da cota num <b>único fornecedor</b> (agregado por CNPJ). Factual e
+          informativo: concentração <b>não</b> é irregularidade — um fornecedor só costuma ser o aluguel do
+          escritório ou a agência de publicidade contratada. Quando o fornecedor é <b>pessoa física</b>,
+          entra o que foi contratado, não o nome dela: quem não é agente público não é nomeado aqui.
         </div>
         {concentracaoFornecedor.map((p, i) => (
           <PoliticianLink key={p.slug} slug={p.slug} className="lrow wide">
             <span className="pos">{i + 1}</span>
-            <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.uf} · {p.partido} — {p.fornecedor}</small></span>
+            <span className="nm"><b>{p.nome}</b><small>
+              {casaLabel(p.casa, true)} · {p.uf} · {p.partido} —{' '}
+              {p.pessoaFisica ? `pessoa física (${p.fornecedor.toLowerCase()})` : p.fornecedor}
+            </small></span>
             <span className="sc" style={{ color: 'var(--gold-2)' }}>{p.pct}%</span>
           </PoliticianLink>
         ))}
       </div>
+
+      {fornecedoresCota && <FornecedoresCota dados={fornecedoresCota} />}
 
       <MapExplorer families={famById('gasto')} datasets={mapView.datasets} />
     </>

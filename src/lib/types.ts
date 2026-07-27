@@ -42,7 +42,13 @@ export interface Politician {
   cotaResumo?: {
     total: number;
     categorias: { categoria: string; valor: number; pct: number }[];
-    fornecedor?: { nome: string; valor: number; pct: number } | null;
+    /**
+     * Maior fornecedor, agregado por CNPJ. Quando é PESSOA FÍSICA (`pessoaFisica`),
+     * `nome` não é o nome dela — é o rótulo do que foi contratado ("Escritório").
+     * O nome nunca é emitido: ela não é agente público, e o que o painel informa é
+     * a concentração, que o percentual já diz. Ver `ehCpf` em scripts/lib/cota.mjs.
+     */
+    fornecedor?: { nome: string; valor: number; pct: number; pessoaFisica?: true } | null;
   };
   seguidores: number;
   /** proposições relevantes (PL/PLP/PEC/PDL) apresentadas por ano, 2023..2026 */
@@ -181,7 +187,23 @@ export interface Insights {
   /** scatter divulgação × alcance: x = divulgação mensal média (R$ mil/mês), y = percentil de Influência */
   divulgacaoInfluencia: (RankPessoa & { tier: Tier; x: number; y: number })[];
   /** ranking nacional por concentração da cota num só fornecedor (informativo — concentração ≠ irregularidade) */
-  concentracaoFornecedor: (RankPessoa & { tier: Tier; fornecedor: string; pct: number; valorMil: number })[];
+  concentracaoFornecedor: (RankPessoa & {
+    tier: Tier; fornecedor: string; pct: number; valorMil: number;
+    /** fornecedor pessoa física: `fornecedor` é o que foi contratado, não o nome dela */
+    pessoaFisica?: true;
+  })[];
+  /**
+   * Empresas que mais receberam da cota, agregadas por CNPJ (as duas casas juntas).
+   * `totalMi` é o universo com CNPJ identificado — e `semCnpjMi` é o que ficou fora
+   * (SIGEPA não identifica pessoa jurídica; lançamento em CPF é pessoa física e não
+   * entra em ranking público). O painel PRECISA exibir os dois: `pct` é fatia de
+   * `totalMi`, não do total da cota. `concentracao` é o acumulado do top-k.
+   */
+  fornecedoresCota?: {
+    totalMi: number; semCnpjMi: number; nEmpresas: number;
+    empresas: { nome: string; cnpj: string; valorMil: number; pct: number; nParl: number }[];
+    concentracao: { top: number; pct: number }[];
+  };
   guildRanking: (Guild & { total: number; tiers: Record<Tier, number> })[];
   ufAgg: { uf: string; opsMedio: number; blogueiros: number }[];
   scatter: {

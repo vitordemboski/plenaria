@@ -675,6 +675,16 @@ a.kpi-link:hover { border-color: var(--gold-2); }
 }
 .gsp-meta { margin: 4px 0 0 30px; font-size: 10px; color: var(--muted); }
 
+/* empresas que receberam da cota: reusa a barra das guildas, mas a linha não é link
+   (a empresa não tem página) e a razão social é longa — pode ocupar duas linhas */
+.forn-nome { white-space: normal; overflow: visible; text-transform: none; }
+.forn-nota { margin-top: 12px; font-size: 10.5px; line-height: 1.5; color: var(--muted); }
+/* auto-fit em vez das 3 colunas fixas do .renov-stats: são 4 degraus (1/10/20/100) */
+.conc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 10px; margin: 6px 0 2px; }
+.conc-grid > div { text-align: center; background: #0c1018; border: 1px solid var(--line); border-radius: 10px; padding: 12px 8px; }
+.conc-grid b { display: block; font-family: var(--font-display), serif; font-weight: 900; font-size: 24px; color: var(--gold-2); }
+.conc-grid small { display: block; font-size: 10px; color: var(--muted); letter-spacing: 0.04em; margin-top: 4px; }
+
 .lrow { display: grid; grid-template-columns: 24px 1fr auto 40px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; }
 .lrow:last-child { border-bottom: 0; }
 .lrow .pos { font-family: var(--font-display), serif; font-weight: 900; color: var(--muted); }

@@ -27,7 +27,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCsvBR } from './lib/csv.mjs';
 import { TIPOS_PRINCIPAIS, TIPOS_EMENDA, ehFiscalizacao, alinhamento, senadoAvancou, senadoVirouNorma } from './lib/classificacao.mjs';
-import { resumoCota, percentuais } from './lib/cota.mjs';
+import { resumoCota, percentuais, chaveFornecedor, destrincharFornecedores, rankFornecedores } from './lib/cota.mjs';
 import { escalaFrugalidade, escalaComparecimento, escalaLog } from './lib/escala.mjs';
 import { referenciasDaCasa, evidenciaDeTitulos } from './lib/evidencia.mjs';
 import { resumoCurtoStats } from './lib/resumo-stat.mjs';
@@ -401,7 +401,7 @@ async function fetchProposicoes(statusById, emendaIds, fiscalIds) {
 async function fetchCeap() {
   const gastoByDep = new Map(); // ideCadastro → total R$ (vlrLiquido)
   const catByDep = new Map();   // ideCadastro → Map<txtDescricao, R$>
-  const fornByDep = new Map();  // ideCadastro → Map<txtFornecedor, R$>
+  const fornByDep = new Map();  // ideCadastro → Map<chaveFornecedor(doc, nome), R$>
   const acc = (mapa, id, chave, v) => {
     let m = mapa.get(id);
     if (!m) mapa.set(id, (m = new Map()));
@@ -436,6 +436,7 @@ async function fetchCeap() {
     const iVal = header.indexOf('vlrLiquido');
     const iCat = header.indexOf('txtDescricao');
     const iForn = header.indexOf('txtFornecedor');
+    const iDoc = header.indexOf('txtCNPJCPF');
     let soma = 0;
     for (const r of rows) {
       const id = Number(r[iId]);
@@ -445,7 +446,7 @@ async function fetchCeap() {
       // net por categoria/fornecedor (estorno negativo abate) → total bate com a Economia
       acc(catByDep, id, r[iCat] ?? '', v);
       const forn = (r[iForn] ?? '').trim();
-      if (forn) acc(fornByDep, id, forn, v);
+      if (forn) acc(fornByDep, id, chaveFornecedor(r[iDoc], forn, r[iCat] ?? ''), v);
       soma += v;
     }
     console.log(`[ceap] ${y}: R$ ${(soma / 1e6).toFixed(1)} mi em ${rows.length} lançamentos`);
@@ -769,7 +770,7 @@ async function fetchSenado(socialMap) {
   // CEAPS (cota do Senado) — CSV latin1, decimal com vírgula, match por NOME
   const gastoByNome = new Map();
   const catByNome = new Map();  // normNome → Map<TIPO_DESPESA, R$>
-  const fornByNome = new Map(); // normNome → Map<FORNECEDOR, R$>
+  const fornByNome = new Map(); // normNome → Map<chaveFornecedor(doc, nome), R$>
   const acc = (mapa, chaveDep, chave, v) => {
     let m = mapa.get(chaveDep);
     if (!m) mapa.set(chaveDep, (m = new Map()));
@@ -794,6 +795,7 @@ async function fetchSenado(socialMap) {
     const iVal = header.findIndex((h) => h.includes('VALOR_REEMBOLSADO'));
     const iCat = header.indexOf('TIPO_DESPESA');
     const iForn = header.indexOf('FORNECEDOR');
+    const iDoc = header.indexOf('CNPJ_CPF');
     let soma = 0;
     for (let i = 2; i < lines.length; i++) {
       const line = lines[i].trimEnd();
@@ -807,7 +809,7 @@ async function fetchSenado(socialMap) {
       // net por categoria/fornecedor (estorno negativo abate) → total bate com a Economia
       acc(catByNome, k, cols[iCat] ?? '', v);
       const forn = (cols[iForn] ?? '').trim();
-      if (forn) acc(fornByNome, k, forn, v);
+      if (forn) acc(fornByNome, k, chaveFornecedor(cols[iDoc], forn, cols[iCat] ?? ''), v);
       soma += v;
     }
     console.log(`[ceaps-sen] ${y}: R$ ${(soma / 1e6).toFixed(1)} mi`);
@@ -834,9 +836,12 @@ async function fetchSenado(socialMap) {
     const key = resolveKey(nomeParlamentar, nomeCivil);
     return resumoCota(
       [...(catByNome.get(key)?.entries() ?? [])],
-      [...(fornByNome.get(key)?.entries() ?? [])],
+      destrincharFornecedores(fornByNome.get(key)),
     );
   };
+  // lançamentos crus do senador, p/ o agregado nacional de empresas (Insights)
+  const resolveForn = (nomeParlamentar, nomeCivil) =>
+    destrincharFornecedores(fornByNome.get(resolveKey(nomeParlamentar, nomeCivil)));
   const semCeaps = [];
 
   // por senador: autorias, votações, relatorias (3 × 81 requests, cacheadas)
@@ -958,6 +963,7 @@ async function fetchSenado(socialMap) {
       sabatinas, votacoesAbertas,
       avancadas, aprovadas, relatoriasPrinc: relatoriasPrinc.length, relatoriasAvancadas,
       gasto: gasto ?? 0, cotaResumo: resolveCota(s.nome, nomeCivil),
+      fornLancamentos: resolveForn(s.nome, nomeCivil),
       social: socialMap.get(`senado:${s.id}`) ?? null,
       ficha, sexo, comissoes, seatedFull, mandatoParcial, mesesExercicio });
   }
@@ -1101,7 +1107,9 @@ async function fetchSenado(socialMap) {
   // total de matérias do Senado que viraram norma na legislatura — mesma semântica do
   // leisTotal da Câmara (conta a matéria, não o autor), para o painel "Leis" somar as duas casas.
   const normasSenado = [...situacaoPorMateria.values()].filter(senadoVirouNorma).length;
-  return { senadores: out, normasSenado };
+  // fornPorSenador fica FORA do objeto do senador: é dado cru de build (dezenas de
+  // milhares de lançamentos), usado só pelo agregado de empresas dos Insights.
+  return { senadores: out, normasSenado, fornPorSenador: new Map(porSenador.map((r) => [r.id, r.fornLancamentos])) };
 }
 
 // ---------- main ----------
@@ -1207,7 +1215,7 @@ const raw = deputados.map((d) => {
   gasto: gastoByDep.get(d.id) ?? 0,
   cotaResumo: resumoCota(
     [...(catByDep.get(d.id)?.entries() ?? [])],
-    [...(fornByDep.get(d.id)?.entries() ?? [])],
+    destrincharFornecedores(fornByDep.get(d.id)),
   ),
   social: social.get(`camara:${d.id}`) ?? null,
   };
@@ -1441,7 +1449,7 @@ for (const p of full) {
 }
 
 // ---------- Senado: merge ----------
-const { senadores, normasSenado } = await fetchSenado(social);
+const { senadores, normasSenado, fornPorSenador } = await fetchSenado(social);
 full.push(...senadores);
 
 // ---------- títulos POSITIVOS / de senioridade (ambas as casas) ----------
@@ -1718,9 +1726,26 @@ const concentracaoFornecedor = RANK
     fornecedor: p.cotaResumo.fornecedor.nome,
     pct: p.cotaResumo.fornecedor.pct,
     valorMil: Math.round(p.cotaResumo.fornecedor.valor / 1000),
+    // fornecedor pessoa física entra pelo QUE FOI CONTRATADO, sem nome (ver ehCpf)
+    ...(p.cotaResumo.fornecedor.pessoaFisica ? { pessoaFisica: true } : {}),
   }))
   .sort((a, b) => b.pct - a.pct)
   .slice(0, 15);
+
+// #5/#6 "Empresas que mais receberam" + "Concentração do mercado da cota".
+// Mesma população dos demais painéis de gasto (RANK), as duas casas juntas: aqui o
+// sujeito é a EMPRESA, não o parlamentar — o teto de cota de cada casa (que proíbe
+// somar Câmara com Senado num ranking de gasto) não pesa sobre quem recebeu.
+function* lancamentosCota() {
+  for (const p of RANK) {
+    const crus = p.casa === 'camara' ? destrincharFornecedores(fornByDep.get(p.id)) : fornPorSenador.get(p.id) ?? [];
+    for (const [doc, nome, , valor] of crus) yield [p.slug, doc, nome, valor];
+  }
+}
+const fornecedoresCota = rankFornecedores(
+  lancamentosCota(),
+  RANK.reduce((t, p) => t + (p.cotaResumo?.total ?? 0), 0),
+);
 
 const generoDe = (casa) => {
   const xs = full.filter((p) => p.casa === casa && (p.sexo === 'F' || p.sexo === 'M'));
@@ -1788,7 +1813,7 @@ const insights = {
   renovacao, leis, genero,
   ...(sabatina ? { sabatina } : {}),
   gastoPorCasa, guildGasto,
-  gastoCategorias, topDivulgacao, divulgacaoInfluencia, concentracaoFornecedor,
+  gastoCategorias, topDivulgacao, divulgacaoInfluencia, concentracaoFornecedor, fornecedoresCota,
   guildRanking, ufAgg,
   // Gasto × Entrega real: cota CEAP média mensal vs. Poder; flag = Nobre Gastador (factual)
   scatter: RANK.map((p) => ({
