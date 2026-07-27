@@ -119,6 +119,17 @@ button { font: inherit; cursor: pointer; }
     border-top: 1px solid var(--line);
     box-shadow: 0 -10px 30px -18px rgba(0, 0, 0, 0.9);
   }
+  /* iOS (Safari E Chrome — todo browser no iPhone é WKWebView): durante o scroll
+     o `position: fixed` é reancorado no viewport de LAYOUT (o das barras
+     recolhidas, mais alto que o visível), e a barra descola
+     do rodapé por ~20px — o texto da página aparece POR BAIXO dela. Não dá para
+     ancorar no visual viewport só com CSS (só via JS de `visualViewport`), então
+     a barra estende o próprio fundo para baixo: no descolamento o que vaza é
+     mais barra, não conteúdo. Fica fora da tela em repouso. */
+  .bottom-nav::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 80px;
+    background: rgba(12, 16, 24, 0.92); pointer-events: none;
+  }
   .bottom-nav a {
     display: grid; justify-items: center; align-content: center; gap: 5px;
     min-height: 52px; padding: 6px 2px; border-radius: 12px;
@@ -881,7 +892,15 @@ a.kpi-link:hover { border-color: var(--gold-2); }
    especificidade das declarações originais (`.picker input`, `.fighter input`…),
    então quem estiver por último no arquivo vence. Escrito lá em cima, o bloco não
    surtia efeito nenhum — e o sintoma é exatamente "não mudou nada".
-   Regra única: campo focável novo entra AQUI também, nunca antes deste ponto. */
+   Regra única: campo focável novo entra AQUI também, nunca antes deste ponto.
+
+   <select> é a EXCEÇÃO: o zoom nasce do cursor de texto entrando no campo, e o
+   select abre o picker nativo, sem teclado. A 16px ele destoava — o filtro de
+   estado fica na mesma linha das pílulas de casa (11,5px) e do contador (11px),
+   e saía visivelmente maior que tudo à volta. Fica em 13px (12px é o desktop,
+   pequeno demais para o alvo de toque). Se algum iPhone ainda der zoom ao abrir
+   o picker, é só devolver os selects para a linha de cima. */
 @media (pointer: coarse) {
-  .search, .uf-filter, .map-select, .fighter select, .fighter input, .picker input { font-size: 16px; }
+  .search, .fighter input, .picker input { font-size: 16px; }
+  .uf-filter, .map-select, .fighter select { font-size: 13px; }
 }
