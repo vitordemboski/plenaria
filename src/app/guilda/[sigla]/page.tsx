@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { brutoDaGuilda } from '../../../../scripts/lib/guilda-bruto.mjs';
 import { politicians, guilds, getTitle, SCORING_STAT_META, TIER_ORDER, TIER_LABEL, casaLabel, foraDoRanking, meta } from '@/lib/data';
 import { FutStat } from '@/components/FutStat';
 import { GuildCrest } from '@/components/GuildCrest';
@@ -71,6 +72,11 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
   // guilda sem NENHUM ranqueável: Poder médio 0 e Tier F seriam ausência de gente
   // medida lida como desempenho ruim — mesma armadilha do mandato parcial
   const semRoster = members.length === 0;
+  // números BRUTOS da bancada, uma frase por atributo. NÃO é o bruto do percentil
+  // médio (média de percentis não tem bruto único): é uma segunda conta sobre os
+  // mesmos membros — média por parlamentar nas contagens, soma/soma nas taxas.
+  // Mesmo módulo que o card OG usa, para as duas peças nunca divergirem.
+  const bruto = brutoDaGuilda(members) as Partial<Record<StatKey, string>>;
   const opsMedio = opsMedioDe(guild.sigla);
   const tier = guildTierOf(opsMedio);
   const pesoDe = (k: string) => Math.round(((meta.pesos as Record<string, number>)[k] ?? 0) * 100);
@@ -155,6 +161,7 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
                         tipLines={[
                           s.desc,
                           `média dos percentis dos ${members.length} membros da guilda`,
+                          ...(bruto[s.key] ? [`na bancada: ${bruto[s.key]}`] : []),
                           `peso ${pesoDe(s.key)}% do Poder`,
                         ]}
                       />
@@ -195,7 +202,12 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
               sigla: guild.sigla,
               // sem roster os atributos seriam 0 — média de ninguém circulando como avaliação
               stats: semRoster ? undefined
-                : SCORING_STAT_META.map((s) => ({ icon: s.icon, label: s.label, value: avgStats[s.key] })),
+                : SCORING_STAT_META.map((s) => ({
+                    icon: s.icon, label: s.label, value: avgStats[s.key],
+                    // o bruto viaja junto com o percentil (mesma regra da carta do
+                    // parlamentar): percentil sozinho não mostra de onde saiu
+                    nota: bruto[s.key],
+                  })),
               story: {
                 rank: semRoster ? undefined : `#${rank} de ${guildasRanqueaveis.length} guildas`,
                 destaque: semRoster ? undefined : `${members.length} membros · por Poder médio`,
@@ -230,6 +242,22 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
         {/* painéis que só existem com roster: sem membros, todos ficariam com o
             título e o corpo vazio, o que parece dado faltando */}
         {!semRoster && (<>
+        <div className="panel">
+          <h3>🔭 Relatório de olheiro da bancada</h3>
+          <p className="sub">
+            os números brutos dos {members.length} membros ranqueados — contagem vira{' '}
+            <b>média por parlamentar</b>; taxa é a <b>soma da bancada</b> (média de porcentagens de
+            casas diferentes não seria a taxa da guilda)
+          </p>
+          <div className="scout-list">
+            {SCORING_STAT_META.map((s) =>
+              bruto[s.key] ? (
+                <div key={s.key}><b>{s.icon}</b> <span><b>{s.label}</b> — {bruto[s.key]}</span></div>
+              ) : null,
+            )}
+          </div>
+        </div>
+
         <div className="panel">
           <h3>🏰 Composição por tier</h3>
           <p className="sub">quantos membros a guilda tem em cada rank</p>
@@ -285,7 +313,9 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
           <h3 style={{ marginBottom: 8 }}>📖 Como ler esta carta</h3>
           A carta da guilda agrega seus {members.length} parlamentares: cada atributo é a{' '}
           <b>média dos percentis dos membros</b>, e o tier da guilda ({tier} · {TIER_LABEL[tier]}) vem do
-          Poder médio — sem os gates individuais do Rank S.
+          Poder médio — sem os gates individuais do Rank S. Os números do{' '}
+          <b>relatório de olheiro</b> acima são outra conta sobre os mesmos membros: percentil médio
+          não tem um bruto único, então ali vão os brutos da bancada, com o denominador em cada linha.
           <div style={{ marginTop: 10 }} className="muted">
             Atributos = média dos {members.length} membros · {meta.fonte}
           </div>

@@ -163,9 +163,18 @@ Armadilhas conhecidas das APIs:
   foto NA imagem). Duas armadilhas do satori: ele não decodifica WebP (a foto é convertida
   com sharp antes) e não desenha emoji sem asset extra. `ogImage` só é gravado no
   politicians.json/guilds.json para quem renderizou — a UI não deriva do slug porque `og:image`
-  404 faz o scraper não mostrar cartão nenhum, pior que o card genérico. O card de GUILDA não
-  leva bruto por atributo: média de percentis não tem bruto único (o ShareButton também não
-  passa `nota` na variante guilda), então o rodapé diz o que o número é.
+  404 faz o scraper não mostrar cartão nenhum, pior que o card genérico.
+- **O bruto do card de GUILDA é OUTRA conta, não o bruto do percentil médio.** Média de
+  percentis não tem bruto único — por isso o card nasceu sem número ao lado da barra. O que
+  existe hoje (`scripts/lib/guilda-bruto.mjs`, com teste; usado pelo card OG, pela página da
+  guilda e pelo `nota` do ShareButton) é um agregado INDEPENDENTE sobre os brutos da bancada,
+  e as duas contas têm de ser declaradas lado a lado (o rodapé do card diz "Percentil: média
+  dos N membros · ao lado, os números da bancada"). Duas regras dele: (1) **contagem vira
+  média por parlamentar, taxa vira soma÷soma da bancada** — média de porcentagens de casas
+  diferentes (o deputado vota em ~1.589 votações, o senador em ~418) não é a taxa da guilda;
+  (2) **emenda só entra na Técnica quando TODA a bancada é da Câmara**, senão a "média por
+  parlamentar" embutiria um denominador que nenhum senador podia ter. Toda frase carrega o
+  próprio denominador e cabe em 44 caracteres (o teste trava isso — é a largura da linha).
 - O mesmo script emite o **`fotoLqip`**: um WebP 12×13 em data-URI (~185B) que a janela
   da carta pinta como `background` enquanto a foto não chega — sem ele a moldura piscava
   do gradiente escuro p/ a foto clara. Três armadilhas: (1) **fundo branco fixo não

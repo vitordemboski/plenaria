@@ -26,6 +26,7 @@ import sharp from 'sharp';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { brutoDaGuilda } from './lib/guilda-bruto.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const W = 1200, H = 630;
@@ -254,10 +255,11 @@ async function crestPng(cor, alturaPx) {
 /**
  * Card da GUILDA (1200×630): brasão à esquerda, médias da bancada à direita.
  *
- * Sem número bruto por atributo, ao contrário do card de parlamentar — e não é
- * omissão: atributo de guilda é MÉDIA DE PERCENTIS dos membros, não existe um
- * bruto único para citar (é o mesmo motivo pelo qual o ShareButton não passa
- * `nota` na variante 'guilda'). No lugar vai a linha que diz o que o número É.
+ * O número ao lado do atributo é MÉDIA DE PERCENTIS dos membros, que não tem um
+ * bruto único — por isso a `nota` de cada linha NÃO é "o bruto desse percentil", e
+ * sim um agregado independente sobre os brutos da bancada (`guilda-bruto.mjs`),
+ * com o denominador dito na própria frase. O rodapé declara as duas contas: sem
+ * isso a peça exibiria percentil e bruto lado a lado como se um viesse do outro.
  */
 function cardGuilda({ g, crest, stats }) {
   const cor = g.semRoster ? '#55442a' : (TIER_COR[g.tier] ?? GOLD_SUB);
@@ -345,7 +347,7 @@ function cardGuilda({ g, crest, stats }) {
           h('div', { style: { display: 'flex', fontSize: '14px', color: '#8a90a0' } },
             // sem crédito de foto: não há foto. O que precisa ser dito é o que os
             // números são — sem isso a peça exibiria percentil sem dizer de quê.
-            stats.length ? `Atributos: média dos percentis ${g.membros === 1 ? 'do único membro' : `dos ${g.membros} membros`}  ·  fórmula em /como-calculamos`
+            stats.length ? `Percentil: média ${g.membros === 1 ? 'do único membro' : `dos ${g.membros} membros`}  ·  ao lado, os números da bancada  ·  /como-calculamos`
                          : 'fórmula em /como-calculamos'),
           h('div', { style: { display: 'flex', marginTop: '6px', fontSize: '18px', fontWeight: 600, color: '#98a0b0' } }, 'plenariarpg.com'),
         ),
@@ -423,6 +425,8 @@ async function ogDaGuilda(g, todos, statKeys, tierCortes) {
   const bancada = semRoster ? todos.filter((p) => p.partido === g.sigla) : membros;
   const opsMedio = semRoster ? 0 : Math.round(membros.reduce((s, p) => s + p.ops, 0) / membros.length);
 
+  // brutos da bancada — a mesma conta da página da guilda (módulo compartilhado)
+  const bruto = semRoster ? {} : brutoDaGuilda(membros);
   const stats = semRoster ? [] : statKeys.map((k) => {
     // média só sobre quem TEM o atributo — igual ao getGuildStats
     const tem = membros.filter((p) => !p.rawNumbers || p.rawNumbers[k]);
@@ -430,6 +434,7 @@ async function ogDaGuilda(g, todos, statKeys, tierCortes) {
     return {
       label: STAT_LABEL[k] ?? k,
       valor: Math.round(base.reduce((s, p) => s + (p.stats[k] ?? 0), 0) / base.length),
+      nota: bruto[k],
     };
   });
 
