@@ -7,7 +7,7 @@
  *   - BULK votacoesVotos-{ano}.csv                     → Stamina
  *   - BULK proposicoesAutores + proposicoes-{ano}.csv  → Ataque, Eficiência,
  *     Técnica (relator designado) e produção anual
- *   - camara.leg.br/cotas/Ano-{ano}.csv.zip (CEAP)     → Economia
+ *   - /deputados/{id}/despesas (CEAP, por deputado)    → Economia
  *
  * Senado (legis.senado.leg.br — endpoints deprecados em 2025-03 mas ativos):
  *   - senador/lista/atual + {cod}/autorias|votacoes|relatorias (JSON)
@@ -21,8 +21,7 @@
  *
  * Uso:  npm run data:real
  */
-import { writeFileSync, mkdirSync, existsSync, readFileSync, statSync, utimesSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCsvBR } from './lib/csv.mjs';
@@ -398,59 +397,93 @@ async function fetchProposicoes(statusById, emendaIds, fiscalIds) {
 
 // ---------- 4. Economia: cota parlamentar (CEAP) ----------
 // soma total (→ Economia) + quebra por categoria e fornecedor (→ cotaResumo, informativa)
-async function fetchCeap() {
-  const gastoByDep = new Map(); // ideCadastro → total R$ (vlrLiquido)
-  const catByDep = new Map();   // ideCadastro → Map<txtDescricao, R$>
-  const fornByDep = new Map();  // ideCadastro → Map<chaveFornecedor(doc, nome), R$>
+//
+// A fonte é a API POR DEPUTADO, não o bulk `Ano-{ano}.csv.zip`. O bulk PAROU de
+// publicar "PASSAGEM AÉREA - SIGEPA" em ago/2025: 2023 e 2024 trazem ~57 mil linhas
+// de SIGEPA por ano (~R$ 40 mi), 2025 despenca de ~5.000/mês para ~100/mês a partir
+// de agosto e 2026 tem ZERO. O buraco não é cache velho nosso (o zip recém-publicado
+// também vem sem) e não é o parser (0 linhas malformadas). Passagem é a maior rubrica
+// depois de divulgação, então o efeito era grande e DESIGUAL — quem voa muito sumia
+// mais: mediana 3,4% de subnotificação na legislatura, 16% no Kim Kataguiri e na
+// Erika Hilton, ~0% em quem é de Brasília. Como a Economia é linear no gasto ancorado
+// na mediana da casa, isso não se cancela: reordena o ranking de frugalidade.
+//
+// Duas armadilhas na migração:
+//  - a API pagina INSTÁVEL sem `ordenarPor` — o mesmo deputado devolvia 1.690
+//    lançamentos (R$ 1,36 mi) sem ordem e 2.011 (R$ 1,65 mi) com. Ordem explícita +
+//    dedupe são obrigatórios, senão trocamos um undercount silencioso por outro.
+//  - `itens` satura em 100 (pedir 1000 devolve 100 sem erro): a condição de parada é
+//    `length < 100`, nunca `length < itens`.
+const CEAP_ANOS = YEARS.map((y) => `ano=${y}`).join('&');
+
+async function fetchCeapDeputado(id, tentativas = 6) {
+  const file = join(RAW, `cota-${id}.json`);
+  if (cacheServe(file)) {
+    registraFonte(file, false);
+    return JSON.parse(readFileSync(file, 'utf8'));
+  }
+  const vistos = new Set();
+  const lancamentos = [];
+  for (let pagina = 1; pagina <= 80; pagina++) {
+    let dados = null;
+    for (let t = 0; t < tentativas && !dados; t++) {
+      const url = `${API}/api/v2/deputados/${id}/despesas?${CEAP_ANOS}&itens=100&ordem=ASC&ordenarPor=codDocumento&pagina=${pagina}`;
+      try {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (res.ok) dados = (await res.json()).dados ?? [];
+        else await new Promise((r) => setTimeout(r, 600 * (t + 1)));
+      } catch { await new Promise((r) => setTimeout(r, 600 * (t + 1))); }
+    }
+    // lista vazia por falha = deputado sem gasto = "o mais frugal da casa", em
+    // silêncio. Mesma regra do histórico de exercício: esgotou, aborta.
+    if (!dados) throw new Error(`CEAP: ${tentativas} tentativas falharam no deputado ${id}, página ${pagina}`);
+    if (!dados.length) break;
+    for (const d of dados) {
+      const chave = `${d.ano}|${d.codDocumento}|${d.numRessarcimento}|${d.parcela}|${d.valorLiquido}|${d.tipoDespesa}`;
+      if (vistos.has(chave)) continue;
+      vistos.add(chave);
+      lancamentos.push({
+        categoria: d.tipoDespesa ?? '',
+        valor: d.valorLiquido ?? 0,
+        doc: d.cnpjCpfFornecedor ?? '',
+        forn: (d.nomeFornecedor ?? '').trim(),
+      });
+    }
+    if (dados.length < 100) break;
+  }
+  writeFileSync(file, JSON.stringify(lancamentos));
+  registraFonte(file, false);
+  return lancamentos;
+}
+
+async function fetchCeap(deputados, concorrencia = 6) {
+  const gastoByDep = new Map(); // id → total R$ (valorLiquido)
+  const catByDep = new Map();   // id → Map<tipoDespesa, R$>
+  const fornByDep = new Map();  // id → Map<chaveFornecedor(doc, nome), R$>
   const acc = (mapa, id, chave, v) => {
     let m = mapa.get(id);
     if (!m) mapa.set(id, (m = new Map()));
     m.set(chave, (m.get(chave) ?? 0) + v);
   };
-  for (const y of YEARS) {
-    const zipName = `Ano-${y}.csv.zip`;
-    const csvName = `Ano-${y}.csv`;
-    const csvPath = join(RAW, csvName);
-    if (!cacheServe(csvPath)) {
-      const zipPath = join(RAW, zipName);
-      // o zip segue a validade do csv: expirar um e reaproveitar o outro
-      // descompactaria de novo exatamente o mesmo conteúdo velho
-      if (!cacheServe(zipPath)) {
-        const url = `https://www.camara.leg.br/cotas/${zipName}`;
-        console.log(`[fetch] ${url}`);
-        const res = await fetch(url);
-        if (!res.ok) { console.log(`[skip] CEAP ${y} indisponível`); continue; }
-        writeFileSync(zipPath, Buffer.from(await res.arrayBuffer()));
+  const fila = deputados.map((d) => d.id);
+  const total = fila.length;
+  let feitos = 0, soma = 0, nLanc = 0;
+  await Promise.all(Array.from({ length: concorrencia }, async () => {
+    while (fila.length) {
+      const id = fila.shift();
+      const lancamentos = await fetchCeapDeputado(id);
+      for (const l of lancamentos) {
+        gastoByDep.set(id, (gastoByDep.get(id) ?? 0) + l.valor);
+        // net por categoria/fornecedor (estorno negativo abate) → total bate com a Economia
+        acc(catByDep, id, l.categoria, l.valor);
+        if (l.forn) acc(fornByDep, id, chaveFornecedor(l.doc, l.forn, l.categoria), l.valor);
+        soma += l.valor;
       }
-      registraFonte(zipPath, false);
-      execSync(`unzip -o -q ${JSON.stringify(zipPath)} -d ${JSON.stringify(RAW)}`);
-      // o unzip PRESERVA o mtime gravado no arquivo — o csv nasceria "velho" e
-      // expiraria na execução seguinte, re-baixando 4 zips a cada rodada
-      utimesSync(csvPath, new Date(), new Date());
-    } else {
-      console.log(`[cache] ${csvName}`);
-      registraFonte(csvPath, false);
+      nLanc += lancamentos.length;
+      if (++feitos % 100 === 0) console.log(`[ceap] ${feitos}/${total} deputados`);
     }
-    const { header, rows } = parseCsv(readFileSync(csvPath, 'utf8'));
-    const iId = header.indexOf('ideCadastro');
-    const iVal = header.indexOf('vlrLiquido');
-    const iCat = header.indexOf('txtDescricao');
-    const iForn = header.indexOf('txtFornecedor');
-    const iDoc = header.indexOf('txtCNPJCPF');
-    let soma = 0;
-    for (const r of rows) {
-      const id = Number(r[iId]);
-      if (!id) continue;
-      const v = parseFloat(r[iVal]) || 0;
-      gastoByDep.set(id, (gastoByDep.get(id) ?? 0) + v);
-      // net por categoria/fornecedor (estorno negativo abate) → total bate com a Economia
-      acc(catByDep, id, r[iCat] ?? '', v);
-      const forn = (r[iForn] ?? '').trim();
-      if (forn) acc(fornByDep, id, chaveFornecedor(r[iDoc], forn, r[iCat] ?? ''), v);
-      soma += v;
-    }
-    console.log(`[ceap] ${y}: R$ ${(soma / 1e6).toFixed(1)} mi em ${rows.length} lançamentos`);
-  }
+  }));
+  console.log(`[ceap] R$ ${(soma / 1e6).toFixed(1)} mi em ${nLanc} lançamentos · ${total} deputados`);
   return { gastoByDep, catByDep, fornByDep };
 }
 
@@ -1119,7 +1152,7 @@ const { votesByDep, totalVotacoes, votacaoData, votoPorDep } = await fetchVotos(
 const orientacaoGov = await fetchOrientacoesGoverno();
 const { statusById, relatoriasByDep, relatoriasAvancadasByDep, emendaIds, fiscalIds } = await fetchStatusProposicoes();
 const { propsByDep, emendasByDep, fiscalByDep } = await fetchProposicoes(statusById, emendaIds, fiscalIds);
-const { gastoByDep, catByDep, fornByDep } = await fetchCeap();
+const { gastoByDep, catByDep, fornByDep } = await fetchCeap(deputados);
 
 console.log(`[base] ${deputados.length} deputados atuais · ${totalVotacoes} votações nominais no período`);
 

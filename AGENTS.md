@@ -186,6 +186,16 @@ Armadilhas conhecidas das APIs:
   12px p/ 196px já borra na interpolação do browser, de graça.
 - Câmara `/proposicoes` limita janelas de data a 3 meses — para séries, use os
   arquivos bulk (`/arquivos/...`), nunca a API paginada.
+- **A cota da Câmara vem da API por deputado, NÃO do bulk `cotas/Ano-{ano}.csv.zip`** —
+  ele parou de publicar "PASSAGEM AÉREA - SIGEPA" em ago/2025 (2026 tem zero; não é
+  cache nem parser). Subnotificava a mediana em 3,4% e quem voa muito em 16%: desigual,
+  logo reordenava a frugalidade. O agregado continua plausível — só bater UM parlamentar
+  contra `/deputados/{id}/despesas` denuncia. Confira a cada ingestão que mexer na cota.
+  O CEAPS do Senado não tem o problema.
+- **`/deputados/{id}/despesas` pagina instável sem `ordenarPor`**: 1.690 lançamentos
+  sem ordem × 2.011 com `ordem=ASC&ordenarPor=codDocumento` (R$ 300 mil sumindo sem
+  erro). Ordem explícita + dedupe, sempre. E `itens` satura em 100 sem reclamar — pare
+  em `length < 100`, nunca `length < itens`. `ano` repetido varre os 4 anos numa passada.
 - Influência vem de seguidores do Instagram via Apify (ator instagram-profile-scraper,
   `npm run social:fetch`, `APIFY_TOKEN` obrigatório) — é serviço pago: rode em lotes,
   escreva resultados parciais no CSV e NUNCA grave falha como zero seguidores.
