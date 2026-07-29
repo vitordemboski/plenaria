@@ -1,3 +1,14 @@
+# Plugin do Next fixado por VERSÃO EXATA (também no package.json, sem `^`).
+# Declarado aqui + instalado como devDependency, a Netlify usa o do projeto em vez
+# de auto-instalar a última release a cada build. Duas razões: (1) build
+# reproduzível — auto-update silencioso troca o que gera o site sem passar por
+# commit; (2) o auto-install pega a versão publicada há minutos e quebra em
+# máquina com `min-release-age` no npmrc (proteção supply-chain), que foi como
+# isso apareceu: a 5.15.13 saiu há 2 dias e o build local abortou com ETARGET.
+# Subir a versão é edição consciente daqui + `npm install`.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
 # Headers de cache — versionados aqui para não depender do painel da Netlify.
 #
 # Princípio (ver CLAUDE.md): os dados quase não mudam (batch, no máx. diário) e
