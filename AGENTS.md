@@ -181,21 +181,22 @@ Armadilhas conhecidas das APIs:
   resolve** — só a Câmara fotografa em branco, o Senado varia (bandeira, cortina); o
   placeholder tem que sair da própria foto; (2) o crop tem que ser o MESMO do render
   (`cover`/`top`) ou o borrão pula quando a foto o cobre; (3) o LQIP fica FORA de
-  `public/data/index.json` — a `/batalha` o baixa no client, e 185B × 593 inflariam
-  245KB → 355KB por duas fotos que já são lazy. Não precisa de `filter: blur()`: subir
-  12px p/ 196px já borra na interpolação do browser, de graça.
+  `public/data/index.json` — a `/batalha` o baixa no client, e 185B por parlamentar
+  inflariam o índice em ~45% por duas fotos que já são lazy. Não precisa de
+  `filter: blur()`: subir 12px p/ 196px já borra na interpolação do browser, de graça.
 - Câmara `/proposicoes` limita janelas de data a 3 meses — para séries, use os
   arquivos bulk (`/arquivos/...`), nunca a API paginada.
 - **A cota da Câmara vem da API por deputado, NÃO do bulk `cotas/Ano-{ano}.csv.zip`** —
-  ele parou de publicar "PASSAGEM AÉREA - SIGEPA" em ago/2025 (2026 tem zero; não é
-  cache nem parser). Subnotificava a mediana em 3,4% e quem voa muito em 16%: desigual,
-  logo reordenava a frugalidade. O agregado continua plausível — só bater UM parlamentar
-  contra `/deputados/{id}/despesas` denuncia. Confira a cada ingestão que mexer na cota.
-  O CEAPS do Senado não tem o problema.
-- **`/deputados/{id}/despesas` pagina instável sem `ordenarPor`**: 1.690 lançamentos
-  sem ordem × 2.011 com `ordem=ASC&ordenarPor=codDocumento` (R$ 300 mil sumindo sem
-  erro). Ordem explícita + dedupe, sempre. E `itens` satura em 100 sem reclamar — pare
-  em `length < 100`, nunca `length < itens`. `ano` repetido varre os 4 anos numa passada.
+  ele parou de publicar "PASSAGEM AÉREA - SIGEPA" em ago/2025 (não é cache nem parser).
+  Passagem é a maior rubrica depois de divulgação, e a perda era DESIGUAL — quem voa
+  muito sumia mais, quem é de Brasília nem sentia —, logo reordenava a frugalidade. O
+  agregado continua plausível: só bater UM parlamentar contra `/deputados/{id}/despesas`
+  denuncia. Confira a cada ingestão que mexer na cota. O CEAPS do Senado não tem o problema.
+- **`/deputados/{id}/despesas` pagina instável sem `ordenarPor`**: o mesmo deputado
+  devolve centenas de lançamentos a menos (centenas de milhares de reais sumindo sem
+  erro) se você não passar `ordem=ASC&ordenarPor=codDocumento`. Ordem explícita + dedupe,
+  sempre. E `itens` satura em 100 sem reclamar — pare em `length < 100`, nunca
+  `length < itens`. `ano` repetido varre os 4 anos numa passada.
 - Influência vem de seguidores do Instagram via Apify (ator instagram-profile-scraper,
   `npm run social:fetch`, `APIFY_TOKEN` obrigatório) — é serviço pago: rode em lotes,
   escreva resultados parciais no CSV e NUNCA grave falha como zero seguidores.
@@ -234,17 +235,27 @@ Armadilhas conhecidas das APIs:
 - **O Karma (TCU) foi REMOVIDO — não reintroduza sem reler o motivo.** A penalidade só podia
   atingir deputados (o Senado não expõe CPF) enquanto os cortes de Tier são absolutos entre as
   casas: era o viés estrutural que o resto do projeto combate. Ainda media fato possivelmente
-  anterior ao mandato, contra o disclaimer de toda ficha, e acendia para 1 parlamentar em 593
-  (nenhum Tier S bloqueado). Com ele saiu a leitura do CPF: o pipeline não coleta mais esse dado
-  — e a `/sobre` afirma isso ao público. Penalidade nova só se valer nas DUAS casas e medir o
+  anterior ao mandato, contra o disclaimer de toda ficha, e acendia para um único
+  parlamentar da base (nenhum Tier S bloqueado). Com ele saiu a leitura do CPF: o
+  pipeline não coleta mais esse dado — e a `/sobre` afirma isso ao público. Penalidade nova só se valer nas DUAS casas e medir o
   exercício do mandato. Detalhe em docs/product-spec.md §9.
 - API do Senado devolve cargos/comissões de órgãos EXTINTOS sem DataFim — sempre
   recortar por DataInicio >= legislatura atual. **Vale igual para `/votacoes`**: ela
   devolve a votação de TODA a carreira (o Renan Calheiros vem com 1.378 votos de
   1995–2022). Sem o recorte, a Stamina do veterano é a média de 30 anos e a do novato
-  a de 3 — e o erro é silencioso, porque a taxa continua "plausível" (o Flávio Bolsonaro
-  exibia 95% de carreira; na legislatura são 91%). O denominador em si é honesto: a API
-  registra o senador em toda votação do mandato, inclusive as que faltou.
+  a de 3 — e o erro é silencioso, porque a taxa de carreira continua "plausível", só
+  alguns pontos acima da real. O denominador em si é honesto: a API registra o senador
+  em toda votação do mandato, inclusive as que faltou.
+- **O MOTIVO da ausência vem no CAMPO DO VOTO, e é vocabulário controlado — classifique
+  por código, nunca por regex na prosa** (`scripts/lib/voto-senado.mjs`, com teste).
+  `SiglaDescricaoVoto` traz `Sim`/`Não`/`Abstenção`/`Votou`/`P-NRV` para presença e
+  `AP`/`MIS`/`LS`/`LP`/`LAP`/`NCom` para ausência. Um regex sobre a descrição descontava
+  "Atividade parlamentar" e deixava passar "Missão da Casa no País/exterior", que é a
+  MESMA natureza (ausência a serviço da Casa) — não era limiar discutível, era a mesma
+  coisa medida de dois jeitos, e inflava a Stamina de mais da metade da casa de forma
+  desigual. Para conferir um código, use `plenario/lista/votacao/{AAAAMMDD}`, que devolve
+  a votação inteira — ausência e voto convivem na mesma coluna. Código novo é LOGADO pela
+  ingestão (`⚠️ código de voto NÃO classificado`); declare-o, não adivinhe.
 - **Não reintroduza o "Réu no STF".** A base "Acervo" do Corte Aberta anonimiza o polo
   passivo (`*NI*`) em ~99,7% das ações penais, então o match por nome civil nunca casa:
   a integração existiu, exigia download MANUAL de um painel Qlik e produziu ZERO

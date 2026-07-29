@@ -28,6 +28,7 @@ import { parseCsvBR } from './lib/csv.mjs';
 import { TIPOS_PRINCIPAIS, TIPOS_EMENDA, ehFiscalizacao, alinhamento, senadoAvancou, senadoVirouNorma } from './lib/classificacao.mjs';
 import { resumoCota, percentuais, chaveFornecedor, destrincharFornecedores, rankFornecedores } from './lib/cota.mjs';
 import { escalaFrugalidade, escalaComparecimento, escalaLog } from './lib/escala.mjs';
+import { compareceu, codigoDesconhecido } from './lib/voto-senado.mjs';
 import { referenciasDaCasa, evidenciaDeTitulos } from './lib/evidencia.mjs';
 import { resumoCurtoStats } from './lib/resumo-stat.mjs';
 
@@ -763,7 +764,8 @@ async function senadoJson(name, url) {
   return JSON.parse(await cached(name, url, { json: true }));
 }
 const asArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
-const VOTO_AUSENTE_RE = /não compareceu|ausen|licen|não votou|atividade parlamentar/i;
+/** códigos de voto vistos que `voto-senado.mjs` não conhece — logados no fim */
+const votosDesconhecidos = new Map();
 
 /**
  * Situação de tramitação das matérias do Senado → Map codigoMateria → situacaoAtual.
@@ -960,7 +962,11 @@ async function fetchSenado(socialMap) {
     // comparecimento sem nunca tocar em COMO o senador votou (que a plataforma não exibe).
     const votacoes = asArray(vot.VotacaoParlamentar?.Parlamentar?.Votacoes?.Votacao)
       .filter((v) => (v.SessaoPlenaria?.DataSessao ?? v.DataSessao ?? '').slice(0, 4) >= '2023');
-    const presente = (v) => !VOTO_AUSENTE_RE.test(v.DescricaoVoto ?? '');
+    const presente = compareceu;
+    for (const v of votacoes) {
+      const sig = (v.SiglaDescricaoVoto ?? '').trim();
+      if (codigoDesconhecido(sig)) votosDesconhecidos.set(sig, (votosDesconhecidos.get(sig) ?? 0) + 1);
+    }
     const votos = votacoes.filter(presente).length;
     for (const v of votacoes) totalSessoesVot.add(`${v.CodigoSessaoVotacao}-${v.Sequencial}`);
     // quebra aberta × secreta: a Stamina soma as duas (é tudo votação nominal), mas a
@@ -1005,11 +1011,17 @@ async function fetchSenado(socialMap) {
   if (semCeaps.length) console.log(`[ceaps-sen] sem lançamentos (gasto 0): ${semCeaps.join(', ')}`);
   const totalVotacoesSen = totalSessoesVot.size;
   console.log(`[senado] ${totalVotacoesSen} votações nominais distintas no período`);
+  // Código de voto novo classificado por prosa é ausência contada como presença (ou o
+  // contrário) em silêncio — foi como "Missão da Casa" inflou a Stamina de 45 senadores.
+  if (votosDesconhecidos.size) {
+    const lista = [...votosDesconhecidos].map(([s, n]) => `${s} (${n}x)`).join(', ');
+    console.log(`[senado] ⚠️  código de voto NÃO classificado: ${lista} — confira na votação inteira e declare em scripts/lib/voto-senado.mjs`);
+  }
 
   // Stamina do Senado = TAXA de comparecimento às votações nominais da legislatura,
   // ABERTAS (174) + SECRETAS/sabatinas (239) = 413. O denominador é honesto: a API
-  // registra o senador em TODA votação do seu mandato, inclusive as que ele faltou (a
-  // ausência vem descrita, e o VOTO_AUSENTE_RE a tira do numerador).
+  // registra o senador em TODA votação do seu mandato, inclusive as que ele faltou (o
+  // motivo da ausência vem no CAMPO DO VOTO, e `compareceu()` a tira do numerador).
   const staxaSen = (r) => (r.nVotacoes ? r.votos / r.nVotacoes : 0);
   const dimA = porSenador.map((r) => r.props).sort((a, b) => a - b);
   const staminaS = escalaComparecimento(porSenador.map(staxaSen));
