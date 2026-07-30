@@ -69,7 +69,7 @@ publicar `out/`. Nenhuma invalidação além do HTML.
 |---|---|
 | `scripts/ingest-real.mjs` | **Única fonte de dados**: ingestão + TODO o cálculo (percentis, Poder, tiers, gates, títulos, agregados). Cache incremental em `data/raw/`. |
 | `scripts/check-data.mjs` | Guarda do `dev`/`build`: falha alto se `data/` estiver vazio. **Não** existe fallback sintético — subir o site com parlamentares inventados seria pior que não subir. |
-| `scripts/lib/` | **Lógica pura e testável** da ingestão: `csv.mjs` (parser correto), `classificacao.mjs` (allowlist de tipos, alinhamento), `cota.mjs` (quebra da cota por categoria), `escala.mjs` (escalas de Economia, Stamina e Técnica), `evidencia.mjs` (número bruto + mediana da casa por trás de cada selo vermelho), `resumo-stat.mjs` (o bruto em uma linha, para a imagem de compartilhamento). Coberto por `npm test` (`node --test`). |
+| `scripts/lib/` | **Lógica pura e testável** da ingestão: `csv.mjs` (parser correto), `classificacao.mjs` (allowlist de tipos, alinhamento), `cota.mjs` (quebra da cota por categoria), `escala.mjs` (escalas de Economia, Stamina e Técnica), `evidencia.mjs` (número bruto + mediana da casa por trás de cada selo vermelho), `resumo-stat.mjs` (o bruto em uma linha, para a imagem de compartilhamento), `voto-senado.mjs` (comparecimento × voto registrado no Senado, por código), `guilda-bruto.mjs` (o bruto agregado da bancada). Coberto por `npm test` (`node --test`). |
 | `scripts/fetch-fotos.mjs` | Fotos oficiais → `public/fotos/` como WebP q75 (same-origin p/ o canvas do ShareButton) + normalização 480px. `npm run data:real` já o roda no fim. |
 | `scripts/make-og.mjs` | Gera `public/og.jpg` (card OG de compartilhamento). |
 | `src/lib/types.ts` | **Contrato de dados** entre o gerador e a UI. |
@@ -88,7 +88,7 @@ publicar `out/`. Nenhuma invalidação além do HTML.
 | Dado | Fonte | Vira |
 |---|---|---|
 | 513 deputados atuais (nome, partido, UF, foto oficial) | API `/deputados` + `/partidos` | identidade + brasões de guilda reais |
-| Votos nominais (~1.600 votações, ~500k votos) | bulk `votacoesVotos-{ano}.csv` | **Stamina** |
+| Votos nominais (~1.600 votações, ~500k votos) | bulk `votacoesVotos-{ano}.csv` — só voto EFETIVO (a Câmara não publica presença sem voto) | **Stamina** |
 | Autorias de PL/PLP/PEC/PDL | bulk `proposicoesAutores-{ano}.csv` + `proposicoes-{ano}.csv` (tipo/status) | **Ataque** + produção anual |
 | Situação das proposições ("Transformada em norma") | bulk `proposicoes-{ano}.csv` | **Eficiência** |
 | Cota parlamentar (~R$ 840 mi, 748k lançamentos) | API `/deputados/{id}/despesas` (por deputado, cacheada em `cota-{id}.json`) — **não** o bulk `cotas/Ano-{ano}.csv.zip`, que parou de publicar as passagens SIGEPA em ago/2025 | **Economia** + scatter Gasto × Entrega |
@@ -111,7 +111,7 @@ publicar `out/`. Nenhuma invalidação além do HTML.
 - Normalização: percentil dentro da casa, EXCETO Economia, Stamina e Técnica — ancoradas na
   mediana da casa (`scripts/lib/escala.mjs`, com teste); as duas primeiras lineares no valor
   bruto, a Técnica em LOG. Percentil descarta a magnitude (Economia), faz a inclinação seguir
-  a densidade local de colegas (Stamina: 1 p.p. de presença valia de 0 a 7,5 pontos no Senado)
+  a densidade local de colegas (Stamina: 1 p.p. de voto registrado valia de 0 a 7,5 pontos no Senado)
   e satura na cauda alta (Técnica: 1,9x o trabalho de um colega no topo valia 1 ponto). O
   Ataque fica em percentil DE PROPÓSITO — em log a magnitude do volume bruto volta a mandar e
   desfaz o motivo de ele pesar menos que a Eficiência. A âncora na mediana é o que mantém a
@@ -130,6 +130,14 @@ publicar `out/`. Nenhuma invalidação além do HTML.
 
 - `senador/lista/atual` + `{cod}/autorias|votacoes|relatorias` (JSON; 3×81 requests
   cacheadas) + CEAPS (`despesa_ceaps_{ano}.csv`, latin1, match por nome).
+- **Stamina = voto REGISTRADO, não presença.** A API marca o `P-NRV` ("Presente – Não
+  registrou voto", ~15% dos registros e ~22% nas secretas) ao lado dos motivos de
+  ausência, no mesmo campo do voto; classificar por CÓDIGO fica em `scripts/lib/
+  voto-senado.mjs`, com teste. Contar presença aqui e voto na Câmara faria a mesma
+  palavra medir coisas diferentes, com cortes de Tier absolutos entre as casas.
+  Abstenção conta (é voto registrado; a Stamina não julga o conteúdo do voto). A taxa
+  de presença sobra na ficha como 2ª taxa (`compareceuN`), e o painel "A Sabatina" usa
+  a MESMA definição — senão suas duas metades param de somar o numerador da Stamina.
 - Senadores têm os **5 atributos** que pontuam. A Eficiência vem do `/processo`
   (`?sigla=X&ano=Y`, em lote — 16 chamadas), único endpoint com `situacaoAtual`; as
   situações que contam como "avançou" são uma allowlist explícita em `scripts/lib/

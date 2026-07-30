@@ -25,7 +25,9 @@ Títulos factuais, Modo Batalha 1v1, páginas por estado e Dashboard de Insights
 ```bash
 npm install
 npm run data:real       # ingesta os dados (1ª vez leva ~1h; cache incremental em data/raw/)
+npm run data:fresh      # o mesmo ignorando o TTL do cache: re-baixa toda fonte volátil
 npm run fotos           # baixa as fotos oficiais (WebP) p/ public/fotos/ (data:real já roda no fim)
+npm run og              # cards de compartilhamento (site, parlamentar, guilda; data:real já roda no fim)
 npm run dev             # http://localhost:3001
 npm run build           # export estático completo em out/ (~675 páginas)
 npm run start           # serve out/

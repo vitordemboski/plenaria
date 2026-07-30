@@ -4,7 +4,7 @@
  *
  * Por que não reusar `rawNumbers`: aquelas frases são a explicação COMPLETA da ficha
  * ("849 votos registrados em 1.587 votações nominais ocorridas durante o seu
- * exercício (53% de comparecimento)") e passam de 100 caracteres — na imagem elas
+ * exercício (53%)") e passam de 100 caracteres — na imagem elas
  * seriam truncadas com reticência, que é o pior dos mundos: ocupa espaço e não
  * informa. Aqui o número vem inteiro, só sem a oração explicativa.
  *

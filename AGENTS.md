@@ -272,14 +272,14 @@ Armadilhas conhecidas das APIs:
   STF passar a publicar os nomes.
 - **Título de PENALIDADE não pode disparar na mediana da casa.** Os atributos são
   percentis DENTRO da casa, mas um rótulo vermelho faz uma acusação ABSOLUTA ("pouca
-  entrega") — e as duas coisas se contradizem quando a distribuição é comprimida. O
-  Senado comparece muito (mediana 93%, p25 88%), então `Stamina < 50` marcava como
-  "Blogueiro de Plenário" quem vai a 9 de cada 10 votações. Pior: o mesmo "50" valia
-  59% de presença na Câmara — um número, duas realidades. Por isso os gates dos títulos
-  vermelhos usam o **quartil** (`< 25`), não a mediana. Antes de criar/afrouxar uma
-  penalidade, traduza o limiar percentílico de volta para o número BRUTO em CADA casa
-  e leia em voz alta: se a frase resultante ("comparece a 91% das votações, logo é
-  blogueiro") soa falsa, o limiar está errado.
+  entrega") — e as duas coisas se contradizem quando a distribuição é comprimida. Numa
+  casa que comparece muito, `Stamina < 50` marcava como "Blogueiro de Plenário" quem ia
+  a 9 de cada 10 votações; e o mesmo "50" valia uma taxa bem menor na outra casa — um
+  número, duas realidades. Por isso os gates dos títulos vermelhos usam o **quartil**
+  (`< 25`), não a mediana. Antes de criar/afrouxar uma penalidade, traduza o limiar
+  percentílico de volta para o número BRUTO em CADA casa e leia em voz alta: se a frase
+  resultante ("vota em 9 de cada 10 pautas, logo é blogueiro") soa falsa, o limiar está
+  errado.
 - **Selo vermelho anda com o número bruto — não o separe do rótulo.** O gate é percentílico
   (relativo à casa), o rótulo acusa em absoluto ("é fantasma"): a evidência de
   `scripts/lib/evidencia.mjs` (bruto do parlamentar + mediana da casa, campo `titleEvidence`)

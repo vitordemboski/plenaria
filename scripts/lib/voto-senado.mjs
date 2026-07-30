@@ -1,5 +1,5 @@
 /**
- * Comparecimento às votações nominais do Senado.
+ * Comparecimento e voto registrado nas votações nominais do Senado.
  *
  * A API põe o MOTIVO DA AUSÊNCIA no mesmo campo do voto, e `SiglaDescricaoVoto` é
  * vocabulário controlado — classifique por código, nunca por regex na descrição em
