@@ -444,9 +444,9 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
             agências, embaixadores) é competência privativa do Senado — Constituição, art. 52, III e IV.
             São {sabatina.total} votações nominais na legislatura, contra {sabatina.totalAbertas} de todo o
             resto da pauta: <b>a sabatina é a maior parte do que um senador vota</b>. Em média eles
-            comparecem a {sabatina.presencaMedia}% delas, ante {sabatina.presencaMediaAbertas}% das demais
-            votações. Abaixo, os que mais destoam para baixo — <b>estão no plenário, mas faltam justamente
-            ao que só a casa deles pode fazer</b>. O voto da sabatina é secreto; a presença, não.
+            registram voto em {sabatina.presencaMedia}% delas, ante {sabatina.presencaMediaAbertas}% das demais
+            votações. Abaixo, os que mais destoam para baixo — <b>estão no plenário, mas não votam justamente
+            no que só a casa deles pode fazer</b>. O voto da sabatina é secreto; se houve voto, não.
           </div>
           {sabatina.faltantes.map((p, i) => (
             <PoliticianLink key={p.slug} slug={p.slug} className="lrow lrow-sab">

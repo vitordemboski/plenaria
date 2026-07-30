@@ -38,7 +38,7 @@ export const TIER_LABEL: Record<Tier, string> = {
 // a qualquer atributo de `meta.statsInformativos`, e repetir duplica o texto no card.
 export const STAT_META = [
   { key: 'ataque', icon: '⚔️', label: 'Ataque', desc: 'PL, PLP, PEC e PDL de autoria apresentados', weight: 24 },
-  { key: 'stamina', icon: '🛡️', label: 'Stamina', desc: 'taxa de comparecimento às votações nominais ocorridas no seu exercício — no Senado, incluídas as sabatinas de autoridades', weight: 20 },
+  { key: 'stamina', icon: '🛡️', label: 'Stamina', desc: 'taxa de voto registrado nas votações nominais ocorridas no seu exercício (abstenção conta; presença sem voto não) — no Senado, incluídas as sabatinas de autoridades', weight: 20 },
   { key: 'eficiencia', icon: '🎯', label: 'Eficiência', desc: 'proposições que avançaram — volume + aproveitamento, com bônus por lei', weight: 28 },
   { key: 'tecnica', icon: '📜', label: 'Técnica', desc: 'relatorias e emendas — trabalho técnico sobre o texto', weight: 16 },
   { key: 'economia', icon: '🪙', label: 'Economia', desc: 'frugalidade no uso da cota parlamentar (CEAP/CEAPS) — gasto mensal médio durante o exercício', weight: 12 },

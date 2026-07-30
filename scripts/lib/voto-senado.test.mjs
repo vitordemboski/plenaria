@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compareceu, codigoDesconhecido } from './voto-senado.mjs';
+import { compareceu, registrouVoto, codigoDesconhecido } from './voto-senado.mjs';
 
 const reg = (SiglaDescricaoVoto, DescricaoVoto = '') => ({ SiglaDescricaoVoto, DescricaoVoto });
 
@@ -40,6 +40,29 @@ test('o regex de fallback também pega missão — nenhuma das duas grafias esca
 
 test('"Abstenção" não é confundida com ausência pelo fallback', () => {
   assert.equal(compareceu({ DescricaoVoto: 'Abstenção' }), true);
+});
+
+// As duas taxas da ficha do senador: a Câmara só registra voto efetivo, então
+// comparecer e votar são a mesma coisa lá. No Senado não são, e exibir só a presença
+// ao lado da taxa do deputado sugeriria uma comparação que não existe.
+test('"Presente – Não registrou voto" é presença mas NÃO é voto registrado', () => {
+  const pnrv = reg('P-NRV', 'Presente – Não registrou voto');
+  assert.equal(compareceu(pnrv), true);
+  assert.equal(registrouVoto(pnrv), false);
+});
+
+test('voto efetivo conta nas duas taxas', () => {
+  for (const s of ['Sim', 'Não', 'Abstenção', 'Votou']) {
+    assert.equal(compareceu(reg(s)), true, s);
+    assert.equal(registrouVoto(reg(s)), true, s);
+  }
+});
+
+test('ausência não conta em nenhuma das duas taxas', () => {
+  for (const [s, d] of [['AP', 'Atividade parlamentar'], ['MIS', 'Missão da Casa no País/exterior'], ['NCom', 'Não Compareceu']]) {
+    assert.equal(compareceu(reg(s, d)), false, s);
+    assert.equal(registrouVoto(reg(s, d)), false, s);
+  }
 });
 
 test('código novo é sinalizado em vez de virar presença em silêncio', () => {

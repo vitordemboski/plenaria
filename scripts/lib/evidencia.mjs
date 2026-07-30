@@ -44,8 +44,10 @@ export function referenciasDaCasa(pessoas) {
   };
 }
 
+// "Registrou voto", não "compareceu": o numerador é voto efetivo nas DUAS casas
+// (o bulk da Câmara só traz isso, e o Senado passou a descontar o P-NRV).
 const comparecimentoTxt = (b, ref, casa) =>
-  `Compareceu a ${pct(b.comparecimento)} das votações nominais ocorridas no seu exercício` +
+  `Registrou voto em ${pct(b.comparecimento)} das votações nominais ocorridas no seu exercício` +
   `${b.votos != null && b.votacoes != null ? ` (${nf.format(b.votos)} de ${nf.format(b.votacoes)})` : ''}` +
   `${ref.comparecimento != null ? ` — mediana ${daCasa(casa)}: ${pct(ref.comparecimento)}` : ''}.`;
 
@@ -91,7 +93,7 @@ export function evidenciaDeTitulos(p, ref) {
     }
     if (b.comparecimento != null) {
       partes.push(
-        `${pct(b.comparecimento)} de comparecimento` +
+        `${pct(b.comparecimento)} das votações com voto registrado` +
         `${ref.comparecimento != null ? ` (mediana: ${pct(ref.comparecimento)})` : ''}`,
       );
     }

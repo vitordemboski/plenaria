@@ -1,11 +1,6 @@
-# Plugin do Next fixado por VERSÃO EXATA (também no package.json, sem `^`).
-# Declarado aqui + instalado como devDependency, a Netlify usa o do projeto em vez
-# de auto-instalar a última release a cada build. Duas razões: (1) build
-# reproduzível — auto-update silencioso troca o que gera o site sem passar por
-# commit; (2) o auto-install pega a versão publicada há minutos e quebra em
-# máquina com `min-release-age` no npmrc (proteção supply-chain), que foi como
-# isso apareceu: a 5.15.13 saiu há 2 dias e o build local abortou com ETARGET.
-# Subir a versão é edição consciente daqui + `npm install`.
+# Plugin do Next fixado por VERSÃO EXATA (idem package.json, sem `^`): sem isso a
+# Netlify auto-instala a última release a cada build — troca o que gera o site sem
+# passar por commit, e quebra com `min-release-age` no npmrc. Subir = editar aqui.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 

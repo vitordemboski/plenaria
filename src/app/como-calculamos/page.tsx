@@ -120,7 +120,7 @@ export default function MethodologyPage() {
           Nota sobre a <span className="key">Economia</span>: o que se compara é o{' '}
           <span className="key">gasto mensal médio durante os meses em exercício</span>, não o total da
           legislatura — comparar totais faria quem assumiu tarde (ou passou anos licenciado) parecer
-          frugal só por ter estado menos tempo sentado, o mesmo princípio da taxa de comparecimento da
+          frugal só por ter estado menos tempo sentado, o mesmo princípio da taxa de voto registrado da
           Stamina. Ela premia usar pouco da cota, então quem quase não a aciona pontua alto — seja por
           frugalidade real, seja por baixa atividade. Isso é
           intencional e tem impacto limitado (peso {AVAILABLE_STAT_META.find((s) => s.key === 'economia')?.weight ?? 10}%):
@@ -187,6 +187,15 @@ export default function MethodologyPage() {
           <span className="key">universo do percentil</span>: deputado só é comparado com deputado, senador com
           senador. As duas casas trabalham em escalas diferentes (o Senado fez 413 votações nominais na
           legislatura; a Câmara, milhares), então misturá-las numa régua só seria comparar coisas distintas.
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+          <span className="key">A Stamina conta voto registrado, não presença.</span> A distinção existe porque o
+          Senado publica as duas coisas e a Câmara só uma: o dado da Câmara traz apenas o voto efetivo, enquanto o
+          do Senado marca também quem estava no plenário e não votou (&ldquo;Presente – Não registrou voto&rdquo;,
+          cerca de 15% dos registros, e 22% nas sabatinas). Se contássemos presença no Senado e voto na Câmara, a
+          mesma palavra mediria coisas diferentes nas duas casas. <span className="key">Abstenção conta como
+          voto</span> — é posição formal, e a Stamina mede se o parlamentar participou, nunca como ele votou. Na
+          ficha do senador as duas taxas aparecem lado a lado.
         </p>
         <p style={{ fontSize: 12, color: 'var(--muted)' }}>
           <span className="key">Mandato parcial fica fora do ranking:</span> quem esteve em exercício efetivo

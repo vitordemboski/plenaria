@@ -53,10 +53,15 @@ export interface Politician {
   seguidores: number;
   /** proposições relevantes (PL/PLP/PEC/PDL) apresentadas por ano, 2023..2026 */
   producaoAnual: number[];
-  /** Senado: presença nas votações de autoridades (sabatina, art. 52) e nas demais.
-   *  A Stamina soma as duas — a quebra existe para o painel "A Sabatina". */
+  /** Senado: votos registrados nas votações de autoridades (sabatina, art. 52) e nas
+   *  demais. A Stamina soma as duas — a quebra alimenta o painel "A Sabatina". */
   sabatinas?: { presencas: number; total: number };
   votacoesAbertas?: { presencas: number; total: number };
+  /** SENADO — presença no plenário, incluindo o "Presente – Não registrou voto" que a
+   *  Stamina não conta. Informativa: a Stamina é voto REGISTRADO nas duas casas (o bulk
+   *  da Câmara só traz voto efetivo), e sem esta segunda taxa o senador que comparece
+   *  sem votar pareceria simplesmente ausente. */
+  compareceuN?: { presencas: number; total: number };
   /** números brutos formatados por atributo — "de onde vem" cada stat */
   rawNumbers?: Partial<Record<StatKey, string>>;
   /** valor bruto NUMÉRICO por atributo — base dos rankings "quem tem mais X" */
@@ -161,8 +166,8 @@ export interface Insights {
   /**
    * A sabatina — aprovação de autoridades (CF art. 52, III e IV), competência PRIVATIVA
    * do Senado e 58% das suas votações nominais. `faltantes` = maiores gaps NEGATIVOS
-   * entre a presença na sabatina e a presença nas demais votações: quem comparece ao
-   * plenário e falta justamente ao que só a casa dele pode fazer.
+   * entre o voto registrado na sabatina e nas demais votações: quem está no plenário e
+   * não vota justamente no que só a casa dele pode fazer.
    */
   sabatina?: {
     total: number; totalAbertas: number;

@@ -59,7 +59,7 @@ test('Blogueiro mostra os DOIS eixos de entrega, inclusive o que não disparou o
   );
   assert.match(ev['blogueiro-de-plenario'], /2\.739\.689 seguidores/);
   assert.match(ev['blogueiro-de-plenario'], /16 proposições relevantes apresentadas \(mediana da Câmara: 24\)/);
-  assert.match(ev['blogueiro-de-plenario'], /72% de comparecimento/);
+  assert.match(ev['blogueiro-de-plenario'], /72% das votações com voto registrado/);
 });
 
 test('Relator de Gaveta cita a taxa de avanço da casa, não um percentil', () => {

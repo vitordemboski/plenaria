@@ -246,6 +246,15 @@ Armadilhas conhecidas das APIs:
   a de 3 — e o erro é silencioso, porque a taxa de carreira continua "plausível", só
   alguns pontos acima da real. O denominador em si é honesto: a API registra o senador
   em toda votação do mandato, inclusive as que faltou.
+- **A Stamina é VOTO REGISTRADO, não presença — nas duas casas.** O bulk da Câmara só
+  publica voto efetivo; o Senado marca também o `P-NRV` ("Presente – Não registrou voto",
+  ~15% dos registros e ~22% nas secretas). Contar presença no Senado e voto na Câmara
+  fazia a mesma palavra medir coisas diferentes, com os cortes de Tier sendo ABSOLUTOS
+  entre as casas. **Abstenção CONTA** — é voto registrado, e a Stamina não julga o
+  conteúdo do voto (mesmo princípio do Alinhamento informativo): excluí-la seria dizer
+  que uma posição legítima vale menos, e ainda é no-op (0,1% dos registros). A taxa de
+  presença sobra na ficha do senador como 2ª taxa (`compareceuN`), e o painel "A Sabatina"
+  usa a MESMA definição — senão suas duas metades param de somar a Stamina.
 - **O MOTIVO da ausência vem no CAMPO DO VOTO, e é vocabulário controlado — classifique
   por código, nunca por regex na prosa** (`scripts/lib/voto-senado.mjs`, com teste).
   `SiglaDescricaoVoto` traz `Sim`/`Não`/`Abstenção`/`Votou`/`P-NRV` para presença e

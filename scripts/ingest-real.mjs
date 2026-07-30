@@ -28,7 +28,7 @@ import { parseCsvBR } from './lib/csv.mjs';
 import { TIPOS_PRINCIPAIS, TIPOS_EMENDA, ehFiscalizacao, alinhamento, senadoAvancou, senadoVirouNorma } from './lib/classificacao.mjs';
 import { resumoCota, percentuais, chaveFornecedor, destrincharFornecedores, rankFornecedores } from './lib/cota.mjs';
 import { escalaFrugalidade, escalaComparecimento, escalaLog } from './lib/escala.mjs';
-import { compareceu, codigoDesconhecido } from './lib/voto-senado.mjs';
+import { compareceu, registrouVoto, codigoDesconhecido } from './lib/voto-senado.mjs';
 import { referenciasDaCasa, evidenciaDeTitulos } from './lib/evidencia.mjs';
 import { resumoCurtoStats } from './lib/resumo-stat.mjs';
 
@@ -399,22 +399,10 @@ async function fetchProposicoes(statusById, emendaIds, fiscalIds) {
 // ---------- 4. Economia: cota parlamentar (CEAP) ----------
 // soma total (→ Economia) + quebra por categoria e fornecedor (→ cotaResumo, informativa)
 //
-// A fonte é a API POR DEPUTADO, não o bulk `Ano-{ano}.csv.zip`. O bulk PAROU de
-// publicar "PASSAGEM AÉREA - SIGEPA" em ago/2025: 2023 e 2024 trazem ~57 mil linhas
-// de SIGEPA por ano (~R$ 40 mi), 2025 despenca de ~5.000/mês para ~100/mês a partir
-// de agosto e 2026 tem ZERO. O buraco não é cache velho nosso (o zip recém-publicado
-// também vem sem) e não é o parser (0 linhas malformadas). Passagem é a maior rubrica
-// depois de divulgação, então o efeito era grande e DESIGUAL — quem voa muito sumia
-// mais: mediana 3,4% de subnotificação na legislatura, 16% no Kim Kataguiri e na
-// Erika Hilton, ~0% em quem é de Brasília. Como a Economia é linear no gasto ancorado
-// na mediana da casa, isso não se cancela: reordena o ranking de frugalidade.
-//
-// Duas armadilhas na migração:
-//  - a API pagina INSTÁVEL sem `ordenarPor` — o mesmo deputado devolvia 1.690
-//    lançamentos (R$ 1,36 mi) sem ordem e 2.011 (R$ 1,65 mi) com. Ordem explícita +
-//    dedupe são obrigatórios, senão trocamos um undercount silencioso por outro.
-//  - `itens` satura em 100 (pedir 1000 devolve 100 sem erro): a condição de parada é
-//    `length < 100`, nunca `length < itens`.
+// API por deputado, NÃO o bulk `Ano-{ano}.csv.zip`: ele parou de publicar as passagens
+// SIGEPA em ago/2025, subnotificando de forma desigual (ver AGENTS.md). Duas armadilhas:
+// a API pagina instável sem `ordenarPor` (daí ordem explícita + dedupe) e `itens` satura
+// em 100 sem erro, então a parada é `length < 100`.
 const CEAP_ANOS = YEARS.map((y) => `ano=${y}`).join('&');
 
 async function fetchCeapDeputado(id, tentativas = 6) {
@@ -435,8 +423,7 @@ async function fetchCeapDeputado(id, tentativas = 6) {
         else await new Promise((r) => setTimeout(r, 600 * (t + 1)));
       } catch { await new Promise((r) => setTimeout(r, 600 * (t + 1))); }
     }
-    // lista vazia por falha = deputado sem gasto = "o mais frugal da casa", em
-    // silêncio. Mesma regra do histórico de exercício: esgotou, aborta.
+    // lista vazia = "o mais frugal da casa" em silêncio: esgotou, aborta.
     if (!dados) throw new Error(`CEAP: ${tentativas} tentativas falharam no deputado ${id}, página ${pagina}`);
     if (!dados.length) break;
     for (const d of dados) {
@@ -967,15 +954,20 @@ async function fetchSenado(socialMap) {
       const sig = (v.SiglaDescricaoVoto ?? '').trim();
       if (codigoDesconhecido(sig)) votosDesconhecidos.set(sig, (votosDesconhecidos.get(sig) ?? 0) + 1);
     }
-    const votos = votacoes.filter(presente).length;
+    // Numerador = VOTO REGISTRADO, não presença: o bulk da Câmara só traz voto efetivo,
+    // então contar o "Presente – Não registrou voto" (15% dos registros do Senado, 22%
+    // nas secretas) seria a mesma palavra medindo coisas diferentes nas duas casas.
+    // Abstenção CONTA — é voto registrado, e a Stamina não julga o conteúdo do voto.
+    const votos = votacoes.filter(registrouVoto).length;
     for (const v of votacoes) totalSessoesVot.add(`${v.CodigoSessaoVotacao}-${v.Sequencial}`);
-    // quebra aberta × secreta: a Stamina soma as duas (é tudo votação nominal), mas a
-    // SEPARAÇÃO é o que revela quem comparece ao plenário e falta à sabatina — o trabalho
-    // que só o Senado faz. Vira o painel "A Sabatina" nos insights.
+    // quebra aberta × secreta: a Stamina soma as duas, mas a SEPARAÇÃO revela quem vota
+    // no plenário e não na sabatina — o trabalho que só o Senado faz.
     const secretas = votacoes.filter((v) => v.IndicadorVotacaoSecreta === 'Sim');
     const abertas = votacoes.filter((v) => v.IndicadorVotacaoSecreta !== 'Sim');
-    const sabatinas = { presencas: secretas.filter(presente).length, total: secretas.length };
-    const votacoesAbertas = { presencas: abertas.filter(presente).length, total: abertas.length };
+    const sabatinas = { presencas: secretas.filter(registrouVoto).length, total: secretas.length };
+    const votacoesAbertas = { presencas: abertas.filter(registrouVoto).length, total: abertas.length };
+    // 2ª taxa da ficha, informativa: esteve no plenário (inclui o P-NRV que a Stamina tira)
+    const compareceuN = { presencas: votacoes.filter(presente).length, total: votacoes.length };
 
     const relatoriasTodas = asArray(rel.MateriasRelatoriaParlamentar?.Parlamentar?.Relatorias?.Relatoria)
       .filter((r) => (r.DataDesignacao ?? '').slice(0, 4) >= '2023');
@@ -999,7 +991,7 @@ async function fetchSenado(socialMap) {
     if (gasto === null) semCeaps.push(s.nome);
 
     porSenador.push({ ...s, props: autorias.length, propsAno, votos, nVotacoes: votacoes.length, relatorias,
-      sabatinas, votacoesAbertas,
+      sabatinas, votacoesAbertas, compareceuN,
       avancadas, aprovadas, relatoriasPrinc: relatoriasPrinc.length, relatoriasAvancadas,
       gasto: gasto ?? 0, cotaResumo: resolveCota(s.nome, nomeCivil),
       fornLancamentos: resolveForn(s.nome, nomeCivil),
@@ -1011,14 +1003,13 @@ async function fetchSenado(socialMap) {
   if (semCeaps.length) console.log(`[ceaps-sen] sem lançamentos (gasto 0): ${semCeaps.join(', ')}`);
   const totalVotacoesSen = totalSessoesVot.size;
   console.log(`[senado] ${totalVotacoesSen} votações nominais distintas no período`);
-  // Código de voto novo classificado por prosa é ausência contada como presença (ou o
-  // contrário) em silêncio — foi como "Missão da Casa" inflou a Stamina de 45 senadores.
+  // Código novo classificado por prosa é ausência virando presença em silêncio.
   if (votosDesconhecidos.size) {
     const lista = [...votosDesconhecidos].map(([s, n]) => `${s} (${n}x)`).join(', ');
     console.log(`[senado] ⚠️  código de voto NÃO classificado: ${lista} — confira na votação inteira e declare em scripts/lib/voto-senado.mjs`);
   }
 
-  // Stamina do Senado = TAXA de comparecimento às votações nominais da legislatura,
+  // Stamina do Senado = TAXA de voto registrado nas votações nominais da legislatura,
   // ABERTAS (174) + SECRETAS/sabatinas (239) = 413. O denominador é honesto: a API
   // registra o senador em TODA votação do seu mandato, inclusive as que ele faltou (o
   // motivo da ausência vem no CAMPO DO VOTO, e `compareceu()` a tira do numerador).
@@ -1125,12 +1116,13 @@ async function fetchSenado(socialMap) {
       producaoAnual: YEARS.map((y) => r.propsAno[y] ?? 0),
       sabatinas: r.sabatinas,              // presença nas votações de autoridades (art. 52)
       votacoesAbertas: r.votacoesAbertas,  // presença nas demais votações nominais
+      compareceuN: r.compareceuN,          // esteve no plenário (inclui o P-NRV)
       ficha: r.ficha,
       sexo: r.sexo,
       comissoes: r.comissoes,
       rawNumbers: {
         ataque: `${nf.format(r.props)} matérias relevantes de autoria principal (PL, PLP, PEC, PDL)`,
-        stamina: `${nf.format(r.votos)} presenças em ${nf.format(r.nVotacoes)} votações nominais ocorridas durante o seu exercício, incluídas as sabatinas de autoridades (${Math.round(staxaSen(r) * 100)}% de comparecimento)`,
+        stamina: `${nf.format(r.votos)} votos registrados em ${nf.format(r.nVotacoes)} votações nominais ocorridas durante o seu exercício, incluídas as sabatinas de autoridades (${Math.round(staxaSen(r) * 100)}%)${r.compareceuN.presencas - r.votos > 0 ? ` — esteve presente em mais ${nf.format(r.compareceuN.presencas - r.votos)} sem registrar voto, então compareceu a ${Math.round((r.compareceuN.presencas / Math.max(r.compareceuN.total, 1)) * 100)}% das votações` : ''}`,
         tecnica: `relator designado em ${nf.format(r.relatoriasPrinc)} matérias relevantes (PL, PLP, PEC, PDL) desde 2023`,
         eficiencia: `${nf.format(eficAndouS(r))} de ${nf.format(eficTocouS(r))} matérias que tocou avançaram na tramitação${eficTocouS(r) ? ` (${((eficAndouS(r) / eficTocouS(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${nf.format(r.avancadas)}/${nf.format(r.props)} de autoria, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatoriasPrinc)} de relatoria (PL, PLP, PEC, PDL)${r.aprovadas ? ` · ${nf.format(r.aprovadas)} já viraram norma (+${bonusLeiS(r)} de bônus na Eficiência)` : ''}`,
         economia: `${fmtReais(r.gasto)} de cota (CEAPS) usados nos ${nf.format(Math.round(Math.max(r.mesesExercicio, 1)))} meses em exercício — média de R$ ${nf.format(Math.round(gastoMensalS(r) / 1000))} mil/mês`,
@@ -1168,7 +1160,7 @@ const { gastoByDep, catByDep, fornByDep } = await fetchCeap(deputados);
 
 console.log(`[base] ${deputados.length} deputados atuais · ${totalVotacoes} votações nominais no período`);
 
-// Stamina = TAXA de comparecimento, não contagem bruta: votos registrados ÷ votações
+// Stamina = TAXA de voto registrado, não contagem bruta: votos registrados ÷ votações
 // nominais ocorridas ENQUANTO o deputado estava em exercício. Sem isso, quem assumiu
 // tarde (suplente) ou ficou licenciado seria punido por tempo de casa, não por faltar.
 // Históricos são cacheados e reaproveitados adiante (mandato parcial, Produção Concentrada).
@@ -1267,7 +1259,7 @@ const raw = deputados.map((d) => {
 });
 
 const dimAtaque = raw.map((r) => r.props).sort((a, b) => a - b);
-const staminaCam = escalaComparecimento(raw.map((r) => r.stTaxa)); // TAXA de comparecimento, não contagem
+const staminaCam = escalaComparecimento(raw.map((r) => r.stTaxa)); // TAXA, não contagem bruta
 // Eficiência = BLEND de duas dimensões, para não punir quem produz muito:
 //   • aproveitamento (taxa): o que andou ÷ o que tocou → recompensa precisão
 //   • resultado (volume que andou): + 2×leis            → recompensa entrega,
@@ -1401,7 +1393,7 @@ const full = raw.map((r) => {
     // números brutos exibidos no card ("de onde vem cada atributo")
     rawNumbers: {
       ataque: `${nf.format(r.props)} proposições relevantes apresentadas (PL, PLP, PEC, PDL)`,
-      stamina: `${nf.format(r.votos)} votos registrados em ${nf.format(r.votacoesMandato)} votações nominais ocorridas durante o seu exercício (${Math.round(r.stTaxa * 100)}% de comparecimento)`,
+      stamina: `${nf.format(r.votos)} votos registrados em ${nf.format(r.votacoesMandato)} votações nominais ocorridas durante o seu exercício (${Math.round(r.stTaxa * 100)}%) — o dado publicado pela Câmara traz o voto efetivo, não a presença em plenário`,
       eficiencia: `${nf.format(eficAndou(r))} de ${nf.format(eficTocou(r))} proposições que tocou avançaram na tramitação${eficTocou(r) ? ` (${((eficAndou(r) / eficTocou(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${nf.format(r.avancadas)}/${nf.format(r.props)} de autoria, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatorias)} de relatoria${r.aprovadas ? ` · ${nf.format(r.aprovadas)} já viraram norma (+${bonusLei(r)} de bônus na Eficiência)` : ''}`,
       tecnica: `${nf.format(tecnicaBruta(r))} atos de trabalho sobre o texto — relator designado em ${nf.format(r.relatorias)} proposições relevantes${r.relatorias ? ` (${nf.format(r.relatoriasAvancadas)} ${r.relatoriasAvancadas === 1 ? 'avançou' : 'avançaram'})` : ''} e autor de ${nf.format(r.emendas)} ${r.emendas === 1 ? 'emenda' : 'emendas'} (na comissão, de plenário ou de relator)`,
       fiscalizacao: `${nf.format(r.fiscal)} atos de cobrança ao Executivo — requerimentos de informação a ministro, convocações de ministro e propostas de fiscalização e controle (PFC)`,
@@ -1443,16 +1435,16 @@ const TITLE_DEFS_REAIS = [
   { slug: 'nobre-gastador', label: '💸 Nobre Gastador', cor: 'red',
     regra: 'Entre os 10% de maior gasto mensal de cota parlamentar (CEAP/CEAPS) durante o exercício COM entrega fraca (Eficiência < 40) — mesmo gate nas duas casas. Gasta muito, entrega pouco.' },
   { slug: 'fantasma-do-plenario', label: '👻 Fantasma do Plenário', cor: 'red',
-    regra: 'Entre os 10% com menor taxa de comparecimento às votações nominais ocorridas durante o seu exercício (fonte: votações da Câmara/Senado).' },
+    regra: 'Entre os 10% com menor taxa de VOTO REGISTRADO nas votações nominais ocorridas durante o seu exercício (fonte: votações da Câmara/Senado). Conta o voto efetivo — inclusive abstenção, que é posição formal —, não a presença: no Senado, estar no plenário sem registrar voto ("Presente – Não registrou voto") não entra, e na Câmara o dado publicado já é só o voto efetivo. A ficha exibe as duas taxas.' },
   { slug: 'blogueiro-de-plenario', label: '📱 Blogueiro de Plenário', cor: 'red',
-    regra: 'Influência ≥ 85 (seguidores nas redes sociais) estando no QUARTIL INFERIOR da própria casa em algum eixo de entrega — Ataque < 25 ou Stamina < 25 — E sem NENHUM título verde de entrega (Artilheiro, Relator-Mor, Legislador Efetivo, Relator que Entrega, Presença de Ferro, Guardião do Cofre): muita projeção, pouca entrega. O limiar é o quartil, não a mediana: estar na média da casa NÃO rotula ninguém. Quem tem prova factual de entrega não é rotulado Blogueiro.' },
+    regra: 'Influência ≥ 85 (seguidores nas redes sociais) estando no QUARTIL INFERIOR da própria casa em algum eixo de entrega — Ataque < 25 ou Stamina < 25 (voto registrado) — E sem NENHUM título verde de entrega (Artilheiro, Relator-Mor, Legislador Efetivo, Relator que Entrega, Presença de Ferro, Guardião do Cofre): muita projeção, pouca entrega. O limiar é o quartil, não a mediana: estar na média da casa NÃO rotula ninguém. Quem tem prova factual de entrega não é rotulado Blogueiro.' },
   // --- positivos de entrega ---
   { slug: 'artilheiro', label: '⚔️ Artilheiro', cor: 'green',
     regra: 'Ataque ≥ 90 — entre os 10% que mais apresentam proposições relevantes (PL, PLP, PEC, PDL) na sua casa.' },
   { slug: 'relator-mor', label: '📜 Relator-Mor', cor: 'green',
     regra: 'Técnica ≥ 90 — entre os 10% mais designados relatores de proposições na sua casa.' },
   { slug: 'presenca-de-ferro', label: '🛡️ Presença de Ferro', cor: 'green',
-    regra: 'Stamina ≥ 95 — entre os 5% com maior taxa de comparecimento às votações nominais do seu mandato. O oposto do Fantasma do Plenário.' },
+    regra: 'Stamina ≥ 95 — entre os 5% que mais registram voto nas votações nominais do seu mandato. O oposto do Fantasma do Plenário.' },
   { slug: 'legislador-efetivo', label: '📖 Legislador Efetivo', cor: 'green',
     regra: 'Autor principal de pelo menos uma proposição já TRANSFORMADA EM NORMA JURÍDICA nesta legislatura. Vale nas duas casas: o desfecho da Câmara vem do CSV bulk de proposições; o do Senado, da situação da matéria no /processo.' },
   { slug: 'relator-que-entrega', label: '📜 Relator que Entrega', cor: 'green',
@@ -1901,7 +1893,7 @@ const meta = {
   },
   statsInformativos: ['influencia', 'comando', 'fiscalizacao', 'alinhamento'], // exibidos mas NÃO pontuam no Poder
   titulosDisponiveis: true,
-  aviso: 'Dados reais da Câmara e do Senado: Ataque (autorias PL/PLP/PEC/PDL), Stamina (taxa de comparecimento às votações nominais do mandato — no Senado, incluídas as sabatinas de autoridades do art. 52), Eficiência (matérias que o parlamentar tocou, por autoria ou relatoria, e que AVANÇARAM na tramitação em vez de morrer na gaveta da comissão — nas duas casas), Técnica (relatorias e emendas — trabalho técnico sobre o texto alheio; o Senado só conta relatorias) e Economia (gasto MENSAL médio da cota CEAP/CEAPS durante os meses em exercício — comparar totais faria quem assumiu tarde parecer frugal por ter estado menos tempo sentado). Fiscalização = requerimentos de informação a ministro, convocações de ministro e propostas de fiscalização e controle (PFC) de autoria (só Câmara): é INFORMATIVA e NÃO pontua no Poder — fiscalizar o Executivo é, na prática, fazer oposição a ele (a oposição protocola em média 192 atos por deputado; a base do governo, 20), então pontuá-la seria premiar posição política travestida de entrega. Influência = seguidores no Instagram (contagem pública dos handles oficiais declarados à Câmara): é INFORMATIVA — aparece no card e nos títulos, mas NÃO pontua no Poder (alcance social não é entrega legislativa). Alinhamento = % de votos coincidentes com a orientação da bancada do Governo (só Câmara): é INFORMATIVO e NÃO pontua no Poder — posição política não é mérito nem demérito. Presidentes da Casa (que não votam/autoram como os demais por dever institucional) ficam fora do ranking, como os de mandato parcial. Títulos são 100% factuais.',
+  aviso: 'Dados reais da Câmara e do Senado: Ataque (autorias PL/PLP/PEC/PDL), Stamina (taxa de VOTO REGISTRADO nas votações nominais do mandato — abstenção conta, presença sem voto não; no Senado, incluídas as sabatinas de autoridades do art. 52), Eficiência (matérias que o parlamentar tocou, por autoria ou relatoria, e que AVANÇARAM na tramitação em vez de morrer na gaveta da comissão — nas duas casas), Técnica (relatorias e emendas — trabalho técnico sobre o texto alheio; o Senado só conta relatorias) e Economia (gasto MENSAL médio da cota CEAP/CEAPS durante os meses em exercício — comparar totais faria quem assumiu tarde parecer frugal por ter estado menos tempo sentado). Fiscalização = requerimentos de informação a ministro, convocações de ministro e propostas de fiscalização e controle (PFC) de autoria (só Câmara): é INFORMATIVA e NÃO pontua no Poder — fiscalizar o Executivo é, na prática, fazer oposição a ele (a oposição protocola em média 192 atos por deputado; a base do governo, 20), então pontuá-la seria premiar posição política travestida de entrega. Influência = seguidores no Instagram (contagem pública dos handles oficiais declarados à Câmara): é INFORMATIVA — aparece no card e nos títulos, mas NÃO pontua no Poder (alcance social não é entrega legislativa). Alinhamento = % de votos coincidentes com a orientação da bancada do Governo (só Câmara): é INFORMATIVO e NÃO pontua no Poder — posição política não é mérito nem demérito. Presidentes da Casa (que não votam/autoram como os demais por dever institucional) ficam fora do ranking, como os de mandato parcial. Títulos são 100% factuais.',
 };
 
 writeFileSync(join(OUT_DATA, 'politicians.json'), JSON.stringify(full));
