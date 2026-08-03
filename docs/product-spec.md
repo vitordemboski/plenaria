@@ -372,3 +372,16 @@ indistinguível de falha de match com a base, então não vale como "o mais frug
    votação de usuário nela. Um "quem vence?" agregado sobre candidatos vira enquete/pesquisa eleitoral
    não registrada (Lei 9.504/97, art. 33). Pelo mesmo motivo, o site não é impulsionado de forma paga.
 8. **Ponderação de projetos** — "aprovado" precisa de peso por relevância (PEC ≠ moção de aplauso).
+9. **O universo do site é quem está EM EXERCÍCIO — e a ausência é nomeada, não escondida.** As duas
+   casas publicam apenas o parlamentar sentado: o titular licenciado (ministro, secretário, licença
+   longa) some da fonte, e com ele todo o dado de atividade. Ele não entra no ranking — não há o que
+   medir —, mas some do site inteiro sem explicação, o que faz a plataforma parecer incompleta ou
+   seletiva justamente com nomes conhecidos. Por isso `data/licenciados.json` emite **nome, casa,
+   partido/UF e a data do afastamento**, exibidos na página da guilda e do estado. Três limites
+   inegociáveis: (a) **nunca o motivo da licença** — nenhuma das duas casas o publica (o
+   `descricaoStatus` da Câmara vem vazio até para quem assumiu ministério), e escrevê-lo seria
+   imputar fato não derivável; (b) no Senado a inclusão é por **código de causa** em allowlist
+   (`LCS`, `AFO`, `LP`, `LS`), porque a consulta ingênua devolve junto falecidos, cassados e
+   renúncias — chamar isso de "licença" publicaria que um parlamentar morto está temporariamente
+   afastado; (c) causa desconhecida é **logada e tratada como não-licença**: omitir um nome é o
+   status quo, afirmar errado não. Cache volátil — licença termina.

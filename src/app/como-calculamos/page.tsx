@@ -197,6 +197,22 @@ export default function MethodologyPage() {
           voto</span> — é posição formal, e a Stamina mede se o parlamentar participou, nunca como ele votou. Na
           ficha do senador as duas taxas aparecem lado a lado.
         </p>
+        <p style={{ fontSize: 12, color: 'var(--muted)' }} id="licenciados">
+          <span className="key">Quem está licenciado não aparece no site.</span> A lista de parlamentares vem
+          das fontes oficiais das duas casas, e ambas publicam apenas quem está <b>em exercício</b> — a Câmara
+          em <span className="key">/deputados</span>, o Senado na <span className="key">lista de parlamentares
+          em exercício</span>. Um deputado que assume um ministério, uma secretaria ou uma licença longa sai
+          dessa lista, e quem passa a constar na cadeira é o suplente que tomou posse — é ele que você encontra
+          aqui. Não é juízo nosso sobre o afastamento: é a cadeira sendo ocupada por outra pessoa no período que
+          medimos. Se você procurou um parlamentar conhecido e não o achou, esse costuma ser o motivo; a ficha
+          dele volta quando ele reassume e a fonte oficial volta a listá-lo.{' '}
+          <span className="key">O ausente é nomeado onde ele faria falta:</span> a página da guilda e a do
+          estado listam quem está licenciado, com a data do afastamento. Só isso — <b>nunca o motivo</b>, porque
+          nenhuma das duas casas o publica (a Câmara devolve o campo de status vazio até para quem assumiu
+          ministério, e inventar o motivo contrariaria a regra de que todo rótulo aqui sai do dado). No Senado,
+          a causa do afastamento é código oficial: só entram os de licença — falecimento, cassação e renúncia
+          encerram o mandato e nunca aparecem como &quot;licenciado&quot;.
+        </p>
         <p style={{ fontSize: 12, color: 'var(--muted)' }}>
           <span className="key">Mandato parcial fica fora do ranking:</span> quem esteve em exercício efetivo
           por menos de 12 meses no período — cerca de um ano dos ~41 da legislatura — tem amostra pequena

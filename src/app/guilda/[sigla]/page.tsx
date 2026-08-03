@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { brutoDaGuilda } from '../../../../scripts/lib/guilda-bruto.mjs';
-import { politicians, guilds, getTitle, SCORING_STAT_META, TIER_ORDER, TIER_LABEL, casaLabel, foraDoRanking, meta } from '@/lib/data';
+import { politicians, guilds, getTitle, SCORING_STAT_META, TIER_ORDER, TIER_LABEL, casaLabel, foraDoRanking, licenciadosDaGuilda, meta } from '@/lib/data';
+import { Licenciados } from '@/components/Licenciados';
 import { FutStat } from '@/components/FutStat';
 import { GuildCrest } from '@/components/GuildCrest';
 import { PoliticianLink } from '@/components/PoliticianLink';
@@ -372,6 +373,9 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
             </div>
           </section>
         )}
+        {/* Depois do roster inteiro: primeiro quem a guilda tem, por último quem
+            ela tem mas o site não pôde medir. */}
+        <Licenciados lista={licenciadosDaGuilda(guild.sigla)} escopo="guilda" />
       </section>
     </main>
   );

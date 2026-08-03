@@ -239,6 +239,13 @@ Armadilhas conhecidas das APIs:
   parlamentar da base (nenhum Tier S bloqueado). Com ele saiu a leitura do CPF: o
   pipeline não coleta mais esse dado — e a `/sobre` afirma isso ao público. Penalidade nova só se valer nas DUAS casas e medir o
   exercício do mandato. Detalhe em docs/product-spec.md §9.
+- **A lista das duas casas é só quem está EM EXERCÍCIO**: o titular licenciado não vem, e
+  some do site sem explicação. `fetchLicenciados` emite `data/licenciados.json` só para a
+  guilda e o estado o NOMEAREM — ele não entra no ranking (não há atividade publicada).
+  Duas regras (lógica em `scripts/lib/licenciados.mjs`, com teste): **nunca publique o
+  MOTIVO** — as duas APIs o omitem, então "assumiu ministério" é imputação; e no Senado
+  classifique por `SiglaCausaAfastamento` em allowlist, senão falecidos e cassados entram
+  como "licenciados". Detalhe em docs/product-spec.md §9.
 - API do Senado devolve cargos/comissões de órgãos EXTINTOS sem DataFim — sempre
   recortar por DataInicio >= legislatura atual. **Vale igual para `/votacoes`**: ela
   devolve a votação de TODA a carreira (o Renan Calheiros vem com 1.378 votos de
@@ -333,8 +340,8 @@ Armadilhas conhecidas das APIs:
 `scripts/ingest-real.mjs` (`npm run data:real`) é a ÚNICA fonte de dados. Ele ingere
 Câmara + Senado (cache incremental em `data/raw/`), normaliza por percentil
 DENTRO de cada casa (Câmara ≠ Senado — exceto a Economia, linear no gasto), calcula Poder/Tier/gates e títulos, e emite
-`data/politicians.json`, `insights.json`, `guilds.json`, `title-defs.json`, `meta.json`
-e `public/data/index.json`. `src/lib/types.ts` é o contrato.
+`data/politicians.json`, `insights.json`, `guilds.json`, `title-defs.json`, `meta.json`,
+`licenciados.json` e `public/data/index.json`. `src/lib/types.ts` é o contrato.
 
 **Não existe gerador de dados sintéticos** — e não reintroduza um. Um fallback que
 inventa parlamentares é pior que um erro: se `data/` sumir, o site sobe com gente

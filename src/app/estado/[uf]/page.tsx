@@ -1,5 +1,7 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { politicians, casaLabel, foraDoRanking } from '@/lib/data';
+import { politicians, casaLabel, foraDoRanking, licenciadosDaUf } from '@/lib/data';
+import { Licenciados } from '@/components/Licenciados';
 import { PoliticianLink } from '@/components/PoliticianLink';
 import { JsonLd } from '@/components/JsonLd';
 import { breadcrumbLd } from '@/lib/jsonld';
@@ -73,6 +75,21 @@ export default async function StatePage({ params }: { params: Promise<{ uf: stri
               </PoliticianLink>
             ))}
           </>
+        )}
+        {/* A bancada é quem está EM EXERCÍCIO — é isso que as fontes oficiais publicam.
+            Sem isto, o licenciado some da lista do estado dele sem explicação nenhuma e a
+            ausência parece falha nossa. Com licenciado na UF, o bloco os NOMEIA (e já traz
+            a explicação); sem nenhum, a regra ainda é dita — ela vale para toda UF. */}
+        {licenciadosDaUf(uf).length > 0 ? (
+          <Licenciados lista={licenciadosDaUf(uf)} escopo="uf" />
+        ) : (
+          <p className="sub" style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+            Esta é a bancada <b>em exercício</b>: parlamentar licenciado sai da lista oficial da Câmara/Senado e
+            não tem ficha aqui; quem consta na cadeira é o suplente empossado.{' '}
+            <Link href="/como-calculamos/#licenciados" style={{ color: 'var(--gold-2)', textDecoration: 'underline' }}>
+              Por que
+            </Link>.
+          </p>
         )}
       </div>
     </main>

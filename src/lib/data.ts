@@ -8,13 +8,15 @@ import insightsJson from '../../data/insights.json';
 import guildsJson from '../../data/guilds.json';
 import titleDefsJson from '../../data/title-defs.json';
 import metaJson from '../../data/meta.json';
-import type { Politician, Insights, Guild, TitleDef, Tier, DataMeta } from './types';
+import licenciadosJson from '../../data/licenciados.json';
+import type { Politician, Insights, Guild, TitleDef, Tier, DataMeta, Licenciado } from './types';
 
 export const politicians = politiciansJson as Politician[];
 export const insights = insightsJson as Insights;
 export const guilds = guildsJson as Guild[];
 export const titleDefs = titleDefsJson as TitleDef[];
 export const meta = metaJson as DataMeta;
+export const licenciados = licenciadosJson as Licenciado[];
 
 const bySlug = new Map(politicians.map((p) => [p.slug, p]));
 const guildBySigla = new Map(guilds.map((g) => [g.sigla, g]));
@@ -70,6 +72,14 @@ export const INFO_STAT_META = AVAILABLE_STAT_META.filter((s) => s.informativo);
 /** Fora de toda comparação de ranking: mandato parcial OU presidência da Casa. */
 export const foraDoRanking = (p: { mandatoParcial?: boolean; presidenteCasa?: boolean }) =>
   !!p.mandatoParcial || !!p.presidenteCasa;
+
+/** Licenciados de um partido / de uma UF — para nomear quem falta na lista. */
+export const licenciadosDaGuilda = (sigla: string) => licenciados.filter((l) => l.partido === sigla);
+export const licenciadosDaUf = (uf: string) => licenciados.filter((l) => l.uf === uf);
+
+/** ISO → dd/mm/aaaa. Sem `new Date`: 'YYYY-MM-DD' é parseado como UTC e, a oeste de
+ *  Greenwich, exibiria o dia anterior. */
+export const dataBR = (iso: string) => iso.split('-').reverse().join('/');
 
 export const casaLabel = (casa: 'camara' | 'senado', short = false) =>
   casa === 'camara' ? (short ? 'Dep.' : 'Câmara dos Deputados') : (short ? 'Sen.' : 'Senado Federal');

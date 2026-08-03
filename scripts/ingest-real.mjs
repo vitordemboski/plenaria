@@ -31,6 +31,7 @@ import { escalaFrugalidade, escalaComparecimento, escalaLog } from './lib/escala
 import { compareceu, registrouVoto, codigoDesconhecido } from './lib/voto-senado.mjs';
 import { referenciasDaCasa, evidenciaDeTitulos } from './lib/evidencia.mjs';
 import { resumoCurtoStats } from './lib/resumo-stat.mjs';
+import { licencaCamara, licencaSenado, causaDesconhecida } from './lib/licenciados.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = join(ROOT, 'data', 'raw');
@@ -41,6 +42,8 @@ mkdirSync(OUT_PUBLIC, { recursive: true });
 
 const API = 'https://dadosabertos.camara.leg.br';
 const YEARS = [2023, 2024, 2025, 2026];
+/** legislatura corrente (2023–2027) — a numeração é a mesma nas duas casas */
+const LEG_ATUAL = 57;
 
 /**
  * Validade do cache bruto. Antes NÃO existia: `if (existsSync(file))` servia o
@@ -1149,6 +1152,106 @@ async function fetchSenado(socialMap) {
   return { senadores: out, normasSenado, fornPorSenador: new Map(porSenador.map((r) => [r.id, r.fornLancamentos])) };
 }
 
+// ---------- 5b. Licenciados: os ausentes NOMEADOS ----------
+/**
+ * As duas casas publicam apenas quem está EM EXERCÍCIO, então o titular licenciado
+ * (ministro, secretário, licença longa) simplesmente não existe para o pipeline — e
+ * some do site sem explicação, como se nunca tivesse havido aquele parlamentar. Esta
+ * etapa não o traz de volta ao ranking: ele não tem atividade publicada para medir.
+ * Ela só emite o NOME, para que a guilda e o estado dele possam dizer onde ele foi.
+ *
+ * Custa 1 + ~135 chamadas na Câmara (a listagem da legislatura não traz `situacao`,
+ * só o detalhe por id) e 1 + ~10 no Senado. Cache VOLÁTIL: licença começa e termina,
+ * e um cache permanente aqui manteria alguém licenciado para sempre.
+ *
+ * Falha de rede aqui só OMITE um nome — nunca aborta a ingestão inteira, ao contrário
+ * do histórico de exercício (lá, vazio = deputado apagado do ranking em silêncio).
+ */
+async function fetchLicenciados(deputados, senadores) {
+  const out = [];
+  const causasDesconhecidas = new Map();
+
+  // Câmara: quem consta na legislatura mas não na lista de hoje.
+  const atuais = new Set(deputados.map((d) => d.id));
+  const naLeg = JSON.parse(await cached(`deputados-leg${LEG_ATUAL}.json`,
+    `${API}/api/v2/deputados?idLegislatura=${LEG_ATUAL}&itens=1000`, { json: true })).dados;
+  // a listagem repete a pessoa a cada troca de partido — dedupe por id, senão o
+  // mesmo licenciado aparece 4x na guilda (Padovani tem 4 linhas)
+  const foraDaLista = [...new Map(naLeg.filter((d) => !atuais.has(d.id)).map((d) => [d.id, d])).values()];
+  console.log(`[licenca] câmara: ${foraDaLista.length} ids da legislatura fora da lista em exercício`);
+
+  for (const d of foraDaLista) {
+    let status;
+    try {
+      status = (await cachedGentil(`dep-status-${d.id}.json`, `${API}/api/v2/deputados/${d.id}`)).dados?.ultimoStatus;
+    } catch (e) {
+      console.log(`[licenca] ⚠️ status do deputado ${d.id} indisponível (${e.message}) — omitido`);
+      continue;
+    }
+    const lic = licencaCamara(status);
+    if (!lic) continue;
+    out.push({
+      nome: status.nomeEleitoral || d.nome,
+      casa: 'camara',
+      partido: normalizaSigla(status.siglaPartido ?? d.siglaPartido ?? 'S/PART'),
+      uf: status.siglaUf ?? d.siglaUf,
+      desde: lic.desde,
+    });
+  }
+
+  // Senado: os titulares da legislatura fora do exercício. A consulta ingênua traz
+  // junto falecidos, cassados e renúncias — quem separa é a allowlist de causa.
+  const sentados = new Set(senadores.map((s) => String(s.id)));
+  const lista = await senadoJson(`senado-lista-leg${LEG_ATUAL}.json`,
+    `https://legis.senado.leg.br/dadosabertos/senador/lista/legislatura/${LEG_ATUAL}.json`);
+  const titulares = asArray(lista.ListaParlamentarLegislatura?.Parlamentares?.Parlamentar)
+    .filter((p) => !sentados.has(p.IdentificacaoParlamentar?.CodigoParlamentar)
+      && asArray(p.Mandatos?.Mandato).some((m) => m.DescricaoParticipacao === 'Titular'));
+  console.log(`[licenca] senado: ${titulares.length} titulares da legislatura fora do exercício`);
+
+  for (const p of titulares) {
+    const i = p.IdentificacaoParlamentar;
+    let mandatos;
+    try {
+      const m = await senadoJson(`sen-${i.CodigoParlamentar}-mandatos.json`,
+        `https://legis.senado.leg.br/dadosabertos/senador/${i.CodigoParlamentar}/mandatos.json`);
+      mandatos = asArray(m.MandatoParlamentar?.Parlamentar?.Mandatos?.Mandato);
+    } catch (e) {
+      console.log(`[licenca] ⚠️ mandatos do senador ${i.CodigoParlamentar} indisponíveis (${e.message}) — omitido`);
+      continue;
+    }
+    for (const m of mandatos) {
+      for (const e of asArray(m.Exercicios?.Exercicio)) {
+        if (causaDesconhecida(e.SiglaCausaAfastamento)) {
+          causasDesconhecidas.set(e.SiglaCausaAfastamento.trim(), e.DescricaoCausaAfastamento ?? '');
+        }
+      }
+    }
+    const lic = licencaSenado(mandatos, LEG_ATUAL);
+    if (!lic) continue;
+    // a UF vem no MANDATO, não na identificação — e tem de ser a do mandato desta
+    // legislatura: veterano de outro estado traria a UF antiga.
+    const uf = mandatos.find((m) => [m.PrimeiraLegislaturaDoMandato, m.SegundaLegislaturaDoMandato]
+      .some((l) => l?.NumeroLegislatura === String(LEG_ATUAL)))?.UfParlamentar;
+    out.push({
+      nome: i.NomeParlamentar,
+      casa: 'senado',
+      partido: normalizaSigla(i.SiglaPartidoParlamentar ?? 'S/PART'),
+      uf: uf ?? i.UfParlamentar,
+      desde: lic.desde,
+    });
+  }
+
+  // causa nova NÃO vira licença sozinha: é declarada aqui para alguém conferir o
+  // código (mesma disciplina dos códigos de voto do Senado).
+  for (const [sigla, desc] of causasDesconhecidas) {
+    console.log(`[licenca] ⚠️ causa de afastamento NÃO classificada: "${sigla}" (${desc}) — tratada como NÃO-licença`);
+  }
+  out.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  console.log(`[licenca] ${out.filter((l) => l.casa === 'camara').length} deputados · ${out.filter((l) => l.casa === 'senado').length} senadores licenciados`);
+  return out;
+}
+
 // ---------- main ----------
 const deputados = await fetchDeputados();
 const partidoNomes = await fetchPartidos();
@@ -1488,6 +1591,11 @@ for (const p of full) {
 // ---------- Senado: merge ----------
 const { senadores, normasSenado, fornPorSenador } = await fetchSenado(social);
 full.push(...senadores);
+
+// Licenciados: NÃO entram em `full` — não têm atividade publicada para medir, e um
+// parlamentar sem dado no ranking seria pior que ausente. Saem em arquivo próprio,
+// só para a guilda e o estado poderem nomear quem está faltando.
+const licenciados = await fetchLicenciados(deputados, senadores);
 
 // ---------- títulos POSITIVOS / de senioridade (ambas as casas) ----------
 // aplicados após o merge para cobrir Câmara e Senado com a mesma regra.
@@ -1900,6 +2008,7 @@ writeFileSync(join(OUT_DATA, 'politicians.json'), JSON.stringify(full));
 writeFileSync(join(OUT_DATA, 'insights.json'), JSON.stringify(insights));
 writeFileSync(join(OUT_DATA, 'guilds.json'), JSON.stringify(GUILDS));
 writeFileSync(join(OUT_DATA, 'meta.json'), JSON.stringify(meta));
+writeFileSync(join(OUT_DATA, 'licenciados.json'), JSON.stringify(licenciados));
 // raridade FACTUAL = fração de parlamentares que carregam o título (comum/raro/lendário)
 const raridadeDe = (n) => (n / full.length < 0.02 ? 'lendario' : n / full.length < 0.10 ? 'raro' : 'comum');
 const titleDefsOut = TITLE_DEFS_REAIS

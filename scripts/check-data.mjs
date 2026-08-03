@@ -8,7 +8,9 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 
-if (!existsSync('data/meta.json') || !existsSync('data/politicians.json')) {
+// `licenciados.json` entra aqui junto dos outros: é emitido pela mesma execução, e
+// faltando ele o build quebra com "module not found" em vez de mandar reingerir.
+if (!existsSync('data/meta.json') || !existsSync('data/politicians.json') || !existsSync('data/licenciados.json')) {
   console.error(`
   ✗ Faltam os dados em data/.
 

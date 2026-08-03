@@ -102,6 +102,23 @@ export interface PoliticianIndex {
   presidenteCasa?: boolean;
 }
 
+/**
+ * data/licenciados.json — o titular AFASTADO da cadeira, que as fontes oficiais
+ * param de publicar e que por isso não tem ficha no site. Não é um Politician
+ * incompleto: não há atividade dele publicada para medir, então não há atributo,
+ * Tier nem slug. Existe só para a guilda e o estado poderem nomear quem falta.
+ *
+ * Nenhuma das duas casas publica o MOTIVO da licença — nunca há campo para ele.
+ */
+export interface Licenciado {
+  nome: string;
+  casa: 'camara' | 'senado';
+  partido: string;
+  uf: string;
+  /** data do afastamento (ISO) — o único fato publicável além do nome */
+  desde: string;
+}
+
 export interface Guild {
   sigla: string;
   nome: string;
