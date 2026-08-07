@@ -3,19 +3,31 @@
 Plataforma web gamificada de acompanhamento cívico (RPG/TCG de Deputados e Senadores).
 Leia `docs/product-spec.md` para o produto e `docs/architecture.md` para a arquitetura.
 
+> **Não escreva aqui número que descreve o ESTADO ATUAL dos dados.** Contagem de
+> parlamentares, de páginas, de arquivos, tamanho de cache, "hoje só o fulano", "são 23
+> fichas" — tudo isso muda sozinho, ninguém revisa, e um número errado num arquivo de
+> instruções é pior que número nenhum: ele é lido como verdade e vira premissa de decisão.
+> Prefira a FORMA da resposta ("unidades é normal, dezenas é a fonte quebrada") ou um
+> comando que meça na hora.
+>
+> A exceção é **evidência de investigação passada** — "capturávamos 10.989 de 16.860
+> relatorias (65%)", "29 dos 81 senadores vieram vazios". Esses não envelhecem: são fato
+> histórico congelado, e é deles que a regra tira autoridade. Escreva-os no passado, para
+> que ninguém os leia como retrato de agora.
+
 ## Comandos
 
 | Comando | O que faz |
 |---|---|
-| `npm run data:real` | Ingesta DADOS REAIS (Câmara + Senado) — cache em `data/raw/` (~1GB); já roda o `fotos` no fim. Do zero leva ~1h (a API da Câmara devolve 504 em rajada); com cache quente, minutos |
+| `npm run data:real` | Ingesta DADOS REAIS (Câmara + Senado) — cache em `data/raw/` (alguns GB); já roda o `fotos` no fim. Do zero leva ~1h (a API da Câmara devolve 504 em rajada); com cache quente, minutos |
 | `npm run data:fresh` | O mesmo com `--fresh`: ignora o TTL e re-baixa TODA fonte volátil (ver "Validade do cache" abaixo) |
-| `npm run fotos` | Baixa as fotos oficiais p/ `public/fotos/` como **WebP** (~8MB) e repõe os `fotoUrl` p/ caminho local |
-| `npm run og` | Gera os cards de compartilhamento: `public/og.jpg` (site), `public/og/<slug>.jpg` (parlamentar) e `og/guilda-<sigla>.jpg` (guilda) — 615 imagens, ~41MB; já roda no fim do `data:real`. `--only=<slug>`/`--guildas`/`--site` p/ iterar |
+| `npm run fotos` | Baixa as fotos oficiais p/ `public/fotos/` como **WebP** e repõe os `fotoUrl` p/ caminho local |
+| `npm run og` | Gera os cards de compartilhamento: `public/og.jpg` (site), `public/og/<slug>.jpg` (parlamentar) e `og/guilda-<sigla>.jpg` (guilda) — um por parlamentar, guilda e o site; já roda no fim do `data:real`. `--only=<slug>`/`--guildas`/`--site` p/ iterar |
 | `npm run social:template` | Gera/atualiza o esqueleto de `data/social.csv` com handles oficiais |
 | `npm run social:discover` | Descobre handles não declarados à Câmara |
 | `npm run social:fetch` | Preenche seguidores do Instagram em `data/social.csv` via Apify (`APIFY_TOKEN`) — **PAGO** |
 | `npm run dev` | Dev server (falha alto se `data/` estiver vazio — ver `check-data.mjs`) |
-| `npm run build` | Export estático completo → `out/` (~673 páginas) |
+| `npm run build` | Export estático completo → `out/` (uma página por parlamentar, guilda, estado, título e seção de insights) |
 | `npm run start` | Serve o `out/` localmente |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Testes da lógica pura de ingestão (`node --test`, sem dependências) |
@@ -73,6 +85,7 @@ Quase tudo em `data/` é reproduzível por script. **Um arquivo NÃO é:**
 | Arquivo | Por que é insubstituível |
 |---|---|
 | `data/social.csv` | seguidores do Instagram via Apify — **serviço PAGO**; re-coletar custa crédito |
+| `data/analises.json` | parágrafos escritos por IA + **revisão humana**; o pipeline só os LÊ, nunca os gera. Está sob uma exceção explícita no `.gitignore` (`!data/analises.json`), porque `data/*.json` é ignorado |
 
 Ele está **versionado no git**. Nunca rode `git clean`, `rm -rf data/` nem nada que varra
 untracked/ignored files nesse diretório — e nunca instrua um subagente a "limpar o working
@@ -84,6 +97,41 @@ guardados na conta do Apify, e **ler dataset já computado é grátis** (só re-
 `defaultDatasetId`, e `GET /v2/datasets/{id}/items` devolve `username` + `followersCount`.
 Foi assim que a coleta de 2026-07-06 foi restaurada sem gastar um centavo.
 
+### ⚠️ SUCESSO VAZIO — a falha nº 1 deste projeto
+
+**Uma fonte que devolve 200 com nada dentro não gera erro: gera um número plausível.**
+Aconteceu seis vezes, sempre igual — a resposta é íntegra, sem o campo de dados; o
+pipeline conclui "não tem"; o atributo vai a zero; e zero é sempre um valor VÁLIDO na
+escala. Ninguém percebe, porque não há o que perceber.
+
+O mais perverso é a Economia: cota vazia não deprime o parlamentar, **ELOGIA** (gasto
+mínimo → Economia alta → Guardião do Cofre). Nos demais, deprime em silêncio.
+
+As três regras, para qualquer fonte nova:
+
+1. **Vazio nunca é aceito de primeira** — repita a chamada (4×) antes de concluir.
+2. **Vazio nunca é gravado nem sobrescreve cache bom.** Sem isso o erro fica congelado
+   pelo TTL, e a execução seguinte herda a conclusão em vez de perguntar de novo.
+3. **Só o 404 é resposta definitiva.** 429/5xx são transitórios; tratar "não-OK" como
+   vazio custou 935 matérias numa execução. Esgotou a retentativa → **aborta ou loga**,
+   nunca segue quieto. E um portão de casa inteira (`> 10%` sem dado) pega o resto.
+
+| Fonte | O que devolveu | Estrago medido |
+|---|---|---|
+| `/deputados/{id}/despesas` com filtro `ano=` | `dados: []` p/ todo deputado e todo ano, inclusive histórico consolidado (`x-total-count: 0`, `retry-after: 30` num 200) | Câmara inteira com R$ 0 de cota e Economia 50 — o filtro quebrou, não o endpoint: com `idLegislatura=` os mesmos dados vêm |
+| `/senador/{id}/*` | envelope sem o nó (`Autorias`, `Votacoes`…), intermitente | 29 dos 81 senadores com Ataque/Eficiência 0 — Alessandro Vieira lia 0 onde há 926 autorias |
+| `/processo/{id}` | sem `classificacoes`, intermitente + 429 sob concorrência 8 | cobertura temática do Senado 98% → 48% |
+| `/materia/{codigo}` | **descontinuado** (desativado em 2026-02-01), 200 com corpo vazio | mediria a mesma cobertura como 20% |
+| `/deputados/{id}/historico` | 504 transitório sob carga (~1 em 3, em rajada de 513) | histórico vazio = 0 meses de exercício = deputado fora do ranking |
+| CEAPS (Senado) | match por NOME sem casar | senador vira "o mais frugal" |
+
+Defesas hoje: `senadoJson` recebe um predicado `temDados`; a cota tem portão de sanidade;
+`historico` e `relatoresPorProposicao` abortam; a classificação do Senado só grava `null`
+após 4 vazios. Pool de concorrência **4**, não 8. Tudo que sobra vazio é LOGADO com `⚠️` —
+**leia esses avisos a cada ingestão** e confira com o comando da seção Verificação.
+O CEAPS loga quem ficou sem lançamento — **unidades** é normal (há quem renuncie à cota
+e recém-empossados); **dezenas** é match nominal quebrado ou fonte vazia.
+
 Armadilhas conhecidas das APIs:
 - **Cache com validade — reingerir NÃO garante dado novo.** O `cached()` servia
   qualquer arquivo existente para sempre: com `data/raw/` populado, `data:real` só
@@ -94,8 +142,8 @@ Armadilhas conhecidas das APIs:
   chamadas) são PERMANENTES — só voltam se o arquivo sumir. Efeito colateral disso:
   relatoria nova em proposição antiga não aparece sem apagar o `relatores-historico`.
 - **`updatedAt` é a data da fonte mais velha**, não a da execução (essa é `geradoEm`).
-  O dado é tão atual quanto sua parte mais velha, e é o `updatedAt` que ~673 páginas
-  exibem ao leitor.
+  O dado é tão atual quanto sua parte mais velha, e é o `updatedAt` que
+  todas as páginas exibem ao leitor.
 - **CSV dos Dados Abertos NÃO se parseia com `split`.** As ementas contêm quebras de
   linha DENTRO das aspas: um `text.split('\n')` parte o registro ao meio e as colunas
   saem deslocadas — 6,69% das linhas de `proposicoes-2025.csv` (7.592 de 113.427).
@@ -104,86 +152,34 @@ Armadilhas conhecidas das APIs:
   de estados de verdade. Mesmo cuidado ao ler colunas de texto livre: em
   `votacoesOrientacoes`, o campo `descricao` pode conter `;`, então as 3 últimas
   colunas são lidas pelo FIM (`r.at(-3)`, `r.at(-1)`), não por índice.
-- **`/deputados/{id}/historico` devolve 504 TRANSITÓRIO sob carga** — numa reingestão
-  do zero (cache vazio) são 513 chamadas seguidas e ~1 em cada 3 estoura; o mesmo id
-  que falha responde 200 minutos depois. Por isso o laço tem pool de concorrência 4,
-  retry com backoff longo, e ADIA os que falharem para rodadas extras. **Nunca
-  "resolva" um 504 devolvendo histórico vazio**: histórico vazio = 0 meses de
-  exercício = deputado apagado do ranking em silêncio. Se esgotar, é para abortar.
 - **`ultimoStatus_uriRelator` do CSV bulk é só o relator ATUAL — não serve p/ contar
-  relatoria.** Uma proposição passa por várias comissões, cada uma com seu relator, e
-  o CSV guarda apenas o último: medido na legislatura inteira, capturávamos 10.989 de
-  16.860 relatorias (65%). O erro não aparece no agregado — o que denuncia é a variância
-  POR DEPUTADO (média 66% capturado, desvio 19 p.p.; três deputados tinham ZERO
-  relatoria visível apesar de terem 13 a 19), porque quem relata cedo, em comissão de
-  mérito, é substituído e some, enquanto quem relata na CCJ ou no plenário fica sendo o
-  último. A correção é `relatoresPorProposicao`, que lê `uriUltimoRelator` de CADA
-  tramitação via `/proposicoes/{id}/tramitacoes`. O bulk `proposicoesTramitacoes`
-  **não** substitui: ele não traz o campo de relator (conferido). São ~24 mil chamadas,
-  cacheadas num JSON único (`data/raw/relatores-historico.json`) com escrita incremental
-  — 24 mil arquivos soltos seriam piores. Mesma regra do histórico acima: falha esgotada
-  ABORTA, nunca grava lista vazia.
-- **Não conclua nada sobre relatoria a partir de proposições que já têm relator atual.**
-  Amostrar só elas infla tudo: são as mais adiantadas na tramitação, logo acumularam
-  mais relatores. Foi assim que uma amostra deu "perdemos 50%" contra os 35% reais.
-- **Licença das fotos oficiais (conferido nas fontes primárias, 2026-07):** a Câmara permite
-  reproduzir "dados, imagens e infografias publicados no portal" citando a fonte "Câmara dos
-  Deputados" (Termo de Uso, item 7) — sem restrição de corte ou uso comercial. O Senado é mais
-  estrito: uso livre "desde que citada a fonte e o conteúdo não seja alterado, nem
-  descaracterizado", crédito "Nome/Agência Senado", e **veda uso comercial ou
-  político-ideológico e a inserção de anúncios** (Guia de Direitos Autorais). Consequência
-  prática: ligar anúncio no site coloca as fotos do Senado FORA dos termos — antes de qualquer
-  monetização, trocar a origem das fotos ou pedir autorização expressa. É por isso que o crédito
-  vai também na imagem do ShareButton, que circula longe do rodapé do site.
-- Fotos oficiais NÃO têm header CORS. Uma `<img>` remota até renderiza, mas ao ser
-  desenhada no `<canvas>` ela o CONTAMINA e o `toBlob()` do ShareButton passa a
-  lançar — a imagem de compartilhamento nunca mostraria o rosto. Por isso
-  `scripts/fetch-fotos.mjs` baixa tudo p/ `public/fotos/` (same-origin) e reescreve
-  `fotoUrl`. O Senado serve 1152×1441 (~1,4MB!): o script normaliza em 480px de
-  altura via sharp e grava **WebP q75** (~23% menor que o JPEG mozjpeg q82, mesma
-  qualidade visual a 480px; o `<canvas>` do ShareButton desenha WebP sem problema). A
-  URL de origem é RECONSTRUÍDA de casa+id, então re-rodar após apagar `public/fotos/`
-  funciona mesmo com os JSONs já apontando p/ o local; se sobrar um `.jpg` antigo de
-  execução pré-WebP, o script o transcodifica localmente (sem rede) e remove o órfão.
-  NB: WebP q75 encodado da FONTE (10M→7,7M) sai menor que transcodificar do JPEG já
-  comprimido só se a qualidade cair; a q80 o transcode (lossy-sobre-lossy) engana com
-  arquivo menor porém degradado. Encodar da fonte é o caminho reproduzível pelo pipeline.
-- **Não use o `urlFoto` da API da Câmara como origem da foto.** Para 134 dos 512
-  deputados ele aponta para uma MINIATURA de 114×152 (os outros 378 vêm em 354×472,
-  então o defeito passa despercebido numa amostra) — esticada para os 216 CSS px da
-  janela da carta em tela 2×, a carta do Kim Kataguiri sai borrada ao lado da do Marcel
-  van Hattem. A origem certa é `bandep/{id}.jpgmaior.jpg` (o `maior.jpg` grudado no
-  nome não é typo: é como a listagem "Quem são os deputados" monta a URL), que devolve
-  354×472 para os 512, sem exceção. Por isso `baixar()` tenta a URL RECONSTRUÍDA antes
-  do `p.fotoUrl`, e recusa cache local com largura < 300px: `public/fotos/` é gitignored,
-  logo o cache é por máquina, e uma miniatura é um download bem-sucedido — sem a
-  checagem de largura, quem já tivesse rodado ficaria com os 134 borrados para sempre.
+  relatoria.** Uma proposição passa por várias comissões, cada uma com seu relator, e o
+  CSV guarda só o último: capturávamos 10.989 de 16.860 (65%). O agregado não denuncia —
+  a variância POR DEPUTADO sim (média 66%, desvio 19 p.p.; três deputados com ZERO
+  relatoria visível apesar de terem 13 a 19), porque quem relata cedo é substituído e
+  some. Correção: `relatoresPorProposicao` lê `uriUltimoRelator` de CADA tramitação via
+  `/proposicoes/{id}/tramitacoes` (~24 mil chamadas, cache incremental em
+  `relatores-historico.json`). O bulk `proposicoesTramitacoes` NÃO substitui — não traz o
+  campo de relator (conferido). **Nunca amostre só proposições que já têm relator atual**:
+  são as mais adiantadas, acumularam mais relatores, e a amostra deu "perdemos 50%"
+  contra os 35% reais.
+- **Licença das fotos (fontes primárias, 2026-07):** a Câmara permite reproduzir citando
+  "Câmara dos Deputados" (Termo de Uso, item 7), sem restrição de corte ou uso comercial.
+  O Senado é mais estrito: crédito "Nome/Agência Senado", conteúdo inalterado, e **veda
+  uso comercial ou político-ideológico e a inserção de anúncios** (Guia de Direitos
+  Autorais). Consequência: **ligar anúncio no site coloca as fotos do Senado FORA dos
+  termos** — antes de monetizar, trocar a origem das fotos ou pedir autorização expressa.
+  Por isso o crédito vai também NA imagem do ShareButton, que circula sem o rodapé.
+- **Foto oficial é baixada para `public/fotos/` (WebP), nunca referenciada remota** —
+  sem CORS ela contamina o `<canvas>` e o ShareButton para de gerar imagem. A origem é
+  `bandep/{id}.jpgmaior.jpg` reconstruída, NÃO o `urlFoto` da API (miniatura em 134 dos
+  512). O mesmo script emite o `fotoLqip`. Detalhe em docs/architecture.md.
 - **O card OG por parlamentar segue as regras da imagem do ShareButton** (sem título/selo,
-  número bruto ao lado de cada percentil, sem Tier p/ quem está fora do ranking, crédito da
-  foto NA imagem). Duas armadilhas do satori: ele não decodifica WebP (a foto é convertida
-  com sharp antes) e não desenha emoji sem asset extra. `ogImage` só é gravado no
-  politicians.json/guilds.json para quem renderizou — a UI não deriva do slug porque `og:image`
-  404 faz o scraper não mostrar cartão nenhum, pior que o card genérico.
-- **O bruto do card de GUILDA é OUTRA conta, não o bruto do percentil médio.** Média de
-  percentis não tem bruto único — por isso o card nasceu sem número ao lado da barra. O que
-  existe hoje (`scripts/lib/guilda-bruto.mjs`, com teste; usado pelo card OG, pela página da
-  guilda e pelo `nota` do ShareButton) é um agregado INDEPENDENTE sobre os brutos da bancada,
-  e as duas contas têm de ser declaradas lado a lado (o rodapé do card diz "Percentil: média
-  dos N membros · ao lado, os números da bancada"). Duas regras dele: (1) **contagem vira
-  média por parlamentar, taxa vira soma÷soma da bancada** — média de porcentagens de casas
-  diferentes (o deputado vota em ~1.589 votações, o senador em ~418) não é a taxa da guilda;
-  (2) **emenda só entra na Técnica quando TODA a bancada é da Câmara**, senão a "média por
-  parlamentar" embutiria um denominador que nenhum senador podia ter. Toda frase carrega o
-  próprio denominador e cabe em 44 caracteres (o teste trava isso — é a largura da linha).
-- O mesmo script emite o **`fotoLqip`**: um WebP 12×13 em data-URI (~185B) que a janela
-  da carta pinta como `background` enquanto a foto não chega — sem ele a moldura piscava
-  do gradiente escuro p/ a foto clara. Três armadilhas: (1) **fundo branco fixo não
-  resolve** — só a Câmara fotografa em branco, o Senado varia (bandeira, cortina); o
-  placeholder tem que sair da própria foto; (2) o crop tem que ser o MESMO do render
-  (`cover`/`top`) ou o borrão pula quando a foto o cobre; (3) o LQIP fica FORA de
-  `public/data/index.json` — a `/batalha` o baixa no client, e 185B por parlamentar
-  inflariam o índice em ~45% por duas fotos que já são lazy. Não precisa de
-  `filter: blur()`: subir 12px p/ 196px já borra na interpolação do browser, de graça.
+  bruto ao lado do percentil, sem Tier p/ quem está fora do ranking, crédito da foto NA
+  imagem). Armadilhas do satori em docs/architecture.md.
+- **O bruto do card de GUILDA é OUTRA conta, não o bruto do percentil médio**
+  (`scripts/lib/guilda-bruto.mjs`, com teste): contagem vira média por parlamentar, taxa
+  vira soma÷soma da bancada. Detalhe em docs/architecture.md.
 - Câmara `/proposicoes` limita janelas de data a 3 meses — para séries, use os
   arquivos bulk (`/arquivos/...`), nunca a API paginada.
 - **A cota da Câmara vem da API por deputado, NÃO do bulk `cotas/Ano-{ano}.csv.zip`** —
@@ -196,15 +192,16 @@ Armadilhas conhecidas das APIs:
   devolve centenas de lançamentos a menos (centenas de milhares de reais sumindo sem
   erro) se você não passar `ordem=ASC&ordenarPor=codDocumento`. Ordem explícita + dedupe,
   sempre. E `itens` satura em 100 sem reclamar — pare em `length < 100`, nunca
-  `length < itens`. `ano` repetido varre os 4 anos numa passada.
+  `length < itens`. **Recorte por `idLegislatura`, não por `ano`**: o filtro `ano` parou
+  de devolver qualquer coisa (ver Sucesso vazio) e o `idLegislatura` varre a legislatura
+  inteira numa passada — que é o recorte que a gente já queria. Antes de culpar o
+  endpoint, teste os FILTROS um a um: aqui o recurso estava de pé o tempo todo.
 - Influência vem de seguidores do Instagram via Apify (ator instagram-profile-scraper,
   `npm run social:fetch`, `APIFY_TOKEN` obrigatório) — é serviço pago: rode em lotes,
   escreva resultados parciais no CSV e NUNCA grave falha como zero seguidores.
-- CEAPS do Senado é latin1, decimal com vírgula e só tem NOME do senador. O CSV nem
-  sempre usa o nome parlamentar da API (ex.: API `Weverton` × CSV `WEVERTON ROCHA`):
-  o match é exato → nome civil → prefixo ÚNICO. Sem match, o gasto vira 0 e o senador
-  aparece como "o mais frugal" — por isso a ingestão loga quem ficou sem lançamentos
-  (hoje só o Kajuru, que de fato não usa a cota). **Confira essa lista a cada ingestão.**
+- CEAPS do Senado é latin1, decimal com vírgula e só tem NOME do senador — nem sempre o
+  nome parlamentar da API (`Weverton` × `WEVERTON ROCHA`): match exato → nome civil →
+  prefixo ÚNICO. Sem match o gasto vira 0 (ver Sucesso vazio).
 - A **quebra da cota por categoria/fornecedor** (`cotaResumo`, painel "Onde foi a cota") é
   INFORMATIVA — descreve o gasto, não pontua (a Economia continua sendo só o TOTAL). Lógica pura em `scripts/lib/cota.mjs` (com teste). Dois cuidados: (1) os valores são
   **líquidos** — os estornos (vlrLiquido negativo) são abatidos por categoria, senão o total do
@@ -216,29 +213,29 @@ Armadilhas conhecidas das APIs:
   CNPJ vem com 81 grafias na Vivo, 630 na A&T Turismo). Agrupar por nome estilhaça a empresa e
   subestima a concentração: um caso ia de 23% p/ 63% e ficava fora do ranking em silêncio. Sem
   documento (SIGEPA), cai no nome — nunca se dropa. No ranking NACIONAL de empresas, o % é fatia
-  do universo COM CNPJ (16% da cota não identifica PJ) e o painel de concentração é irmão
-  obrigatório do top 15: a maior empresa tem 1,3% de ~43 mil CNPJs, e o top 15 solto sugere
-  captura — o oposto do dado. Detalhe em docs/product-spec.md §8.
+  do universo COM CNPJ (parte da cota não identifica PJ) e o painel de concentração é irmão
+  obrigatório do top 15: medido, a maior empresa ficava com pouco mais de 1% de dezenas de
+  milhares de CNPJs — o top 15 solto sugere captura, o oposto do dado. Detalhe em docs/product-spec.md §8.
 - **Fornecedor PESSOA FÍSICA não é nomeado, e a minimização é na EMISSÃO** (`ehCpf` grava o rótulo
-  do que foi contratado; o nome não entra em JSON nenhum, com teste). São 23 fichas — locador do
-  escritório, prestador do gabinete. Público na origem não dispensa NECESSIDADE na reutilização: o
+  do que foi contratado; o nome não entra em JSON nenhum, com teste). São poucas fichas —
+  locador do escritório, prestador do gabinete. Público na origem não dispensa NECESSIDADE na reutilização: o
   nome não acrescenta nada ao que o painel afirma ("35% da cota num só fornecedor, aluguel de
   escritório"), a pessoa não é agente público, e nomeá-la ao lado do parlamentar faz o leitor
   completar a acusação sozinho. Vale p/ toda superfície nova que exiba fornecedor.
-- **Não reintroduza o auxílio-moradia na Economia.** Investigado e descartado: NÃO está nos Dados
-  Abertos (só no portal de transparência). Câmara teria um endpoint interno por ID, mas não
-  documentado/versionado; Senado só publica um snapshot mensal por NOME (o mesmo risco de homônimo
-  do CEAPS). É um valor ~fixo (R$4–5 mil/mês ou imóvel funcional), então quase não move o
-  percentil. O spec (§1) já listava "auxílio-moradia/verba de gabinete" na fórmula — isso era
-  drift do design original; a Economia real é só a cota CEAP/CEAPS. Só vale reabrir se as duas
-  casas passarem a publicar por ID, legível por máquina.
-- **O Karma (TCU) foi REMOVIDO — não reintroduza sem reler o motivo.** A penalidade só podia
-  atingir deputados (o Senado não expõe CPF) enquanto os cortes de Tier são absolutos entre as
-  casas: era o viés estrutural que o resto do projeto combate. Ainda media fato possivelmente
-  anterior ao mandato, contra o disclaimer de toda ficha, e acendia para um único
-  parlamentar da base (nenhum Tier S bloqueado). Com ele saiu a leitura do CPF: o
-  pipeline não coleta mais esse dado — e a `/sobre` afirma isso ao público. Penalidade nova só se valer nas DUAS casas e medir o
-  exercício do mandato. Detalhe em docs/product-spec.md §9.
+- **INVESTIGADO E DESCARTADO — não reintroduza sem reler o motivo** (detalhe em
+  docs/product-spec.md §9). Os três caem pelo MESMO teste: uma métrica precisa valer nas
+  DUAS casas e medir o exercício do mandato.
+  - **Karma (TCU)**: só alcançava deputados (o Senado não expõe CPF) enquanto os cortes de
+    Tier são absolutos entre as casas — o viés estrutural que o resto do projeto combate.
+    Ainda media fato possivelmente anterior ao mandato. Com ele saiu a leitura do CPF, e a
+    `/sobre` afirma isso ao público.
+  - **Réu no STF**: o Corte Aberta anonimiza o polo passivo (`*NI*`) em ~99,7% das ações
+    penais, o match por nome nunca casa e a integração produziu ZERO portadores. Só volta
+    se o STF publicar os nomes.
+  - **Auxílio-moradia**: não está nos Dados Abertos, só no portal de transparência (Senado
+    publica por NOME — risco de homônimo). É valor ~fixo, quase não move o percentil. A
+    Economia é só a cota CEAP/CEAPS; "auxílio-moradia" no spec §1 era drift do design
+    original. Só reabre se as duas casas publicarem por ID.
 - **A lista das duas casas é só quem está EM EXERCÍCIO**: o titular licenciado não vem, e
   some do site sem explicação. `fetchLicenciados` emite `data/licenciados.json` só para a
   guilda e o estado o NOMEAREM — ele não entra no ranking (não há atividade publicada).
@@ -246,6 +243,29 @@ Armadilhas conhecidas das APIs:
   MOTIVO** — as duas APIs o omitem, então "assumiu ministério" é imputação; e no Senado
   classifique por `SiglaCausaAfastamento` em allowlist, senão falecidos e cassados entram
   como "licenciados". Detalhe em docs/product-spec.md §9.
+- Classificação temática do Senado: `/processo/{id}` (`classificacoes`), com a ponte
+  `codigoMateria → idProcesso` vinda dos `sen-processos-*.json` já cacheados. Cache
+  PERMANENTE em `classificacoes-senado.json`, como o de relatores. Para recuperar de uma
+  execução ruim: purgue os vazios do cache e reingira.
+- **Prioridade temática NÃO pontua e NÃO vira título** (`p.prioridades`,
+  `scripts/lib/temas.mjs`): fora do Poder, do Tier e dos gates. "Deputado da Saúde" seria
+  rótulo sobre pauta política — o mesmo motivo da Fiscalização informativa —, e nenhuma
+  cor julga o assunto (`higherIsBetter: null`). Duas contas que não se confundem: a
+  **contagem é CHEIA** (3 temas contam nos 3 → os percentuais NÃO somam 100%, cada linha
+  carrega o próprio denominador) e a **agregação de bancada é soma÷soma**, nunca média de
+  porcentagens. Na guilda o que informa é o **desvio** do nacional, não o absoluto:
+  "Administração Pública" e/ou "Direitos Humanos" estão no top-3 de 7 dos 8 maiores
+  partidos, então o ranking absoluto pareceria funcionar sem distinguir bancada nenhuma.
+  O mapa dos dois vocabulários oficiais é EDITORIAL e está publicado em
+  `/como-calculamos` — mexeu no mapa, mexa lá. Detalhe em docs/product-spec.md §10.
+- **Análise de IA só aparece se o `fonteHash` bater** (`scripts/lib/analises.mjs`):
+  `data/analises.json` guarda o parágrafo junto do hash dos números que ele descreve, e a
+  UI não renderiza quando divergem — senão um texto de julho ficaria ao lado das barras
+  de setembro parecendo análise do dado atual. A IA **lê**: não classifica, não conta, e o
+  prompt (versionado em `docs/prompts/`) a proíbe de citar quantidade fora da tabela. Todo
+  texto exibido leva selo, modelo, data e link do prompt. O escopo (guildas + nacional,
+  algumas dezenas de textos) cabe em revisão humana integral; um parágrafo por
+  parlamentar — centenas, sobre pessoas nomeadas — não caberia.
 - API do Senado devolve cargos/comissões de órgãos EXTINTOS sem DataFim — sempre
   recortar por DataInicio >= legislatura atual. **Vale igual para `/votacoes`**: ela
   devolve a votação de TODA a carreira (o Renan Calheiros vem com 1.378 votos de
@@ -272,11 +292,6 @@ Armadilhas conhecidas das APIs:
   desigual. Para conferir um código, use `plenario/lista/votacao/{AAAAMMDD}`, que devolve
   a votação inteira — ausência e voto convivem na mesma coluna. Código novo é LOGADO pela
   ingestão (`⚠️ código de voto NÃO classificado`); declare-o, não adivinhe.
-- **Não reintroduza o "Réu no STF".** A base "Acervo" do Corte Aberta anonimiza o polo
-  passivo (`*NI*`) em ~99,7% das ações penais, então o match por nome civil nunca casa:
-  a integração existiu, exigia download MANUAL de um painel Qlik e produziu ZERO
-  portadores do título em todas as ingestões. Foi removida. Só vale reimplementar se o
-  STF passar a publicar os nomes.
 - **Título de PENALIDADE não pode disparar na mediana da casa.** Os atributos são
   percentis DENTRO da casa, mas um rótulo vermelho faz uma acusação ABSOLUTA ("pouca
   entrega") — e as duas coisas se contradizem quando a distribuição é comprimida. Numa
@@ -317,20 +332,20 @@ Armadilhas conhecidas das APIs:
   deputada com mais leis aprovadas da casa. Por isso a escala é ancorada na mediana
   (=50): mudou a normalização, confira a fração da casa abaixo de 40 CONTRA a dos
   atributos percentílicos antes de dar por pronto. Cuidado gêmeo: os cortes de Tier são
-  ABSOLUTOS, valem para as duas casas e vivem SÓ em `meta.tierCortes` (uma segunda
-  tabela no guild-stats.ts ficou na calibração antiga e dava Tier A p/ guilda com
-  Poder médio 86 enquanto parlamentar com 86 era S), então uma escala que desloque uma casa mais que a
+  ABSOLUTOS, valem para as duas casas e vivem SÓ em `meta.tierCortes` (uma segunda tabela
+  no guild-stats.ts ficou na calibração antiga e dava Tier A p/ guilda com Poder médio 86
+  enquanto parlamentar com 86 era S), então uma escala que desloque uma casa mais que a
   outra embute "senador vale mais que deputado" no Poder. É a âncora na mediana que
-  neutraliza isso — uma reta entre extremos deslocava a Stamina +2,1 na Câmara × +3,8 no
-  Senado, a ancorada desloca +0,56 × +0,94. Não descarte uma correção medindo a variante
-  errada.
+  neutraliza isso: reta entre extremos deslocava a Stamina +2,1 (Câmara) × +3,8 (Senado);
+  a ancorada, +0,56 × +0,94.
 - **Percentil é invariante a transformação monotônica.** Normalizar o log do valor, usar
   "taxa de falta" no lugar de "taxa de presença" ou winsorizar a ENTRADA do percentil não
   mudam nada — são as três primeiras ideias que ocorrem e as três são no-ops. Para mudar a
   sensibilidade é preciso abandonar o rank (ver `scripts/lib/escala.mjs`).
 - Fiscalização (RIC/PFC/convocação) e Alinhamento são INFORMATIVOS de propósito.
   Fiscalizar o Executivo é, na prática, fazer oposição a ele: a oposição protocola
-  ~192 atos por deputado, a base do governo ~20 (PT: 3; NOVO: 306). Pontuar isso
+  uma ordem de grandeza a mais de atos que a base do governo (medido em 2026-07: ~192
+  por deputado da oposição × ~20 da base). Pontuar isso
   faria o Poder premiar posição política travestida de entrega. Vale a mesma regra
   para qualquer métrica nova: antes de deixá-la pontuar, meça-a contra o eixo
   governo/oposição — se o gap for de ordem de grandeza, ela é política, não técnica.
@@ -404,3 +419,18 @@ Atenção: o Chrome headless no macOS força largura mínima de janela ~500px �
 mobile de verdade, use um iframe de 390px ou o DevTools device mode.
 Mexeu em metadado/JSON-LD? Varra o `out/`: 1 `<h1>` por página, `og:title` sem duplicata,
 URLs do sitemap existindo em disco, JSON-LD parseável e sem `ratingValue`.
+
+**Reingeriu? Confira o que a fonte pode zerar em silêncio.** Estas três já quebraram, e
+nenhuma delas gera erro — todas produzem um número plausível:
+
+```sh
+node -e 'const P=require("./data/politicians.json");const z=k=>P.filter(k).length;
+console.log("cota zero:", z(p=>!p.gastoMensalMedioMil), "de", P.length);
+console.log("ataque zero (senado):", z(p=>p.casa==="senado"&&!p.statRaw?.ataque), "de 81");
+console.log("sem prioridades:", z(p=>!p.prioridades), "de", P.length);'
+```
+
+Leia a FORMA do número, não um valor de referência (que envelheceria): **unidades** é o
+normal — sempre há quem renuncie à cota, tenha tomado posse ontem ou não tenha autoria
+principal. **Dezenas** é a fonte devolvendo vazio, não parlamentar inativo. Leia também os
+`⚠️` do log da ingestão: eles nomeiam quem ficou sem dado depois de todas as tentativas.

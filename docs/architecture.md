@@ -179,6 +179,63 @@ contra o eixo governo/oposição.** Se o gap for de ordem de grandeza, ela é po
 não técnica — e pontuá-la faria o ranking tomar partido com cara de objetividade.
 Foi o que quase aconteceu com a Fiscalização (oposição ~192 atos/deputado × base ~20).
 
+## Imagens: fotos, LQIP e cards OG
+
+Detalhe de `scripts/fetch-fotos.mjs` e `scripts/make-og.mjs`. O AGENTS.md carrega só as
+regras; os porquês estão aqui.
+
+**Por que a foto é baixada em vez de referenciada.** As fotos oficiais não têm header
+CORS. Uma `<img>` remota renderiza, mas ao ser desenhada no `<canvas>` ela o CONTAMINA e
+o `toBlob()` do ShareButton passa a lançar — a imagem de compartilhamento nunca mostraria
+o rosto. Daí `public/fotos/` (same-origin) e a reescrita do `fotoUrl`.
+
+**Formato.** O Senado serve 1152×1441 (~1,4 MB). O script normaliza em 480px de altura
+via sharp e grava **WebP q75** — ~23% menor que JPEG mozjpeg q82 com a mesma qualidade
+visual nesse tamanho, e o `<canvas>` desenha WebP sem problema. Encodar **da fonte**
+(10M→7,7M) é o caminho reproduzível: transcodificar do JPEG já comprimido só sai menor se
+a qualidade cair, e a q80 o lossy-sobre-lossy engana com arquivo menor porém degradado.
+A URL de origem é RECONSTRUÍDA de casa+id, então re-rodar após apagar `public/fotos/`
+funciona mesmo com os JSONs já apontando para o caminho local; `.jpg` remanescente de
+execução pré-WebP é transcodificado localmente (sem rede) e o órfão, removido.
+
+**Não use o `urlFoto` da API da Câmara como origem.** Para 134 dos 512 deputados ele
+aponta para uma MINIATURA de 114×152 — os outros 378 vêm em 354×472, então o defeito
+passa despercebido numa amostra. Esticada para os 216 CSS px da janela da carta em tela
+2×, a carta do Kim Kataguiri sai borrada ao lado da do Marcel van Hattem. A origem certa
+é `bandep/{id}.jpgmaior.jpg` (o `maior.jpg` grudado no nome não é typo: é como a listagem
+"Quem são os deputados" monta a URL), que devolve 354×472 para os 512 sem exceção. Por
+isso `baixar()` tenta a URL reconstruída ANTES do `p.fotoUrl` e **recusa cache local com
+largura < 300px**: `public/fotos/` é gitignored, logo o cache é por máquina, e uma
+miniatura é um download bem-sucedido — sem a checagem de largura, quem já tivesse rodado
+ficaria com os 134 borrados para sempre.
+
+**`fotoLqip`** — WebP 12×13 em data-URI (~185 B) que a janela da carta pinta como
+`background` enquanto a foto não chega; sem ele a moldura piscava do gradiente escuro
+para a foto clara. Três armadilhas: (1) fundo branco fixo NÃO resolve — só a Câmara
+fotografa em branco, o Senado varia (bandeira, cortina), então o placeholder tem que sair
+da própria foto; (2) o crop tem que ser o MESMO do render (`cover`/`top`) ou o borrão
+pula quando a foto o cobre; (3) o LQIP fica FORA de `public/data/index.json` — a
+`/batalha` o baixa no client, e 185 B por parlamentar inflariam o índice em ~45% por duas
+fotos que já são lazy. Não precisa de `filter: blur()`: subir 12px para 196px já borra na
+interpolação do browser, de graça.
+
+**Cards OG (satori).** Duas armadilhas: ele não decodifica WebP (a foto é convertida com
+sharp antes) e não desenha emoji sem asset extra. `ogImage` só é gravado no
+politicians.json/guilds.json para quem renderizou — a UI não deriva do slug porque
+`og:image` 404 faz o scraper não mostrar cartão nenhum, pior que o card genérico.
+
+**Bruto do card de GUILDA** (`scripts/lib/guilda-bruto.mjs`, com teste; usado pelo card
+OG, pela página da guilda e pelo `nota` do ShareButton). Média de percentis não tem bruto
+único — por isso o card nasceu sem número ao lado da barra. O que existe é um agregado
+INDEPENDENTE sobre os brutos da bancada, e as duas contas têm de ser declaradas lado a
+lado (o rodapé diz "Percentil: média dos N membros · ao lado, os números da bancada").
+Duas regras: (1) contagem vira **média por parlamentar**, taxa vira **soma÷soma** da
+bancada — média de porcentagens de casas diferentes (o deputado vota em ~1.589 votações,
+o senador em ~418) não é a taxa da guilda; (2) **emenda só entra na Técnica quando TODA a
+bancada é da Câmara**, senão a "média por parlamentar" embutiria um denominador que nenhum
+senador podia ter. Toda frase carrega o próprio denominador e cabe em 44 caracteres (o
+teste trava isso — é a largura da linha).
+
 ## Próximos incrementos
 
 1. Caçador de Votos real: exige baseline anual consolidada (2026 ainda parcial).
