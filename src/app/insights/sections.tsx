@@ -12,6 +12,9 @@ import { TitlesGallery } from '@/components/TitlesGallery';
 import { InsightsTabs } from '@/components/InsightsTabs';
 import { buildMapView } from '@/lib/map-data';
 import { PoliticianLink } from '@/components/PoliticianLink';
+import { Prioridades, AnaliseIA } from '@/components/Prioridades';
+import { prioridadesNacionais, prioridadesPorCasa, assinaturasDasGuildas, analiseNacional } from '@/lib/prioridades';
+import { guildSlug } from '@/lib/slug';
 
 /** R$ a partir de milhares: "R$ 1,6 mi" acima de mil, senão "R$ 740 mil" */
 const fmtMilReais = (mil: number) =>
@@ -36,6 +39,8 @@ export const SECTION_META = [
     desc: 'Ranking das guildas (partidos) por Poder médio e por gasto de cota, com a composição de tiers de cada bancada.' },
   { id: 'gastos', label: '💸 Gasto × Entrega', title: 'Gasto × Entrega',
     desc: 'O cruzamento entre gasto de cota CEAP/CEAPS e entrega legislativa, parlamentar por parlamentar e por casa.' },
+  { id: 'prioridades', label: '🗂️ Prioridades', title: 'Prioridades',
+    desc: 'Em que o Congresso legisla — a distribuição temática oficial das proposições, por casa e a assinatura de cada guilda. Informativa: não pontua no Poder.' },
   { id: 'perfil', label: '👥 Perfil', title: 'Perfil',
     desc: 'Quem compõe o Congresso: renovação, gênero, sabatinas e a distribuição das bancadas por estado.' },
   { id: 'governo', label: '🏛️ Governo × Oposição', title: 'Governo × Oposição',
@@ -62,7 +67,12 @@ function temGoverno(): boolean {
  *  generateStaticParams. Mantém nav, rotas e conteúdo em sincronia. */
 export function availableSectionIds(): string[] {
   return SECTION_META
-    .filter((s) => (s.id === 'governo' ? temGoverno() : s.id === 'titulos' ? meta.titulosDisponiveis : true))
+    .filter((s) => (s.id === 'governo' ? temGoverno()
+      : s.id === 'titulos' ? meta.titulosDisponiveis
+      // sem classificação temática na fonte, a aba inteira não existe — em vez de
+      // uma seção com título e corpo vazio, que se lê como dado faltando
+      : s.id === 'prioridades' ? prioridadesNacionais.nComTema > 0
+      : true))
     .map((s) => s.id);
 }
 
@@ -472,7 +482,89 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
     </>
   ) : null;
 
+  // ---------- Prioridades: em que o Congresso legisla ----------
+  // Informativa em todas as superfícies: descreve o assunto, não julga. Nenhuma cor
+  // de bom/ruim, nenhum título, nenhum peso no Poder.
+  const assinaturas = assinaturasDasGuildas(guildRanking.map((g) => g.sigla));
+  const prioridades = prioridadesNacionais.nComTema ? (
+    <>
+      <div className="kpis">
+        <div className="kpi">
+          <div className="k-lbl">Proposições classificadas</div>
+          <div className="k-val">{prioridadesNacionais.nComTema.toLocaleString('pt-BR')}</div>
+          <div className="k-sub">de autoria, com tema oficial nas duas casas</div>
+        </div>
+        <div className="kpi">
+          <div className="k-lbl">Temas por proposição</div>
+          <div className="k-val">{prioridadesNacionais.temasPorProposicao.toFixed(1).replace('.', ',')}</div>
+          <div className="k-sub">por isso os percentuais não somam 100%</div>
+        </div>
+      </div>
+
+      <Prioridades
+        agregado={prioridadesNacionais}
+        titulo="🗂️ Em que o Congresso legisla"
+        sub={`${prioridadesNacionais.nComTema.toLocaleString('pt-BR')} proposições de autoria (PL, PLP, PEC, PDL) das duas casas, pela classificação oficial de cada uma`}
+        limite={12}
+      />
+
+      <AnaliseIA analise={analiseNacional(prioridadesNacionais)} />
+
+      {/* Por casa, sempre lado a lado e NUNCA somadas numa barra só aqui: são 513
+          deputados contra 81 senadores, então o agregado nacional acima é dominado
+          pela Câmara — e o leitor precisa poder ver isso. */}
+      <div className="grid2 even">
+        <Prioridades
+          agregado={prioridadesPorCasa.camara}
+          titulo="🏛️ Câmara"
+          sub={`${prioridadesPorCasa.camara.nComTema.toLocaleString('pt-BR')} proposições de ${prioridadesPorCasa.camara.nParlamentares} deputados`}
+          limite={8}
+        />
+        <Prioridades
+          agregado={prioridadesPorCasa.senado}
+          titulo="🏛️ Senado"
+          sub={`${prioridadesPorCasa.senado.nComTema.toLocaleString('pt-BR')} matérias de ${prioridadesPorCasa.senado.nParlamentares} senadores`}
+          limite={8}
+        />
+      </div>
+
+      {assinaturas.length > 0 && (
+        <div className="panel">
+          <h3>🧭 A assinatura de cada guilda</h3>
+          <p className="sub">
+            o tema em que cada bancada mais se afasta da média das duas casas, em pontos percentuais —
+            o ranking ABSOLUTO seria quase idêntico entre as guildas, porque todas refletem o que o
+            Congresso inteiro legisla
+          </p>
+          {/* 4 filhos porque .lrow é grid de 4 colunas (24px 1fr auto 40px) — com
+              menos, o número cai numa coluna que não é a dele */}
+          {assinaturas.map((g, i) => (
+            <Link key={g.sigla} href={`/guilda/${guildSlug(g.sigla)}/`} className="lrow">
+              <span className="pos">{i + 1}</span>
+              <span className="nm">
+                <b>{g.sigla}</b>
+                <small>{g.topo.tema}</small>
+              </span>
+              <span className="badge">
+                {Math.round(g.topo.pct)}% × {Math.round(g.topo.pctNacional)}% no Congresso
+              </span>
+              <span className="sc" style={{ color: 'var(--gold-2)' }}>
+                +{g.topo.desvio.toFixed(1).replace('.', ',')}
+              </span>
+            </Link>
+          ))}
+          <p className="prio-nota">
+            Comparação, não avaliação: nenhum tema vale mais que outro. Guildas com menos de 5
+            parlamentares ficam fora — numa bancada minúscula, três proposições do mesmo assunto
+            produziriam um desvio enorme por acidente aritmético.
+          </p>
+        </div>
+      )}
+    </>
+  ) : null;
+
   const nodes: Record<string, React.ReactNode> = { panorama, atributos, guildas, gastos, perfil };
+  if (prioridades) nodes.prioridades = prioridades;
   if (governo) nodes.governo = governo;
   if (titulos) nodes.titulos = titulos;
   return nodes;

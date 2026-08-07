@@ -28,6 +28,14 @@ if printf '%s' "$cmd" | grep -Eq "${SEP}rm " \
   reason="rm recursivo mirando data/"
 fi
 
+# 1b) rm mirando um dos INSUBSTITUÍVEIS pelo nome. A regra acima exige `-r`, então
+# `rm -f data/social.csv` passava — e é o comando mais provável de todos, porque não
+# "parece" destrutivo. Estes dois não voltam por reingestão: social.csv é coleta paga
+# no Apify e analises.json é texto de IA já revisado à mão.
+if printf '%s' "$cmd" | grep -Eq "${SEP}rm\b[^;&|]*(social\.csv|analises\.json)"; then
+  reason="rm mirando um arquivo insubstituível de data/ (social.csv / analises.json)"
+fi
+
 # 2) git clean — varre arquivos NÃO RASTREADOS; foi exatamente assim que data/ sumiu
 if printf '%s' "$cmd" | grep -Eq "${SEP}git +clean\b"; then
   reason="git clean varre os arquivos não rastreados de data/ (social.csv inclusive)"

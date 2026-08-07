@@ -146,6 +146,22 @@
   font-size: 8.5px; letter-spacing: 0.2em; text-transform: uppercase; text-align: center;
   color: #e2d8ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Variante temática da MESMA faixa (ver Prioridades / destaqueDoCard). Dourada, não
+   roxa: o roxo é o selo "sem Tier" nas listas, e os dois estados são exclusivos —
+   quem está fora do ranking não exibe prioridade. Aqui nada acusa ninguém: é o
+   assunto das proposições, com o bruto ao lado. */
+.futc-faixa-tema {
+  background: linear-gradient(90deg,
+    rgba(26, 21, 10, 0.72), rgba(74, 60, 24, 0.88) 30%, rgba(74, 60, 24, 0.88) 70%, rgba(26, 21, 10, 0.72));
+  border-top-color: rgba(212, 175, 55, 0.5); border-bottom-color: rgba(212, 175, 55, 0.5);
+  color: var(--gold-2);
+  display: flex; align-items: baseline; justify-content: center; gap: 8px;
+}
+/* só o TEMA encolhe: o denominador truncado transformaria a faixa num selo
+   temático sem prova, que é exatamente o que ela não pode ser */
+.futc-faixa-tema b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.futc-faixa-tema span { flex: 0 0 auto; color: #cbbd8e; letter-spacing: 0.12em; }
+
 /* o "—" no lugar do Poder não pode brilhar como número dourado */
 .futc-ops.vazio {
   background: none; -webkit-text-fill-color: #6f7686; color: #6f7686; font-size: 40px;
@@ -375,6 +391,55 @@ a.plate:hover { border-color: var(--gold-2); background: rgba(212, 175, 55, 0.14
 .cota-agg { margin-top: 16px; }
 .cota-agg h4 { font-size: 13px; color: var(--gold-2); margin: 0 0 8px; display: flex; align-items: baseline; gap: 8px; }
 .cota-agg h4 small { color: var(--muted); font-weight: 400; font-size: 11px; }
+
+/* ---------- "No que trabalha": prioridades temáticas (ver Prioridades.tsx) ----------
+   Grade de 3 colunas em vez de flex: os rótulos de tema variam muito de largura
+   ("Saúde" × "Infraestrutura, Energia e Transporte") e num flex cada barra
+   começaria num x diferente, matando a comparação vertical que é o ponto. */
+.prio-list { list-style: none; display: grid; gap: 9px; }
+.prio-row {
+  display: grid; grid-template-columns: minmax(96px, 168px) 1fr auto;
+  gap: 10px; align-items: center;
+}
+.prio-tema { font-size: 11.5px; color: var(--ink); line-height: 1.25; }
+.prio-track {
+  height: 14px; border-radius: 5px; overflow: hidden;
+  border: 1px solid var(--line); background: #0c1018;
+}
+.prio-fill { display: block; height: 100%; border-radius: 4px 0 0 4px; }
+/* a assinatura não é magnitude, é distância da média — cor única, sem rampa: uma
+   escala de tons sugeriria ordem de importância entre temas, que é justamente o
+   juízo que esta feature se recusa a fazer */
+.prio-fill-asn { background: linear-gradient(90deg, rgba(212, 175, 55, 0.55), var(--gold)); }
+.prio-num { text-align: right; line-height: 1.15; white-space: nowrap; }
+.prio-num b { font-family: var(--font-display), serif; font-size: 14px; color: var(--gold-2); }
+.prio-num small { display: block; font-size: 9.5px; color: var(--muted); }
+/* a nota do denominador não é rodapé decorativo: sem ela a coluna de percentuais
+   que não soma 100 parece erro de conta */
+.prio-nota { font-size: 10.5px; line-height: 1.55; color: var(--muted); margin-top: 12px; }
+.prio-nota b { color: var(--ink); font-weight: 600; }
+.prio-nota a { color: var(--gold-2); text-decoration: underline; }
+
+/* parágrafo escrito por IA — visualmente destacado do resto do site DE PROPÓSITO:
+   é a única superfície interpretativa da plataforma, e o leitor tem que saber
+   disso antes de ler a primeira palavra */
+.prio-ia { border-color: rgba(166, 132, 255, 0.32); background: linear-gradient(180deg, #171528, #12111c); }
+.prio-ia-selo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin-bottom: 10px; }
+.prio-ia-tag {
+  font-family: var(--font-display), serif; font-weight: 700; font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: #d9ccff;
+  border: 1px solid rgba(166, 132, 255, 0.45); border-radius: 999px; padding: 3px 10px;
+  background: rgba(166, 132, 255, 0.1);
+}
+.prio-ia-meta { font-size: 10px; color: var(--muted); }
+.prio-ia-texto { font-size: 12.5px; line-height: 1.7; color: var(--ink); }
+
+@media (max-width: 640px) {
+  .prio-row { grid-template-columns: 1fr auto; row-gap: 4px; }
+  /* no estreito a barra vai para a linha de baixo, cheia: espremida entre rótulo
+     e número ela ficaria com ~40px e deixaria de codificar qualquer coisa */
+  .prio-track { grid-column: 1 / -1; grid-row: 2; }
+}
 
 .carta-back { font-size: 11px; color: var(--muted); text-align: center; }
 .carta-back a { color: var(--gold-2); text-decoration: underline; }

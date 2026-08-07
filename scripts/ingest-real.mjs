@@ -32,6 +32,8 @@ import { compareceu, registrouVoto, codigoDesconhecido } from './lib/voto-senado
 import { referenciasDaCasa, evidenciaDeTitulos } from './lib/evidencia.mjs';
 import { resumoCurtoStats } from './lib/resumo-stat.mjs';
 import { licencaCamara, licencaSenado, causaDesconhecida } from './lib/licenciados.mjs';
+import { TEMAS, OUTROS, deTemaCamara, deClasseSenado, contarTemas, destaqueDoCard, agregarPrioridades } from './lib/temas.mjs';
+import { fonteHash, contarObsoletas, alvoNacional, alvoGuilda } from './lib/analises.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = join(ROOT, 'data', 'raw');
@@ -352,10 +354,53 @@ async function fetchStatusProposicoes() {
   return { statusById, relatoriasByDep, relatoriasAvancadasByDep, emendaIds, fiscalIds };
 }
 
-async function fetchProposicoes(statusById, emendaIds, fiscalIds) {
+/**
+ * Tema oficial de cada proposição da Câmara → Map idProposicao → rótulos comuns.
+ *
+ * A casa publica a classificação temática dela em bulk anual, com MÚLTIPLOS temas
+ * por proposição (2,07 em média). É dado factual e auditável — a alternativa,
+ * classificar ementa por IA, trocaria isso por juízo de modelo.
+ *
+ * Rótulo que o `temas.mjs` não conhece vira OUTROS e é logado: a fonte inventar um
+ * tema e ele sumir da barra em silêncio é o modo de falha que este projeto já pagou.
+ */
+async function fetchTemasCamara() {
+  const porProposicao = new Map();
+  const naoMapeados = new Map();
+  for (const y of YEARS) {
+    let body;
+    try {
+      body = await cached(`proposicoesTemas-${y}.csv`, `${API}/arquivos/proposicoesTemas/csv/proposicoesTemas-${y}.csv`);
+    } catch { console.log(`[skip] proposicoesTemas-${y} indisponível`); continue; }
+    const { header, rows } = parseCsv(body);
+    const iUri = header.indexOf('uriProposicao');
+    const iTema = header.indexOf('tema');
+    for (const r of rows) {
+      const id = (r[iUri] ?? '').split('/').pop();
+      if (!id) continue;
+      const rotulo = deTemaCamara(r[iTema]);
+      if (rotulo === OUTROS && (r[iTema] ?? '').trim()) {
+        naoMapeados.set(r[iTema], (naoMapeados.get(r[iTema]) ?? 0) + 1);
+      }
+      if (!porProposicao.has(id)) porProposicao.set(id, new Set());
+      porProposicao.get(id).add(rotulo);
+    }
+    console.log(`[temas] ${y}: ${porProposicao.size} proposições com tema oficial (acumulado)`);
+  }
+  if (naoMapeados.size) {
+    console.log(`⚠️ [temas] tema da Câmara NÃO mapeado (caiu em "${OUTROS}") — declare em scripts/lib/temas.mjs:`);
+    for (const [t, n] of [...naoMapeados].sort((a, b) => b[1] - a[1])) console.log(`   ${n}× ${t}`);
+  }
+  return porProposicao;
+}
+
+async function fetchProposicoes(statusById, emendaIds, fiscalIds, temasPorProp) {
   const propsByDep = new Map();     // id → {total, aprovadas, avancadas, porAno}
   const emendasByDep = new Map();   // id → nº de emendas de autoria
   const fiscalByDep = new Map();    // id → nº de atos de fiscalização
+  // id → um array de rótulos POR PROPOSIÇÃO (não um contador): a contagem cheia
+  // precisa saber quais temas vieram juntos para não contar o mesmo duas vezes
+  const temasByDep = new Map();
   for (const y of YEARS) {
     let body;
     try {
@@ -392,11 +437,15 @@ async function fetchProposicoes(statusById, emendaIds, fiscalIds) {
       if (st.avancou) e.avancadas++;
       if (st.aprovada) { e.aprovadas++; aprov++; }
       propsByDep.set(id, e);
+      // prioridades: uma entrada por proposição, mesmo sem tema (a proposição sem
+      // classificação é CONTADA como sem tema — some seria mentir no denominador)
+      if (!temasByDep.has(id)) temasByDep.set(id, []);
+      temasByDep.get(id).push([...(temasPorProp.get(r[iId]) ?? [])]);
       count++;
     }
     console.log(`[props] ${y}: ${count} autorias principais (PL/PLP/PEC/PDL) · ${aprov} viraram norma · ${nEmd} emendas · ${nFis} atos de fiscalização`);
   }
-  return { propsByDep, emendasByDep, fiscalByDep };
+  return { propsByDep, emendasByDep, fiscalByDep, temasByDep };
 }
 
 // ---------- 4. Economia: cota parlamentar (CEAP) ----------
@@ -406,7 +455,12 @@ async function fetchProposicoes(statusById, emendaIds, fiscalIds) {
 // SIGEPA em ago/2025, subnotificando de forma desigual (ver AGENTS.md). Duas armadilhas:
 // a API pagina instável sem `ordenarPor` (daí ordem explícita + dedupe) e `itens` satura
 // em 100 sem erro, então a parada é `length < 100`.
-const CEAP_ANOS = YEARS.map((y) => `ano=${y}`).join('&');
+// Recorte por LEGISLATURA, não por `ano`. O filtro `ano` do /despesas parou de
+// funcionar — devolve `dados: []` para todo deputado e todo ano, inclusive 2023, que é
+// histórico consolidado. Não é 404 nem 5xx: é 200 vazio (ver "SUCESSO VAZIO" no
+// AGENTS.md), e foi assim que a Câmara inteira ficou com R$ 0 de cota. O
+// `idLegislatura` devolve os 4 anos numa passada e é o recorte que já queríamos.
+const CEAP_FILTRO = `idLegislatura=${LEG_ATUAL}`;
 
 async function fetchCeapDeputado(id, tentativas = 6) {
   const file = join(RAW, `cota-${id}.json`);
@@ -419,7 +473,7 @@ async function fetchCeapDeputado(id, tentativas = 6) {
   for (let pagina = 1; pagina <= 80; pagina++) {
     let dados = null;
     for (let t = 0; t < tentativas && !dados; t++) {
-      const url = `${API}/api/v2/deputados/${id}/despesas?${CEAP_ANOS}&itens=100&ordem=ASC&ordenarPor=codDocumento&pagina=${pagina}`;
+      const url = `${API}/api/v2/deputados/${id}/despesas?${CEAP_FILTRO}&itens=100&ordem=ASC&ordenarPor=codDocumento&pagina=${pagina}`;
       try {
         const res = await fetch(url, { headers: { Accept: 'application/json' } });
         if (res.ok) dados = (await res.json()).dados ?? [];
@@ -441,6 +495,19 @@ async function fetchCeapDeputado(id, tentativas = 6) {
       });
     }
     if (dados.length < 100) break;
+  }
+  // Vazio nunca sobrescreve cache bom nem é gravado: o `/despesas` passou a devolver
+  // 200 com `dados: []` para todos os deputados e todos os anos (sucesso vazio, como
+  // nos endpoints do Senado). Vencido o TTL, a ingestão gravou `[]` por cima de dado
+  // bom e a casa inteira virou "R$ 0 de cota".
+  if (!lancamentos.length) {
+    const antigo = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : [];
+    if (antigo.length) {
+      console.log(`[ceap] deputado ${id}: API devolveu vazio — mantendo cache anterior (${antigo.length} lançamentos)`);
+      registraFonte(file, false);
+      return antigo;
+    }
+    return []; // sem gravar, para a próxima execução perguntar de novo
   }
   writeFileSync(file, JSON.stringify(lancamentos));
   registraFonte(file, false);
@@ -475,6 +542,16 @@ async function fetchCeap(deputados, concorrencia = 6) {
     }
   }));
   console.log(`[ceap] R$ ${(soma / 1e6).toFixed(1)} mi em ${nLanc} lançamentos · ${total} deputados`);
+  // Portão de sanidade: cota zero é o gasto mais baixo possível, então uma falha da
+  // fonte não vira erro — vira "o mais frugal da casa", com Economia alta e selo de
+  // Guardião do Cofre. Deputado sem NENHUM lançamento é raríssimo; um décimo da casa
+  // assim é a fonte quebrada, e publicar isso é pior que não publicar.
+  const semGasto = total - gastoByDep.size;
+  if (semGasto > total * 0.1) {
+    throw new Error(`[ceap] ${semGasto} de ${total} deputados sem NENHUM lançamento de cota. `
+      + `A fonte (/deputados/{id}/despesas) está devolvendo vazio — seguir publicaria a casa inteira como frugal. `
+      + `Confira o endpoint antes de reingerir; o cache anterior foi preservado.`);
+  }
   return { gastoByDep, catByDep, fornByDep };
 }
 
@@ -750,8 +827,63 @@ async function orgaosCamara(id) {
 // Nota: os endpoints /senador/* estão marcados como deprecados desde 2025-03-18,
 // mas seguem ativos. A tramitação NÃO usa mais eles: `/processo` é o substituto
 // oficial que a própria API aponta, e é o único que traz `situacaoAtual`.
-async function senadoJson(name, url) {
-  return JSON.parse(await cached(name, url, { json: true }));
+/** senadores cujo endpoint insistiu em vir sem o nó de dados — logados no fim */
+const envelopesVazios = new Map();
+
+/**
+ * @param {string} name arquivo de cache em data/raw/
+ * @param {string} url
+ * @param {(j: any) => boolean} [temDados] presença do nó de dados esperado
+ *
+ * ARMADILHA (custou 29 dos 81 senadores): os endpoints `/senador/{id}/*` devolvem,
+ * de forma INTERMITENTE, **200 com um envelope sem o nó de dados** — só Metadados e
+ * `Parlamentar: {Codigo, Nome}`, sem `Autorias`. Não é erro, não é 404, não é 504:
+ * é uma resposta bem-sucedida e vazia, indistinguível de "este senador não tem
+ * autoria nenhuma". Medido nesta base: 29 senadores (36% da casa) vieram assim, e
+ * ao repetir a chamada os mesmos 29 responderam com dado — Alessandro Vieira com
+ * 926 autorias onde o pipeline lia zero.
+ *
+ * O efeito é o modo de falha que este projeto mais combate: zero autorias = Ataque
+ * 0, Eficiência 0 e produção anual zerada, o que DEPRIME Poder e Tier de um terço
+ * do Senado sem nenhum erro no log. E, uma vez gravado, o vazio ficava no cache.
+ *
+ * Regra, a mesma dos 504 da Câmara: vazio nunca é aceito de primeira e NUNCA é
+ * gravado. Repete-se a chamada; só depois de 4 respostas vazias seguidas o vazio é
+ * tratado como real — e ainda assim é logado, para alguém conferir à mão.
+ */
+async function senadoJson(name, url, temDados) {
+  const file = join(RAW, name);
+  if (!temDados) return JSON.parse(await cached(name, url, { json: true }));
+
+  if (cacheServe(file)) {
+    const j = JSON.parse(readFileSync(file, 'utf8'));
+    // cache COM dado é confiável; cache vazio não é — pode ser o envelope de uma
+    // execução azarada, e servi-lo perpetuaria o zero por mais 24h
+    if (temDados(j)) { registraFonte(file, false); return j; }
+    console.log(`[senado] ${name}: cache sem o nó de dados — refazendo (envelope vazio é transitório)`);
+  }
+
+  let ultimo = null;
+  for (let t = 1; t <= 4; t++) {
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (res.ok) {
+        const body = await res.text();
+        const j = JSON.parse(body);
+        if (temDados(j)) {
+          writeFileSync(file, body);
+          registraFonte(file, false);
+          return j;
+        }
+        ultimo = j;
+      }
+    } catch { /* rede: cai no backoff abaixo */ }
+    if (t < 4) await sleep(900 * t);
+  }
+  // 4 respostas vazias seguidas: aceita como vazio de verdade — mas não grava, para
+  // que a próxima execução volte a perguntar em vez de herdar a conclusão
+  envelopesVazios.set(name, (envelopesVazios.get(name) ?? 0) + 1);
+  return ultimo ?? JSON.parse(readFileSync(file, 'utf8'));
 }
 const asArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
 /** códigos de voto vistos que `voto-senado.mjs` não conhece — logados no fim */
@@ -767,19 +899,118 @@ const votosDesconhecidos = new Map();
  */
 async function fetchProcessosSenado() {
   const situacaoPorMateria = new Map();
+  // codigoMateria → idProcesso: as autorias do /senador só trazem o Codigo, e o
+  // detalhe do processo (de onde sai a classificação temática) é chaveado pelo id
+  const idPorMateria = new Map();
   for (const sigla of TIPOS_PRINCIPAIS) {
     for (const ano of YEARS) {
       const j = await senadoJson(`sen-processos-${sigla}-${ano}.json`,
         `https://legis.senado.leg.br/dadosabertos/processo?sigla=${sigla}&ano=${ano}`);
-      for (const p of asArray(j)) situacaoPorMateria.set(String(p.codigoMateria), p.situacaoAtual ?? '');
+      for (const p of asArray(j)) {
+        situacaoPorMateria.set(String(p.codigoMateria), p.situacaoAtual ?? '');
+        if (p.id) idPorMateria.set(String(p.codigoMateria), p.id);
+      }
     }
   }
   console.log(`[senado] ${situacaoPorMateria.size} processos com situação de tramitação (PL/PLP/PEC/PDL 2023+)`);
-  return situacaoPorMateria;
+  return { situacaoPorMateria, idPorMateria };
+}
+
+/**
+ * Classificação temática das matérias do Senado → Map codigoMateria → rótulos comuns.
+ *
+ * ARMADILHA: o caminho "óbvio" é `/materia/{codigo}`, que tem o campo `Classificacoes`
+ * e responde **200 com corpo vazio** — ele foi DESCONTINUADO (DataDesativacaoCompleta
+ * 2026-02-01) e a própria resposta aponta o substituto. Medida por ele, a cobertura
+ * do Senado "é" de 20%; medida pelo `/processo/{id}`, é de 98%. Um endpoint morto que
+ * devolve 200 é exatamente o tipo de falha silenciosa que apagaria o tema de 4 em cada
+ * 5 senadores sem nenhum erro no log.
+ *
+ * Cache PERMANENTE num JSON só, com escrita incremental — mesmo padrão (e mesma razão)
+ * do `relatores-historico.json`: são ~2,6 mil chamadas que não mudam. Falha esgotada
+ * ABORTA: gravar lista vazia é o tema do senador desaparecendo em silêncio.
+ */
+// concorrência 4, não 8: a 8 a API passa a devolver 429 em rajada, e cada 429 era
+// uma matéria perdendo o tema. Mais devagar aqui é mais rápido no total (menos
+// re-execuções) — mesma lição do pool 4 do histórico de exercício da Câmara.
+async function fetchClassificacoesSenado(codigos, idPorMateria, concorrencia = 4) {
+  const file = join(RAW, 'classificacoes-senado.json');
+  const cache = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  const semId = codigos.filter((c) => !idPorMateria.has(c));
+  // `null` = vazio CONFIRMADO (4 respostas vazias seguidas); lista vazia nunca é
+  // gravada. O `/processo/{id}` sofre do mesmo envelope vazio intermitente dos
+  // `/senador/{id}/*` (ver senadoJson): numa execução, 1.333 de 2.576 matérias
+  // voltaram sem `classificacoes` e TODAS as 40 reconsultadas responderam com dado.
+  // Aceitar o primeiro vazio derrubava a cobertura temática do Senado de ~98% para 48%.
+  const cacheado = (c) => c in cache && (cache[c] === null || cache[c].length > 0);
+  const alvos = codigos.filter((c) => idPorMateria.has(c) && !cacheado(c));
+  if (semId.length) {
+    console.log(`[classif-sen] ${semId.length} matérias sem idProcesso no /processo — entram como "sem tema", não somem`);
+  }
+  if (alvos.length) {
+    console.log(`[classif-sen] buscando classificação de ${alvos.length} matérias (${Object.keys(cache).length} em cache)…`);
+    const gravar = () => writeFileSync(file, JSON.stringify(cache));
+    let i = 0, feitos = 0, erros = 0, vaziosConfirmados = 0;
+    await Promise.all(Array.from({ length: concorrencia }, async () => {
+      while (i < alvos.length) {
+        const cod = alvos[i++];
+        let ok = false, vazio = false;
+        // 4 tentativas mesmo com HTTP 200: aqui o inimigo não é o erro, é o SUCESSO
+        // vazio — resposta íntegra, sem o campo `classificacoes`
+        for (let t = 1; t <= 4 && !ok; t++) {
+          try {
+            const res = await fetch(`https://legis.senado.leg.br/dadosabertos/processo/${idPorMateria.get(cod)}`,
+              { headers: { Accept: 'application/json' } });
+            // SÓ o 404 é resposta definitiva ("processo não exposto"). Qualquer outro
+            // status — 429 sobretudo — é transitório e precisa de nova tentativa:
+            // tratá-lo como vazio foi o que fez 935 matérias perderem o tema numa
+            // execução (ao vivo, 24 de 25 delas respondem 200 COM classificação).
+            if (res.status === 404) { cache[cod] = null; ok = true; break; }
+            if (!res.ok) throw new Error(`${res.status}`);
+            const j = JSON.parse(await res.text());
+            const p = Array.isArray(j) ? j[0] : j;
+            const cls = (p?.classificacoes ?? []).map((c) => c.descricaoHierarquia ?? c.descricao ?? '');
+            if (cls.length) { cache[cod] = cls; ok = true; break; }
+            vazio = true; // pode ser real — mas só depois de insistir
+            if (t < 4) await sleep(900 * t);
+          } catch { await sleep(1200 * t); }
+        }
+        // 4 respostas vazias seguidas: aceita como vazio de verdade e MARCA (null),
+        // para a próxima execução não repetir as 4 chamadas
+        if (!ok && vazio) { cache[cod] = null; vaziosConfirmados++; ok = true; }
+        if (!ok) { erros++; continue; } // NÃO grava vazio: vazio = tema apagado em silêncio
+        if (++feitos % 500 === 0) { gravar(); console.log(`  [classif-sen] ${feitos}/${alvos.length}`); }
+      }
+    }));
+    gravar();
+    if (erros) {
+      throw new Error(`[classif-sen] ${erros} matérias não responderam após 4 tentativas. `
+        + `Seguir gravaria tema de menos em silêncio — rode de novo, o cache retoma de onde parou.`);
+    }
+    if (vaziosConfirmados) console.log(`[classif-sen] ${vaziosConfirmados} matérias seguem sem classificação após 4 tentativas (aceitas como não classificadas)`);
+  }
+  const naoMapeadas = new Map();
+  const porMateria = new Map();
+  for (const cod of codigos) {
+    const rotulos = new Set();
+    for (const h of cache[cod] ?? []) { // `null` (vazio confirmado) cai aqui como []
+      const r = deClasseSenado(h);
+      if (r === OUTROS && h.trim()) naoMapeadas.set(h, (naoMapeadas.get(h) ?? 0) + 1);
+      rotulos.add(r);
+    }
+    porMateria.set(cod, rotulos);
+  }
+  const comTema = [...porMateria.values()].filter((s) => s.size).length;
+  console.log(`[classif-sen] ${comTema} de ${codigos.length} matérias classificadas (${Math.round(comTema / Math.max(codigos.length, 1) * 100)}%)`);
+  if (naoMapeadas.size) {
+    console.log(`⚠️ [classif-sen] classe do Senado NÃO mapeada (caiu em "${OUTROS}") — declare em scripts/lib/temas.mjs:`);
+    for (const [h, n] of [...naoMapeadas].sort((a, b) => b[1] - a[1])) console.log(`   ${n}× ${h}`);
+  }
+  return porMateria;
 }
 
 async function fetchSenado(socialMap) {
-  const situacaoPorMateria = await fetchProcessosSenado();
+  const { situacaoPorMateria, idPorMateria } = await fetchProcessosSenado();
   const lista = await senadoJson('senado-lista.json', 'https://legis.senado.leg.br/dadosabertos/senador/lista/atual.json');
   const parls = asArray(lista.ListaParlamentarEmExercicio.Parlamentares.Parlamentar)
     .map((p) => p.IdentificacaoParlamentar)
@@ -875,13 +1106,22 @@ async function fetchSenado(socialMap) {
   const porSenador = [];
   for (const s of parls) {
     const [aut, vot, rel, det, com, car, man] = await Promise.all([
-      senadoJson(`sen-${s.id}-autorias.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/autorias.json`),
-      senadoJson(`sen-${s.id}-votacoes.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/votacoes.json`),
-      senadoJson(`sen-${s.id}-relatorias.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/relatorias.json`),
-      senadoJson(`sen-${s.id}-detalhe.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}.json`),
-      senadoJson(`sen-${s.id}-comissoes.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/comissoes.json`),
+      // o predicado é o que separa "não tem" de "a API não respondeu" — ver senadoJson
+      senadoJson(`sen-${s.id}-autorias.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/autorias.json`,
+        (j) => !!j?.MateriasAutoriaParlamentar?.Parlamentar?.Autorias),
+      senadoJson(`sen-${s.id}-votacoes.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/votacoes.json`,
+        (j) => !!j?.VotacaoParlamentar?.Parlamentar?.Votacoes),
+      senadoJson(`sen-${s.id}-relatorias.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/relatorias.json`,
+        (j) => !!j?.MateriasRelatoriaParlamentar?.Parlamentar?.Relatorias),
+      senadoJson(`sen-${s.id}-detalhe.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}.json`,
+        (j) => !!j?.DetalheParlamentar?.Parlamentar?.IdentificacaoParlamentar),
+      senadoJson(`sen-${s.id}-comissoes.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/comissoes.json`,
+        (j) => !!j?.MembroComissaoParlamentar?.Parlamentar?.MembroComissoes),
+      // cargos: senador sem NENHUM cargo é comum e legítimo, então um envelope vazio
+      // aqui não é sintoma — sem predicado, sem 4 chamadas inúteis por senador
       senadoJson(`sen-${s.id}-cargos.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/cargos.json`),
-      senadoJson(`sen-${s.id}-mandatos.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/mandatos.json`),
+      senadoJson(`sen-${s.id}-mandatos.json`, `https://legis.senado.leg.br/dadosabertos/senador/${s.id}/mandatos.json`,
+        (j) => !!j?.MandatoParlamentar?.Parlamentar?.Mandatos),
     ]);
 
     // ficha civil + comissões atuais (GP* = grupos de amizade, fora da conta)
@@ -994,6 +1234,9 @@ async function fetchSenado(socialMap) {
     if (gasto === null) semCeaps.push(s.nome);
 
     porSenador.push({ ...s, props: autorias.length, propsAno, votos, nVotacoes: votacoes.length, relatorias,
+      // códigos das autorias — a classificação temática é buscada em LOTE depois do
+      // laço (uma chamada por matéria dentro dele seria serial por senador)
+      autoriaCodigos: autorias.map((m) => String(m.Codigo)),
       sabatinas, votacoesAbertas, compareceuN,
       avancadas, aprovadas, relatoriasPrinc: relatoriasPrinc.length, relatoriasAvancadas,
       gasto: gasto ?? 0, cotaResumo: resolveCota(s.nome, nomeCivil),
@@ -1004,8 +1247,21 @@ async function fetchSenado(socialMap) {
   // sem lançamento no CEAPS = R$ 0. É factual (há quem renuncie à cota), mas também
   // é o sintoma de um match nominal quebrado — confira a lista a cada ingestão.
   if (semCeaps.length) console.log(`[ceaps-sen] sem lançamentos (gasto 0): ${semCeaps.join(', ')}`);
+
+  // prioridades: classificação temática de TODAS as autorias da casa, em lote
+  const codigosAutoria = [...new Set(porSenador.flatMap((r) => r.autoriaCodigos))];
+  const classifPorMateria = await fetchClassificacoesSenado(codigosAutoria, idPorMateria);
+  for (const r of porSenador) {
+    r.temasPorProposicao = r.autoriaCodigos.map((c) => [...(classifPorMateria.get(c) ?? [])]);
+  }
+
   const totalVotacoesSen = totalSessoesVot.size;
   console.log(`[senado] ${totalVotacoesSen} votações nominais distintas no período`);
+  // Vazio que sobreviveu a 4 tentativas: pode ser real (senador recém-empossado) ou
+  // a API insistindo no envelope vazio. Confira à mão — é dado de atributo em jogo.
+  if (envelopesVazios.size) {
+    console.log(`[senado] ⚠️  ${envelopesVazios.size} respostas seguiram SEM o nó de dados após 4 tentativas: ${[...envelopesVazios.keys()].join(', ')} — confira se o parlamentar realmente não tem esse dado`);
+  }
   // Código novo classificado por prosa é ausência virando presença em silêncio.
   if (votosDesconhecidos.size) {
     const lista = [...votosDesconhecidos].map(([s, n]) => `${s} (${n}x)`).join(', ');
@@ -1117,6 +1373,7 @@ async function fetchSenado(socialMap) {
       mandatoParcial: r.mandatoParcial, // < 12 meses em exercício → fora do ranking
       mesesExercicio: r.mesesExercicio,
       producaoAnual: YEARS.map((y) => r.propsAno[y] ?? 0),
+      temasProps: r.temasPorProposicao ?? [], // consumido e removido no cálculo das prioridades
       sabatinas: r.sabatinas,              // presença nas votações de autoridades (art. 52)
       votacoesAbertas: r.votacoesAbertas,  // presença nas demais votações nominais
       compareceuN: r.compareceuN,          // esteve no plenário (inclui o P-NRV)
@@ -1258,7 +1515,8 @@ const partidoNomes = await fetchPartidos();
 const { votesByDep, totalVotacoes, votacaoData, votoPorDep } = await fetchVotos();
 const orientacaoGov = await fetchOrientacoesGoverno();
 const { statusById, relatoriasByDep, relatoriasAvancadasByDep, emendaIds, fiscalIds } = await fetchStatusProposicoes();
-const { propsByDep, emendasByDep, fiscalByDep } = await fetchProposicoes(statusById, emendaIds, fiscalIds);
+const temasPorProp = await fetchTemasCamara();
+const { propsByDep, emendasByDep, fiscalByDep, temasByDep } = await fetchProposicoes(statusById, emendaIds, fiscalIds, temasPorProp);
 const { gastoByDep, catByDep, fornByDep } = await fetchCeap(deputados);
 
 console.log(`[base] ${deputados.length} deputados atuais · ${totalVotacoes} votações nominais no período`);
@@ -1347,6 +1605,7 @@ const raw = deputados.map((d) => {
   aprovadas: propsByDep.get(d.id)?.aprovadas ?? 0,
   avancadas: propsByDep.get(d.id)?.avancadas ?? 0,
   propsAno: propsByDep.get(d.id)?.porAno ?? {},
+  temasProps: temasByDep.get(d.id) ?? [], // rótulos de cada proposição de autoria
   relatorias: relatoriasByDep.get(d.id) ?? 0,
   relatoriasAvancadas: relatoriasAvancadasByDep.get(d.id) ?? 0,
   emendas: emendasByDep.get(d.id) ?? 0,
@@ -1468,6 +1727,7 @@ const full = raw.map((r) => {
     relatoriasN: r.relatorias,
     relatoriasAvancadasN: r.relatoriasAvancadas, // p/ títulos de relatoria (só Câmara)
     producaoAnual: YEARS.map((y) => r.propsAno[y] ?? 0),
+    temasProps: r.temasProps ?? [], // consumido e removido no cálculo das prioridades
     // valor bruto numérico por atributo (base dos rankings "quem tem mais X")
     statRaw: {
       ataque: r.props, stamina: r.votos, eficiencia: eficAndou(r), tecnica: tecnicaBruta(r),
@@ -1591,6 +1851,32 @@ for (const p of full) {
 // ---------- Senado: merge ----------
 const { senadores, normasSenado, fornPorSenador } = await fetchSenado(social);
 full.push(...senadores);
+
+// ---------- PRIORIDADES: no que cada parlamentar trabalha (informativo) ----------
+// Universo = autoria principal de PL/PLP/PEC/PDL, o mesmo do Ataque: é a pauta que o
+// parlamentar ESCOLHEU. Relatoria fica de fora de propósito — ela é designação da mesa
+// ou da comissão, então entraria como "prioridade" uma pauta que lhe foi imposta.
+//
+// NÃO PONTUA: não entra no Poder, não gera Tier, não gera gate e não gera título. Um
+// selo "Deputado da Saúde" seria rótulo sobre pauta política — o mesmo erro que tirou a
+// Fiscalização do Poder. Aqui só se descreve.
+for (const p of full) {
+  const { temas, nComTema, nSemTema, pares } = contarTemas(p.temasProps ?? []);
+  delete p.temasProps; // dado de trabalho — não vai para o JSON público
+  if (!nComTema) continue;
+  p.prioridades = {
+    temas, nComTema, nSemTema,
+    // média de temas por proposição DESTE parlamentar: é o número que explica ao
+    // leitor por que a coluna de percentuais não soma 100%
+    temasPorProposicao: Number((pares / nComTema).toFixed(2)),
+    ...(destaqueDoCard(temas, nComTema) ? { destaque: destaqueDoCard(temas, nComTema) } : {}),
+  };
+}
+{
+  const com = full.filter((p) => p.prioridades);
+  const semTema = full.reduce((s, p) => s + (p.prioridades?.nSemTema ?? 0), 0);
+  console.log(`[prioridades] ${com.length} de ${full.length} parlamentares com tema · ${semTema} proposições sem classificação na fonte · ${com.filter((p) => p.prioridades.destaque).length} com faixa no card`);
+}
 
 // Licenciados: NÃO entram em `full` — não têm atividade publicada para medir, e um
 // parlamentar sem dado no ranking seria pior que ausente. Saem em arquivo próprio,
@@ -1725,6 +2011,24 @@ const siglas = [...new Set(full.map((p) => p.partido))].sort();
 const GUILDS = siglas.map((sigla) => ({
   sigla, nome: partidoNomes.get(sigla) ?? sigla, cor: corDe(sigla), espectro: null,
 }));
+
+// A análise de IA some da página quando os números mudam (o `fonteHash` deixa de
+// bater). Isso é certo para o leitor e péssimo para quem mantém: sem este log,
+// ninguém descobre que a guilda perdeu o parágrafo. Ver scripts/lib/analises.mjs.
+{
+  const fileAnalises = join(OUT_DATA, 'analises.json');
+  const analises = existsSync(fileAnalises) ? JSON.parse(readFileSync(fileAnalises, 'utf8')) : [];
+  if (analises.length) {
+    const hashAtual = new Map([[alvoNacional(), fonteHash(agregarPrioridades(full))]]);
+    for (const g of GUILDS) {
+      hashAtual.set(alvoGuilda(g.sigla), fonteHash(agregarPrioridades(full.filter((p) => p.partido === g.sigla))));
+    }
+    const { obsoletas, orfas } = contarObsoletas(analises, hashAtual);
+    console.log(`[analises] ${analises.length} análises no arquivo · ${obsoletas} OBSOLETAS (os números mudaram — não serão exibidas até refazer) · ${orfas} órfãs (alvo não existe mais)`);
+  } else {
+    console.log('[analises] data/analises.json vazio — as páginas mostram só as barras factuais');
+  }
+}
 
 const TIERS = ['S', 'A', 'B', 'C', 'D', 'F'];
 const guildRanking = GUILDS.map((g) => {
@@ -2000,8 +2304,21 @@ const meta = {
     senado: pesosNormalizados('senado'),
   },
   statsInformativos: ['influencia', 'comando', 'fiscalizacao', 'alinhamento'], // exibidos mas NÃO pontuam no Poder
+  /** vocabulário comum das prioridades — a UI nunca hardcoda a lista de temas */
+  temas: {
+    vocabulario: TEMAS,
+    outros: OUTROS,
+    // média de temas por proposição no Congresso — é o número que explica ao leitor
+    // por que a coluna de percentuais não soma 100%
+    porProposicao: (() => {
+      const com = full.filter((p) => p.prioridades);
+      const pares = com.reduce((s, p) => s + p.prioridades.temas.reduce((t, x) => t + x.n, 0), 0);
+      const n = com.reduce((s, p) => s + p.prioridades.nComTema, 0);
+      return n ? Number((pares / n).toFixed(2)) : 0;
+    })(),
+  },
   titulosDisponiveis: true,
-  aviso: 'Dados reais da Câmara e do Senado: Ataque (autorias PL/PLP/PEC/PDL), Stamina (taxa de VOTO REGISTRADO nas votações nominais do mandato — abstenção conta, presença sem voto não; no Senado, incluídas as sabatinas de autoridades do art. 52), Eficiência (matérias que o parlamentar tocou, por autoria ou relatoria, e que AVANÇARAM na tramitação em vez de morrer na gaveta da comissão — nas duas casas), Técnica (relatorias e emendas — trabalho técnico sobre o texto alheio; o Senado só conta relatorias) e Economia (gasto MENSAL médio da cota CEAP/CEAPS durante os meses em exercício — comparar totais faria quem assumiu tarde parecer frugal por ter estado menos tempo sentado). Fiscalização = requerimentos de informação a ministro, convocações de ministro e propostas de fiscalização e controle (PFC) de autoria (só Câmara): é INFORMATIVA e NÃO pontua no Poder — fiscalizar o Executivo é, na prática, fazer oposição a ele (a oposição protocola em média 192 atos por deputado; a base do governo, 20), então pontuá-la seria premiar posição política travestida de entrega. Influência = seguidores no Instagram (contagem pública dos handles oficiais declarados à Câmara): é INFORMATIVA — aparece no card e nos títulos, mas NÃO pontua no Poder (alcance social não é entrega legislativa). Alinhamento = % de votos coincidentes com a orientação da bancada do Governo (só Câmara): é INFORMATIVO e NÃO pontua no Poder — posição política não é mérito nem demérito. Presidentes da Casa (que não votam/autoram como os demais por dever institucional) ficam fora do ranking, como os de mandato parcial. Títulos são 100% factuais.',
+  aviso: 'Dados reais da Câmara e do Senado: Ataque (autorias PL/PLP/PEC/PDL), Stamina (taxa de VOTO REGISTRADO nas votações nominais do mandato — abstenção conta, presença sem voto não; no Senado, incluídas as sabatinas de autoridades do art. 52), Eficiência (matérias que o parlamentar tocou, por autoria ou relatoria, e que AVANÇARAM na tramitação em vez de morrer na gaveta da comissão — nas duas casas), Técnica (relatorias e emendas — trabalho técnico sobre o texto alheio; o Senado só conta relatorias) e Economia (gasto MENSAL médio da cota CEAP/CEAPS durante os meses em exercício — comparar totais faria quem assumiu tarde parecer frugal por ter estado menos tempo sentado). Fiscalização = requerimentos de informação a ministro, convocações de ministro e propostas de fiscalização e controle (PFC) de autoria (só Câmara): é INFORMATIVA e NÃO pontua no Poder — fiscalizar o Executivo é, na prática, fazer oposição a ele (a oposição protocola em média 192 atos por deputado; a base do governo, 20), então pontuá-la seria premiar posição política travestida de entrega. Influência = seguidores no Instagram (contagem pública dos handles oficiais declarados à Câmara): é INFORMATIVA — aparece no card e nos títulos, mas NÃO pontua no Poder (alcance social não é entrega legislativa). Alinhamento = % de votos coincidentes com a orientação da bancada do Governo (só Câmara): é INFORMATIVO e NÃO pontua no Poder — posição política não é mérito nem demérito. Presidentes da Casa (que não votam/autoram como os demais por dever institucional) ficam fora do ranking, como os de mandato parcial. Títulos são 100% factuais. Prioridades = classificação temática OFICIAL das proposições de autoria (temas da Câmara e classificações do Senado, normalizados num vocabulário comum): é INFORMATIVA e NÃO pontua no Poder nem gera título — descreve em que o parlamentar trabalha, sem julgar o assunto. Uma proposição pode ter mais de um tema, então os percentuais não somam 100%.',
 };
 
 writeFileSync(join(OUT_DATA, 'politicians.json'), JSON.stringify(full));

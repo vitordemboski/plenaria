@@ -26,6 +26,9 @@ export default function MethodologyPage() {
   // "A, B e C" em vez de "A e B e C" quando há mais de dois informativos.
   const joinPt = (items: string[]) =>
     items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`;
+  // vocabulário das prioridades sai do meta.json (o gerador o emite) — hardcodar a
+  // lista aqui a faria divergir do mapa em silêncio no dia em que ele mudar
+  const vocabTemas = meta.temas?.vocabulario ?? [];
   const formula = statsQuePontuam
     .map((s) => `${(s.weight / 100).toFixed(2)}×${s.label}`)
     .join(' + ');
@@ -255,8 +258,48 @@ export default function MethodologyPage() {
         </div>
       </div>
 
+      <div className="panel detail-block" id="prioridades">
+        <h3>5. Prioridades — &ldquo;no que trabalha&rdquo;</h3>
+        <p>
+          As duas casas publicam a <span className="key">classificação temática oficial</span> de cada
+          proposição: a Câmara com 32 temas em lista plana, o Senado com uma hierarquia de 10 macro-classes
+          e 63 classes. Nós não classificamos nada — apenas <b>traduzimos os dois vocabulários oficiais</b>{' '}
+          para os {vocabTemas.length} rótulos comuns abaixo, para que uma guilda de bancada mista some uma
+          coisa só. Esse mapa é decisão nossa, e por isso está publicado aqui e no repositório
+          (<code>scripts/lib/temas.mjs</code>).
+        </p>
+        <div className="legend-list">
+          <div><b>Universo</b> — proposições de <span className="key">autoria principal</span> (PL, PLP, PEC, PDL),
+            o mesmo recorte do Ataque. Relatoria fica de fora de propósito: ela é designação da mesa ou da
+            comissão, então entraria como &ldquo;prioridade&rdquo; uma pauta que não foi escolhida.</div>
+          <div><b>Contagem</b> — uma proposição com 3 temas conta <span className="key">inteira nos 3</span>.
+            Cada linha é uma afirmação independente (&ldquo;41 das 120 proposições tocam Saúde&rdquo;) e, por
+            isso, <b>os percentuais não somam 100%</b> — no Congresso, uma proposição trata de{' '}
+            {(meta.temas?.porProposicao ?? 0).toFixed(1).replace('.', ',')} temas em média. A alternativa
+            (dar 1/3 a cada tema) somaria 100%, mas embutiria a suposição de que os três pesam igual, o que
+            é ponderação nossa e não dado da fonte.</div>
+          <div><b>Assinatura da guilda</b> — a distância, em pontos percentuais, entre a bancada e a média
+            das duas casas. Existe porque o ranking absoluto por guilda é quase idêntico entre elas: todas
+            refletem o que o Congresso inteiro legisla.</div>
+          <div><b>Não pontua</b> — prioridade <span className="key">não entra no Poder</span>, não muda o
+            Tier e <b>não gera título</b>. Um selo &ldquo;Deputado da Saúde&rdquo; seria rótulo sobre pauta
+            política, o mesmo motivo pelo qual a Fiscalização é informativa. E nenhuma cor julga o assunto:
+            legislar sobre Defesa não é melhor nem pior que legislar sobre Saúde.</div>
+          <div><b>Vocabulário comum</b> — {vocabTemas.join(' · ')}. Tema que a fonte publicar e este mapa
+            ainda não conhecer aparece como &ldquo;{meta.temas?.outros ?? 'Outros temas'}&rdquo; em vez de
+            sumir da barra.</div>
+        </div>
+        <p>
+          Onde houver um <span className="key">parágrafo escrito por IA</span>, ele vem marcado como tal, com
+          o modelo, a data e o link para o prompt no repositório. Esse texto é interpretativo e fica
+          deliberadamente separado: os números ao lado são a classificação oficial, e o prompt proíbe a IA de
+          citar qualquer quantidade que não esteja na tabela. Se os números mudarem, o texto some da página
+          até ser refeito — análise velha nunca é exibida ao lado de dado novo.
+        </p>
+      </div>
+
       <div className="panel detail-block">
-        <h3>5. De onde vêm os dados</h3>
+        <h3>6. De onde vêm os dados</h3>
         <p>
           <span className="key">Dados reais</span>, atualizados em {meta.updatedAt}. Fontes:
           Dados Abertos da <span className="key">Câmara</span> (autorias, votos nominais, normas geradas,
@@ -269,7 +312,7 @@ export default function MethodologyPage() {
       </div>
 
       <div className="panel detail-block">
-        <h3>6. Auditar por conta própria</h3>
+        <h3>7. Auditar por conta própria</h3>
         <p>
           Nada nesta página é uma promessa que só nós podemos verificar: o{' '}
           <span className="key">código é aberto</span>, sob licença MIT, em{' '}

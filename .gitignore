@@ -7,6 +7,10 @@ next-env.d.ts
 
 # dados gerados (reproduzíveis via `npm run data` / `npm run data:real`)
 data/*.json
+# EXCEÇÃO: as análises escritas por IA NÃO são reproduzíveis pelo pipeline — elas
+# custam geração e revisão humana, e o `data:real` só as LÊ (para logar quantas
+# ficaram obsoletas). Perder este arquivo é perder trabalho, como o social.csv.
+!data/analises.json
 public/data/*.json
 # fotos oficiais baixadas dos portais (reproduzíveis via `npm run fotos`, ~10MB)
 public/fotos/

@@ -6,6 +6,8 @@ import { Licenciados } from '@/components/Licenciados';
 import { FutStat } from '@/components/FutStat';
 import { GuildCrest } from '@/components/GuildCrest';
 import { PoliticianLink } from '@/components/PoliticianLink';
+import { Prioridades, AssinaturaDaGuilda, AnaliseIA } from '@/components/Prioridades';
+import { prioridadesDaGuilda, analiseDaGuilda } from '@/lib/prioridades';
 import { ShareButton } from '@/components/ShareButton';
 import { TitleBadge } from '@/components/TitleBadge';
 import { JsonLd } from '@/components/JsonLd';
@@ -78,6 +80,10 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
   // mesmos membros — média por parlamentar nas contagens, soma/soma nas taxas.
   // Mesmo módulo que o card OG usa, para as duas peças nunca divergirem.
   const bruto = brutoDaGuilda(members) as Partial<Record<StatKey, string>>;
+  // prioridades somam a bancada INTEIRA, inclusive quem está fora do ranking: aqui
+  // ninguém é comparado com ninguém — descreve-se o que a bancada apresentou, e a
+  // conta é soma÷soma, então quem apresentou pouco pesa pouco por construção.
+  const prio = prioridadesDaGuilda(guild.sigla);
   const opsMedio = opsMedioDe(guild.sigla);
   const tier = guildTierOf(opsMedio);
   const pesoDe = (k: string) => Math.round(((meta.pesos as Record<string, number>)[k] ?? 0) * 100);
@@ -258,6 +264,18 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
             )}
           </div>
         </div>
+
+        {/* Assinatura ANTES do perfil: sozinho, o perfil absoluto não distingue
+            bancada nenhuma (Administração Pública e Direitos Humanos dominam quase
+            todas, porque dominam o Congresso). O desvio é o que informa; o perfil
+            logo abaixo é o que impede o desvio de ser lido fora de escala. */}
+        <AssinaturaDaGuilda linhas={prio.assinatura} sigla={guild.sigla} />
+        <Prioridades
+          agregado={prio.agregado}
+          titulo="🗂️ No que a bancada trabalha"
+          sub={`${prio.agregado.nComTema} proposições de autoria dos ${prio.agregado.nParlamentares} parlamentares da bancada, por tema oficial`}
+        />
+        <AnaliseIA analise={analiseDaGuilda(guild.sigla, prio.agregado)} />
 
         <div className="panel">
           <h3>🏰 Composição por tier</h3>

@@ -53,6 +53,31 @@ export interface Politician {
   seguidores: number;
   /** proposições relevantes (PL/PLP/PEC/PDL) apresentadas por ano, 2023..2026 */
   producaoAnual: number[];
+  /**
+   * "No que trabalha" — classificação temática OFICIAL das proposições de autoria
+   * principal (temas da Câmara / classificações do Senado, normalizados em
+   * `scripts/lib/temas.mjs`). Ausente para quem não tem nenhuma autoria classificada.
+   *
+   * INFORMATIVO: não pontua no Poder, não gera Tier e NÃO gera título — um selo
+   * "Deputado da Saúde" seria rótulo sobre pauta política, o mesmo motivo pelo qual
+   * a Fiscalização não pontua.
+   *
+   * CONTAGEM CHEIA: uma proposição com 3 temas conta inteira nos 3, então
+   * `sum(temas.n) > nComTema` e os percentuais NÃO somam 100% — cada linha é uma
+   * afirmação independente ("41 das 120 proposições dele tocam Saúde").
+   */
+  prioridades?: {
+    temas: { tema: string; n: number }[];
+    /** proposições de autoria COM tema — o denominador de toda linha */
+    nComTema: number;
+    /** proposições de autoria SEM classificação na fonte (contadas, nunca escondidas) */
+    nSemTema: number;
+    /** temas por proposição deste parlamentar — explica por que não soma 100% */
+    temasPorProposicao: number;
+    /** tema do topo, para a faixa do card. Só existe acima do piso de proposições:
+     *  "1 de 2 = 50% Saúde" seria prioridade nascida de ruído. */
+    destaque?: { tema: string; n: number; de: number; pct: number };
+  };
   /** Senado: votos registrados nas votações de autoridades (sabatina, art. 52) e nas
    *  demais. A Stamina soma as duas — a quebra alimenta o painel "A Sabatina". */
   sabatinas?: { presencas: number; total: number };
@@ -151,8 +176,41 @@ export interface DataMeta {
   /** atributos exibidos mas que NÃO pontuam no Poder (Influência, Comando,
    *  Fiscalização, Alinhamento — medem projeção ou posição, não entrega) */
   statsInformativos?: StatKey[];
+  /** vocabulário comum das prioridades — a UI nunca hardcoda a lista de temas */
+  temas?: {
+    vocabulario: string[];
+    /** rótulo de escape: tema que a fonte publicou e o mapa ainda não conhece */
+    outros: string;
+    /** média de temas por proposição no Congresso (a razão de não somar 100%) */
+    porProposicao: number;
+  };
   titulosDisponiveis: boolean;
   aviso: string | null;
+}
+
+/**
+ * data/analises.json — a camada de leitura GERADA POR IA sobre as prioridades.
+ *
+ * Os números nunca vêm daqui: eles saem da classificação oficial das duas casas.
+ * A IA lê as ementas e os rótulos e escreve um parágrafo; o prompt proíbe citar
+ * qualquer quantidade que não esteja na tabela ao lado.
+ *
+ * `fonteHash` é o que impede a falha silenciosa da feature: se ele não bater com
+ * o hash dos números atuais (`fonteHash()` em scripts/lib/analises.mjs), a UI não
+ * renderiza o texto. Análise obsoleta some em vez de descrever outro dado.
+ */
+export interface Analise {
+  /** 'nacional' | `guilda:${sigla}` | `parlamentar:${slug}` */
+  alvo: string;
+  texto: string;
+  /** modelo que escreveu — exibido ao lado do texto, junto da data */
+  modelo: string;
+  geradoEm: string;
+  /** versão do prompt, versionado em docs/prompts/ e linkado na página */
+  promptVersao: string;
+  fonteHash: string;
+  /** quem revisou antes de publicar (a revisão humana é o ponto do volume pequeno) */
+  revisadoPor?: string;
 }
 
 export interface TitleDef {

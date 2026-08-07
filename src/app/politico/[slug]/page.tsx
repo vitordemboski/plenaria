@@ -4,6 +4,7 @@ import { politicians, getPolitician, getTitle, getGuild, SCORING_STAT_META, INFO
 import { FutStat } from '@/components/FutStat';
 import { CotaBreakdown } from '@/components/CotaBreakdown';
 import { GuildCrest } from '@/components/GuildCrest';
+import { Prioridades } from '@/components/Prioridades';
 import { ReadingDisclaimer } from '@/components/ReadingDisclaimer';
 import { ShareButton } from '@/components/ShareButton';
 import { TitleBadge } from '@/components/TitleBadge';
@@ -87,6 +88,9 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
   const mesesTxt = meses != null ? `${meses} ${meses === 1 ? 'mês' : 'meses'} em exercício` : 'exercício parcial';
   const motivoFora = !fora ? undefined
     : p.presidenteCasa ? 'presidência da Casa nesta legislatura' : `mandato parcial · ${mesesTxt}`;
+  // faixa temática do card: só existe acima do piso de proposições (ver
+  // destaqueDoCard em scripts/lib/temas.mjs) — "1 de 2 = 50% Saúde" não é prioridade
+  const destaque = p.prioridades?.destaque;
 
   return (
     <main className="carta-stage">
@@ -148,12 +152,24 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
               {/* faixa: o estado "fora do ranking" tem que ser legível de longe. Sem
                   ela, a carta só se distingue por um traço no lugar do Poder — e uma
                   ausência não se lê como decisão editorial, se lê como dado faltando. */}
-              {fora && (
+              {fora ? (
                 <div className="futc-faixa">
                   {p.presidenteCasa ? 'Presidência na legislatura'
                     : `Mandato parcial${meses != null ? ` · ${meses} ${meses === 1 ? 'mês' : 'meses'}` : ''}`}
                 </div>
-              )}
+              ) : destaque ? (
+                // Mesma faixa, outro estado: quem está fora do ranking não tem
+                // prioridade para mostrar, então as duas nunca disputam o espaço.
+                // O nº bruto vai junto do rótulo e NUNCA é truncado (só o tema
+                // encolhe): sozinho, "Saúde" seria um selo temático sem denominador.
+                <div
+                  className="futc-faixa futc-faixa-tema"
+                  title={`Tema mais frequente nas proposições de autoria: ${destaque.tema} — ${destaque.n} de ${destaque.de} (${destaque.pct}%). Classificação oficial da ${casaLabel(p.casa)}; informativa, não pontua no Poder.`}
+                >
+                  <b>{destaque.tema}</b>
+                  <span>{destaque.n} de {destaque.de}</span>
+                </div>
+              ) : null}
 
               <div
                 className="futc-stats"
@@ -314,6 +330,18 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
             })}
           </div>
         </div>
+      )}
+
+      {/* "no que trabalha" fica logo depois de "quanto produz": a produção anual diz o
+          VOLUME, esta seção diz o ASSUNTO — separá-las por outros painéis quebraria a
+          leitura. Informativa: não pontua no Poder nem gera título. */}
+      {p.prioridades && (
+        <Prioridades
+          agregado={p.prioridades}
+          // "da Câmara dos Deputados" × "do Senado Federal": mesmo idioma dos tooltips
+          // de atributo, que já resolvem o artigo pelo `p.casa`
+          sub={`${p.prioridades.nComTema} proposições de autoria principal com tema oficial — classificação ${p.casa === 'camara' ? 'da' : 'do'} ${casaLabel(p.casa)}`}
+        />
       )}
 
       {p.producaoAnual.some((v) => v > 0) && (

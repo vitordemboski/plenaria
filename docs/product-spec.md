@@ -322,6 +322,10 @@ Ver mockup: [`mockups/plenaria-mockup.html`](../mockups/plenaria-mockup.html) (a
   pessoa jurídica, ou CPF) e o **painel de concentração é obrigatório junto** — a maior
   empresa fica com ~1,3% de ~43 mil CNPJs, e sem essa leitura um top 15 solto sugere
   captura, o oposto do que o dado mostra.
+- 🗂️ Prioridades — em que o Congresso legisla, por casa, e a **assinatura** de cada
+  guilda (ver §10). O ranking absoluto por guilda seria inútil e não óbvio que é:
+  medido na legislatura, "Administração Pública" e/ou "Direitos Humanos e Minorias"
+  aparecem no top-3 de 7 dos 8 maiores partidos, porque dominam o Congresso inteiro.
 - 🌱 Renovação & Idade — estreantes × veteranos e distribuição etária.
 - ⚥ Representatividade de Gênero.
 - 🏛️ Alinhamento × Fiscalização — scatter (só Câmara), com "Os Dissidentes" (quem mais
@@ -385,3 +389,84 @@ indistinguível de falha de match com a base, então não vale como "o mais frug
    renúncias — chamar isso de "licença" publicaria que um parlamentar morto está temporariamente
    afastado; (c) causa desconhecida é **logada e tratada como não-licença**: omitir um nome é o
    status quo, afirmar errado não. Cache volátil — licença termina.
+
+---
+
+## 10. Prioridades — "no que este parlamentar trabalha"
+
+Descreve o **assunto** da produção legislativa, ao lado do que os atributos já medem
+(volume, aproveitamento, presença, gasto). É **informativa**: não pontua no Poder, não
+muda o Tier e **não gera título**.
+
+### Fonte: classificação oficial das duas casas, não IA
+
+As duas casas publicam a própria classificação temática, e é dela que sai todo número:
+
+| Casa | Fonte | Vocabulário |
+|---|---|---|
+| Câmara | bulk `proposicoesTemas-{ano}.csv` | 32 temas, lista plana |
+| Senado | `/processo/{id}` → `classificacoes` | hierarquia: 10 macro-classes, 63 classes de nível 2 |
+
+⚠️ **`/materia/{codigo}` do Senado é uma armadilha.** Ele tem o campo `Classificacoes` e
+responde **200 com corpo vazio** — foi descontinuado (desativação completa em
+2026-02-01) e a própria resposta aponta o substituto. Medida por ele, a cobertura do
+Senado "é" de 20%; pelo `/processo/{id}`, é de **98%**. Um endpoint morto que devolve
+200 apagaria o tema de 4 em cada 5 senadores sem erro nenhum no log.
+
+Os dois vocabulários viram **20 rótulos comuns** por uma tabela determinística e testada
+(`scripts/lib/temas.mjs`), pelo mesmo motivo e no mesmo padrão do `rotuloCategoria` da
+cota (CEAP × CEAPS): uma guilda tem bancada mista e precisa somar uma coisa só. Esse
+mapa é decisão **editorial**, não dado da fonte — por isso é publicado inteiro em
+`/como-calculamos`. Rótulo desconhecido cai em "Outros temas" **e é logado**, nunca
+dropado.
+
+### Universo e contagem
+
+- **Universo**: autoria **principal** de PL/PLP/PEC/PDL — o mesmo recorte do Ataque, e a
+  pauta que o parlamentar *escolheu*. Relatoria fica de fora: é designação da mesa ou da
+  comissão, então entraria como "prioridade" uma pauta imposta.
+- **Contagem cheia**: uma proposição com 3 temas conta **inteira nos 3**. Cada linha é
+  uma afirmação independente e literal ("41 das 120 proposições tocam Saúde"), e por
+  isso **os percentuais não somam 100%** — uma proposição trata de ~2,1 temas em média.
+  A alternativa fracionária (1/n por tema) somaria 100%, mas embutiria a suposição de
+  que os três temas de uma PEC pesam igual (ponderação nossa, não da fonte) e produziria
+  brutos como "13,7 proposições", que não existem.
+- **Agregação de bancada**: soma ÷ soma, nunca média das porcentagens individuais — a
+  mesma regra que o `guilda-bruto.mjs` já fixou.
+
+### Assinatura da guilda (o desvio, não o absoluto)
+
+O perfil absoluto **não distingue guilda nenhuma**, e isso não é óbvio até medir: em
+2025, "Administração Pública" e/ou "Direitos Humanos e Minorias" aparecem no top-3 de 7
+dos 8 maiores partidos. O que separa é o desvio da média das duas casas — PL →
+Defesa e Segurança (+5,7 p.p.), PT → Trabalho e Emprego (+8,1), MDB → Cidades (+8,6).
+
+É **comparação, não juízo**: o número nacional vai sempre ao lado, e nenhuma cor de
+bom/ruim acompanha a barra. Bancadas com menos de 5 parlamentares ficam fora — três
+proposições do mesmo assunto produziriam um desvio enorme por acidente aritmético.
+
+### Faixa no card
+
+O card exibe o tema do topo na **mesma faixa** que hoje anuncia "sem Tier" — os dois
+estados são mutuamente exclusivos, porque quem está fora do ranking não tem prioridade
+para mostrar. Duas travas: o **piso** (≥ 5 proposições, ≥ 3 no tema do topo), porque
+"1 de 2 = 50% Saúde" seria prioridade nascida de ruído; e o **bruto nunca truncado** —
+só o nome do tema encolhe, já que "Saúde" sozinho seria um selo temático sem prova.
+
+### Camada de IA — o parágrafo, nunca o número
+
+Onde houver um texto interpretativo, ele é escrito por IA, **marcado como tal** com
+modelo, data e link para o prompt versionado (`docs/prompts/prioridades-v1.md`). A IA
+**lê**; ela não classifica, não conta e o prompt a proíbe de citar qualquer quantidade
+que não esteja na tabela ao lado.
+
+A regra que sustenta a camada: cada análise carrega o **`fonteHash`** dos números que
+descreve, e a UI só a renderiza se ele bater com o hash calculado no build. Assim a
+única falha grave possível — um texto de julho publicado ao lado das barras de setembro,
+parecendo análise do dado atual — não acontece em silêncio: a análise simplesmente some,
+e o gerador loga quantas ficaram obsoletas.
+
+O escopo desta fase (guildas + panorama nacional, ~25 textos) foi escolhido para caber
+em **revisão humana integral**. Estender ao parlamentar individual são 594 parágrafos
+sobre pessoas nomeadas, impossíveis de revisar um a um — o contrato já aceita a chave
+`parlamentar:<slug>`, mas a decisão de gerá-los é separada.
