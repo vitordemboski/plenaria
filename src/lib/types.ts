@@ -7,6 +7,26 @@ export type StatKey = 'ataque' | 'stamina' | 'tecnica' | 'eficiencia' | 'influen
 
 export interface Stats extends Record<StatKey, number> {}
 
+/**
+ * Uma proposição de autoria principal que foi TRANSFORMADA EM NORMA JURÍDICA —
+ * o desfecho, não a intenção. `ref` é o nome do projeto ("PL 358/2025") e sempre
+ * existe; `norma` é o nome da lei publicada ("Lei 15.172/2025") e é o que o leitor
+ * reconhece — mas **é omitido quando a fonte não o dá**, nunca estimado (a Câmara
+ * não o publica em campo nenhum; ver scripts/lib/norma.mjs).
+ */
+export interface Lei {
+  /** identificação da PROPOSIÇÃO — "PL 358/2025" */
+  ref: string;
+  /** identificação da NORMA — "Lei 15.172/2025". Ausente = a fonte não publicou. */
+  norma?: string;
+  /** ementa oficial, cortada em limite de palavra (o link leva ao texto integral) */
+  ementa: string;
+  /** data em que virou norma, ISO. Ausente = a fonte não a expôs de forma confiável. */
+  data?: string;
+  /** página oficial da proposição na casa — a prova auditável de cada linha */
+  url: string;
+}
+
 export interface Politician {
   id: number;
   slug: string;
@@ -53,6 +73,12 @@ export interface Politician {
   seguidores: number;
   /** proposições relevantes (PL/PLP/PEC/PDL) apresentadas por ano, 2023..2026 */
   producaoAnual: number[];
+  /** nº de proposições de autoria principal que viraram norma jurídica. Alimenta o
+   *  bônus da Eficiência e o título `legislador-efetivo`. */
+  leisAprovadas: number;
+  /** as leis em si, da mais recente para a mais antiga. Ausente = nenhuma.
+   *  Mesmo recorte de tudo o mais: proposições NUMERADAS nesta legislatura. */
+  leis?: Lei[];
   /**
    * "No que trabalha" — classificação temática OFICIAL das proposições de autoria
    * principal (temas da Câmara / classificações do Senado, normalizados em
@@ -200,7 +226,7 @@ export interface DataMeta {
  * renderiza o texto. Análise obsoleta some em vez de descrever outro dado.
  */
 export interface Analise {
-  /** 'nacional' | `guilda:${sigla}` | `parlamentar:${slug}` */
+  /** 'nacional' | `guilda:${sigla}` | `parlamentar:${slug}` | `leis:*` */
   alvo: string;
   texto: string;
   /** modelo que escreveu — exibido ao lado do texto, junto da data */
@@ -208,6 +234,11 @@ export interface Analise {
   geradoEm: string;
   /** versão do prompt, versionado em docs/prompts/ e linkado na página */
   promptVersao: string;
+  /** família do prompt — o arquivo é `docs/prompts/{prompt}-{promptVersao}.md`.
+   *  Ausente = 'prioridades', a única família que existia quando o contrato nasceu.
+   *  Sem isto, uma análise de leis linkaria o prompt das prioridades, e o leitor
+   *  leria as regras erradas achando que são as que produziram o texto. */
+  prompt?: 'prioridades' | 'leis';
   fonteHash: string;
   /** quem revisou antes de publicar (a revisão humana é o ponto do volume pequeno) */
   revisadoPor?: string;
@@ -220,6 +251,28 @@ export interface TitleDef {
   regra: string;
   /** raridade derivada da fração de portadores (comum/raro/lendário) */
   raridade?: 'comum' | 'raro' | 'lendario';
+}
+
+/** perfil temático de um conjunto de NORMAS (já deduplicado por proposição) */
+export interface AgregadoLeis {
+  temas: { tema: string; n: number }[];
+  nComTema: number;
+  nSemTema: number;
+  nLeis: number;
+}
+
+/** uma linha de "o que se apresenta × o que vira lei", por tema */
+export interface LinhaComparativo {
+  tema: string;
+  /** normas neste tema */
+  n: number;
+  /** proposições apresentadas neste tema (universo deduplicado) */
+  nApresentadas: number;
+  pctAprovadas: number;
+  pctApresentadas: number;
+  /** normas ÷ apresentadas, em %. `null` abaixo do piso — "não dá para afirmar"
+   *  e "0% de aproveitamento" são coisas diferentes, e a segunda seria falsa. */
+  taxa: number | null;
 }
 
 /** pessoa slim usada nos rankings/insights */
@@ -237,7 +290,28 @@ export interface Insights {
     maisVelho: RankPessoa & { idade: number } | null;
   };
   /** leis que viraram norma (as duas casas) */
-  leis?: { total: number; legisladores: number; ranking: (RankPessoa & { n: number })[] };
+  leis?: {
+    total: number;
+    legisladores: number;
+    ranking: (RankPessoa & { n: number })[];
+    /** normas distintas creditadas a quem está em exercício — menor que a soma das
+     *  contagens individuais, porque autoria coletiva credita a mesma lei a vários */
+    distintas?: number;
+    /** perfil temático das normas (classificação OFICIAL, não IA). Contagem CHEIA:
+     *  uma lei com 3 temas conta nos 3, então os percentuais não somam 100%. */
+    temas?: AgregadoLeis;
+    /** o universo contra o qual a taxa é medida: proposições DISTINTAS de autoria
+     *  principal, o mesmo recorte deduplicado do lado das aprovadas */
+    apresentadas?: { temas: { tema: string; n: number }[]; nComTema: number };
+    /** apresentado × aprovado por tema, com a taxa de conversão */
+    comparativo?: LinhaComparativo[];
+    /** normas honoríficas: título de "Capital Nacional", data comemorativa,
+     *  Livro dos Heróis. Descritivo, não juízo — a plataforma conta, o leitor julga. */
+    simbolicas?: { n: number; exclusivas: number; total: number; pct: number };
+    /** feed das normas mais recentes, agrupadas por proposição (uma lei com dois
+     *  autores principais é UMA linha com dois nomes, nunca duas) */
+    recentes: (Lei & { autores: RankPessoa[] })[];
+  };
   /**
    * A sabatina — aprovação de autoridades (CF art. 52, III e IV), competência PRIVATIVA
    * do Senado e 58% das suas votações nominais. `faltantes` = maiores gaps NEGATIVOS

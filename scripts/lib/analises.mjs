@@ -83,3 +83,14 @@ export function contarObsoletas(analises, hashAtualPorAlvo) {
   }
   return { obsoletas, orfas };
 }
+
+/**
+ * Alvos da leitura de "o que vira lei, por tema".
+ *
+ * Chaves próprias, separadas das prioridades: são tabelas diferentes (uma conta
+ * o que se APRESENTA, a outra o que se APROVA) e um texto escrito sobre uma
+ * nunca pode aparecer ao lado da outra. O `fonteHash` já as separaria pelos
+ * números, mas a chave torna o erro impossível em vez de improvável.
+ */
+export const alvoLeisNacional = () => 'leis:nacional';
+export const alvoLeisGuilda = (sigla) => `leis:guilda:${sigla}`;

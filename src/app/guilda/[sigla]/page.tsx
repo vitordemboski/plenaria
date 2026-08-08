@@ -7,7 +7,9 @@ import { FutStat } from '@/components/FutStat';
 import { GuildCrest } from '@/components/GuildCrest';
 import { PoliticianLink } from '@/components/PoliticianLink';
 import { Prioridades, AssinaturaDaGuilda, AnaliseIA } from '@/components/Prioridades';
-import { prioridadesDaGuilda, analiseDaGuilda } from '@/lib/prioridades';
+import { prioridadesDaGuilda, analiseDaGuilda, analiseLeisDaGuilda } from '@/lib/prioridades';
+import { leisDaGuilda } from '@/lib/leis';
+import { LeisPorTema } from '@/components/Leis';
 import { ShareButton } from '@/components/ShareButton';
 import { TitleBadge } from '@/components/TitleBadge';
 import { JsonLd } from '@/components/JsonLd';
@@ -41,6 +43,10 @@ export async function generateMetadata({ params }: { params: Promise<{ sigla: st
     image: g.ogImage,
   });
 }
+
+/** teto da lista de quem emplacou: acima disso a cauda é "1 norma cada" e só
+ *  empurra o perfil temático para longe da dobra (o roster completo já está no fim) */
+const MAX_AUTORES_GUILDA = 12;
 
 /** abreviações de 3 letras, mesmas da carta de parlamentar */
 const ABBR: Record<StatKey, string> = {
@@ -84,6 +90,9 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
   // ninguém é comparado com ninguém — descreve-se o que a bancada apresentou, e a
   // conta é soma÷soma, então quem apresentou pouco pesa pouco por construção.
   const prio = prioridadesDaGuilda(guild.sigla);
+  // mesmo universo das prioridades (a bancada inteira), mas soma simples de eventos:
+  // uma lei sancionada é fato inteiro, não taxa — ver src/lib/leis.ts
+  const leis = leisDaGuilda(guild.sigla);
   const opsMedio = opsMedioDe(guild.sigla);
   const tier = guildTierOf(opsMedio);
   const pesoDe = (k: string) => Math.round(((meta.pesos as Record<string, number>)[k] ?? 0) * 100);
@@ -276,6 +285,60 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
           sub={`${prio.agregado.nComTema} proposições de autoria dos ${prio.agregado.nParlamentares} parlamentares da bancada, por tema oficial`}
         />
         <AnaliseIA analise={analiseDaGuilda(guild.sigla, prio.agregado)} />
+
+        {/* o desfecho da bancada, ao lado do "no que trabalha": aquele diz o assunto,
+            este diz o que chegou ao fim. Soma simples — não há percentil de guilda
+            aqui, e por isso o nº de membros vai na mesma frase. */}
+        {leis.total > 0 && (
+          <div className="panel">
+            <h3>📜 O que a bancada emplacou</h3>
+            <p className="sub">
+              <b>{leis.total}</b> {leis.total === 1 ? 'proposição de autoria' : 'proposições de autoria'} do{' '}
+              {guild.sigla} {leis.total === 1 ? 'virou' : 'viraram'} norma jurídica nesta legislatura —{' '}
+              {leis.autores.length} de {members.length + parciais.length} parlamentares da bancada
+              emplacaram ao menos uma
+            </p>
+            <div style={{ display: 'grid', gap: 2 }}>
+              {/* corta a cauda de "1 lei cada": numa bancada grande são dezenas de
+                  linhas idênticas que empurram o perfil temático para fora da tela
+                  — e é o perfil que responde "o que a bancada aprovou", não a lista */}
+              {leis.autores.slice(0, MAX_AUTORES_GUILDA).map((p, i) => (
+                <PoliticianLink key={p.slug} slug={p.slug} className="lrow">
+                  <span className="pos">{i + 1}</span>
+                  <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.uf}</small></span>
+                  <span />
+                  <span className="sc" style={{ color: 'var(--gold-2)' }}>{p.n}</span>
+                </PoliticianLink>
+              ))}
+            </div>
+            {leis.autores.length > MAX_AUTORES_GUILDA && (
+              <p className="lei-mais">
+                e mais {leis.autores.length - MAX_AUTORES_GUILDA} parlamentares da bancada, com{' '}
+                {leis.autores[MAX_AUTORES_GUILDA].n === 1 ? 'uma norma cada' : `até ${leis.autores[MAX_AUTORES_GUILDA].n} cada`}
+              </p>
+            )}
+            <p className="prio-nota">
+              Autoria principal do projeto de origem, no recorte desta legislatura — a mesma base do bônus
+              de Eficiência. Uma lei tem muitas mãos; esta lista credita só a assinatura registrada como
+              proponente. Abra a ficha de cada parlamentar para ver quais leis são.{' '}
+              {leis.temas.nLeis < leis.total && (
+                <>As contagens acima somam {leis.total} porque uma lei de bancada é creditada a cada
+                autor — são <b>{leis.temas.nLeis} normas distintas</b>.</>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* O QUE a bancada aprovou, não só quanto. Sem a taxa de conversão que os
+            Insights mostram: com poucas normas por tema, "50% de aproveitamento"
+            a partir de 2 leis seria ruído vendido como fato. */}
+        <LeisPorTema
+          agregado={leis.temas}
+          titulo="📊 O que a bancada aprovou, por tema"
+          sub={<>{leis.temas.nLeis} normas distintas da bancada, pela classificação temática oficial das duas casas</>}
+          limite={8}
+        />
+        <AnaliseIA analise={analiseLeisDaGuilda(guild.sigla, leis.temas)} />
 
         <div className="panel">
           <h3>🏰 Composição por tier</h3>

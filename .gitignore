@@ -12,6 +12,9 @@ data/*.json
 # ficaram obsoletas). Perder este arquivo é perder trabalho, como o social.csv.
 !data/analises.json
 public/data/*.json
+# proposições por parlamentar (~584 arquivos, ~11MB) — servidas sob demanda no clique
+# do tema; reproduzíveis por `npm run data:real`, como todo o resto de public/data/
+public/data/props/
 # fotos oficiais baixadas dos portais (reproduzíveis via `npm run fotos`, ~10MB)
 public/fotos/
 # cards de compartilhamento por parlamentar (reproduzíveis via `npm run og`, ~39MB).

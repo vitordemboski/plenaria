@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { insights, politicians, casaLabel, meta, AVAILABLE_STAT_META, foraDoRanking } from '@/lib/data';
 import type { StatKey } from '@/lib/types';
 import { ScatterChart, type ScatterPoint } from '@/components/ScatterChart';
-import { GuildRanking } from '@/components/GuildRanking';
 import { GuildSpendRanking } from '@/components/GuildSpendRanking';
 import { GastoCasas } from '@/components/GastoCasas';
 import { GastoCategorias } from '@/components/GastoCategorias';
@@ -13,7 +12,8 @@ import { InsightsTabs } from '@/components/InsightsTabs';
 import { buildMapView } from '@/lib/map-data';
 import { PoliticianLink } from '@/components/PoliticianLink';
 import { Prioridades, AnaliseIA } from '@/components/Prioridades';
-import { prioridadesNacionais, prioridadesPorCasa, assinaturasDasGuildas, analiseNacional } from '@/lib/prioridades';
+import { LeisRecentes, LeisPorTema, LeisSimbolicas } from '@/components/Leis';
+import { prioridadesNacionais, prioridadesPorCasa, assinaturasDasGuildas, analiseNacional, analiseLeis } from '@/lib/prioridades';
 import { guildSlug } from '@/lib/slug';
 
 /** R$ a partir de milhares: "R$ 1,6 mi" acima de mil, senão "R$ 740 mil" */
@@ -35,10 +35,10 @@ export const SECTION_META = [
     desc: 'A legislatura em números: distribuição de tiers, médias por casa e os extremos do Poder nas duas casas.' },
   { id: 'atributos', label: '🏅 Atributos', title: 'Atributos',
     desc: 'Quem lidera cada atributo do Poder — Ataque, Stamina, Eficiência, Técnica e Economia — na Câmara e no Senado.' },
-  { id: 'guildas', label: '🛡️ Guildas', title: 'Guildas',
-    desc: 'Ranking das guildas (partidos) por Poder médio e por gasto de cota, com a composição de tiers de cada bancada.' },
   { id: 'gastos', label: '💸 Gasto × Entrega', title: 'Gasto × Entrega',
     desc: 'O cruzamento entre gasto de cota CEAP/CEAPS e entrega legislativa, parlamentar por parlamentar e por casa.' },
+  { id: 'leis', label: '📜 Virou lei', title: 'Virou lei',
+    desc: 'O que o Congresso de fato aprovou: as proposições transformadas em norma jurídica nesta legislatura, quem as assinou e as mais recentes, com ementa e fonte oficial.' },
   { id: 'prioridades', label: '🗂️ Prioridades', title: 'Prioridades',
     desc: 'Em que o Congresso legisla — a distribuição temática oficial das proposições, por casa e a assinatura de cada guilda. Informativa: não pontua no Poder.' },
   { id: 'perfil', label: '👥 Perfil', title: 'Perfil',
@@ -72,6 +72,9 @@ export function availableSectionIds(): string[] {
       // sem classificação temática na fonte, a aba inteira não existe — em vez de
       // uma seção com título e corpo vazio, que se lê como dado faltando
       : s.id === 'prioridades' ? prioridadesNacionais.nComTema > 0
+      // mesma regra da aba de prioridades: sem nenhuma norma na fonte, a aba
+      // inteira não existe — melhor que um título com corpo vazio
+      : s.id === 'leis' ? !!insights.leis?.total
       : true))
     .map((s) => s.id);
 }
@@ -122,14 +125,6 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
         </div>
       </div>
     </>
-  );
-
-  const guildas = (
-    <div className="panel">
-      <h3>🏆 Ranking de Guildas</h3>
-      <div className="sub">Composição de membros por Tier — ordenado por nº de Rank S</div>
-      <GuildRanking ranking={guildRanking} />
-    </div>
   );
 
   // Small multiples por casa: mesma unidade (R$ mil/mês) → eixo X compartilhado, para
@@ -429,21 +424,6 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
           ))}
         </div>
       ))}
-      {/* métrica própria (proposições que viraram norma), não redundante com Top Eficiência */}
-      {leis && (
-        <div className="panel">
-          <h3>📖 Legisladores Efetivos</h3>
-          <div className="sub">{leis.legisladores} parlamentares emplacaram leis — {leis.total} proposições já viraram norma na legislatura</div>
-          {leis.ranking.map((p, i) => (
-            <PoliticianLink key={p.slug} slug={p.slug} className="lrow">
-              <span className="pos">{i + 1}</span>
-              <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.uf} · {p.partido}</small></span>
-              <span />
-              <span className="sc" style={{ color: 'var(--gold-2)' }}>{p.n}</span>
-            </PoliticianLink>
-          ))}
-        </div>
-      )}
       {/* Competência PRIVATIVA do Senado — a Câmara não tem equivalente. Só a PRESENÇA
           é lida: o voto da sabatina é secreto e a plataforma não o exibe. */}
       {sabatina && (
@@ -474,6 +454,66 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
       )}
     </div>
   );
+
+  /**
+   * "Virou lei" — a única seção que mede DESFECHO, não atividade.
+   *
+   * Os Top de atributo acima ranqueiam esforço (proposições apresentadas, matérias
+   * que andaram). Aqui só entra o que chegou ao fim: virou norma jurídica. É a
+   * métrica mais dura do site e a menos frequente — por isso ela ganha seção, em
+   * vez de um painel espremido entre os leaderboards.
+   */
+  const leisSecao = leis ? (
+    <>
+      <div className="kpis">
+        <div className="kpi">
+          <div className="k-lbl">Proposições que viraram norma</div>
+          <div className="k-val">{leis.total}</div>
+          <div className="k-sub">nas duas casas, nesta legislatura</div>
+        </div>
+        <div className="kpi">
+          <div className="k-lbl">Parlamentares que emplacaram</div>
+          <div className="k-val">{leis.legisladores}</div>
+          <div className="k-sub">de {totalParlamentares} em exercício, com autoria principal</div>
+        </div>
+      </div>
+
+      {/* O perfil temático vem ANTES do ranking de pessoas: a pergunta "o que o
+          Congresso aprova" é sobre o conteúdo, e um leaderboard de nomes no topo
+          empurraria a leitura para "quem produz mais", que é outra coisa. */}
+      {leis.temas && <LeisPorTema agregado={leis.temas} comparativo={leis.comparativo} />}
+      {leis.simbolicas && <LeisSimbolicas s={leis.simbolicas} />}
+      <AnaliseIA analise={analiseLeis(leis.temas)} />
+
+      <div className="panel">
+        <h3>📖 Legisladores Efetivos</h3>
+        <div className="sub">
+          quem mais teve proposições de autoria principal transformadas em norma — lei ordinária,
+          lei complementar, emenda constitucional ou decreto legislativo
+        </div>
+        {leis.ranking.map((p, i) => (
+          <PoliticianLink key={p.slug} slug={p.slug} className="lrow">
+            <span className="pos">{i + 1}</span>
+            <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.uf} · {p.partido}</small></span>
+            <span />
+            <span className="sc" style={{ color: 'var(--gold-2)' }}>{p.n}</span>
+          </PoliticianLink>
+        ))}
+        <p className="prio-nota">
+          O total das duas casas ({leis.total}) é maior que a soma desta lista: ele conta toda
+          proposição transformada em norma, inclusive as de autoria do Executivo, de comissões e de
+          quem não está mais em exercício. A lista credita só quem está no site hoje.
+          {leis.distintas != null && (
+            <> E <b>as contagens individuais não somam entre si</b>: são {leis.distintas} normas
+            distintas creditadas aqui, mas <b>autoria coletiva é frequente</b> — uma matéria chega a
+            ter dezenas de autores principais, e a mesma lei entra na conta de cada um.</>
+          )}
+        </p>
+      </div>
+
+      <LeisRecentes recentes={leis.recentes} />
+    </>
+  ) : null;
 
   const titulos = meta.titulosDisponiveis ? (
     <>
@@ -532,28 +572,34 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
         <div className="panel">
           <h3>🧭 A assinatura de cada guilda</h3>
           <p className="sub">
-            o tema em que cada bancada mais se afasta da média das duas casas, em pontos percentuais —
-            o ranking ABSOLUTO seria quase idêntico entre as guildas, porque todas refletem o que o
-            Congresso inteiro legisla
+            Em que assunto cada bancada legisla <b>mais que o Congresso</b> — e quanto mais. O ranking
+            ABSOLUTO não serviria: ele sairia quase idêntico entre as guildas, porque todas refletem o
+            que o Congresso inteiro legisla.
           </p>
-          {/* 4 filhos porque .lrow é grid de 4 colunas (24px 1fr auto 40px) — com
-              menos, o número cai numa coluna que não é a dele */}
+          {/* O TEMA é a resposta da seção, então é ele que fica em destaque — antes
+              o lugar de honra era do "+17,3", que é o número mais abstrato da linha
+              (a diferença entre as duas porcentagens) e vinha sem unidade. */}
           {assinaturas.map((g, i) => (
-            <Link key={g.sigla} href={`/guilda/${guildSlug(g.sigla)}/`} className="lrow">
+            <Link key={g.sigla} href={`/guilda/${guildSlug(g.sigla)}/`} className="lrow asn-row">
               <span className="pos">{i + 1}</span>
               <span className="nm">
-                <b>{g.sigla}</b>
-                <small>{g.topo.tema}</small>
+                <b>{g.topo.tema}</b>
+                {/* <span>, não <b>: `.lrow .nm b` é display:block, e a sigla em
+                    bloco jogava o resto da frase para a linha seguinte, órfã */}
+                <small>
+                  <span className="asn-sigla">{g.sigla}</span> · {Math.round(g.topo.pct)}% das
+                  proposições da bancada, contra {Math.round(g.topo.pctNacional)}% no Congresso
+                </small>
               </span>
-              <span className="badge">
-                {Math.round(g.topo.pct)}% × {Math.round(g.topo.pctNacional)}% no Congresso
-              </span>
-              <span className="sc" style={{ color: 'var(--gold-2)' }}>
-                +{g.topo.desvio.toFixed(1).replace('.', ',')}
+              <span className="asn-gap">
+                <b>+{Math.round(g.topo.desvio)}</b>
+                <small>p.p.</small>
               </span>
             </Link>
           ))}
           <p className="prio-nota">
+            <b>p.p. = pontos percentuais</b>, a diferença entre as duas porcentagens da linha (37% na
+            bancada menos 20% no Congresso = 17 p.p.). Não é a mesma coisa que &ldquo;17% a mais&rdquo;.
             Comparação, não avaliação: nenhum tema vale mais que outro. Guildas com menos de 5
             parlamentares ficam fora — numa bancada minúscula, três proposições do mesmo assunto
             produziriam um desvio enorme por acidente aritmético.
@@ -563,7 +609,8 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
     </>
   ) : null;
 
-  const nodes: Record<string, React.ReactNode> = { panorama, atributos, guildas, gastos, perfil };
+  const nodes: Record<string, React.ReactNode> = { panorama, atributos, gastos, perfil };
+  if (leisSecao) nodes.leis = leisSecao;
   if (prioridades) nodes.prioridades = prioridades;
   if (governo) nodes.governo = governo;
   if (titulos) nodes.titulos = titulos;

@@ -299,7 +299,6 @@ Ver mockup: [`mockups/plenaria-mockup.html`](../mockups/plenaria-mockup.html) (a
 ## 8. Dashboard de Insights
 
 - 📈 Hall da Fama / Muro da Vergonha — top e bottom nacionais por Poder.
-- 🏆 Ranking de Guildas — barra empilhada por tier.
 - 💸 Gasto × Entrega — scatter (gasto de cota × Poder) para achar "Nobres Gastadores",
   facetado por casa (small multiples, eixo X compartilhado): CEAP e CEAPS são cotas
   distintas. Junto dele: painel comparativo Câmara × Senado (média, mediana, maior
@@ -322,6 +321,9 @@ Ver mockup: [`mockups/plenaria-mockup.html`](../mockups/plenaria-mockup.html) (a
   pessoa jurídica, ou CPF) e o **painel de concentração é obrigatório junto** — a maior
   empresa fica com ~1,3% de ~43 mil CNPJs, e sem essa leitura um top 15 solto sugere
   captura, o oposto do que o dado mostra.
+- 📜 Virou lei — o DESFECHO (ver §11): total de normas das duas casas, Legisladores
+  Efetivos, o feed das mais recentes e o perfil temático do que foi aprovado, com a
+  **taxa de conversão** por tema e o recorte de homenagens/datas.
 - 🗂️ Prioridades — em que o Congresso legisla, por casa, e a **assinatura** de cada
   guilda (ver §10). O ranking absoluto por guilda seria inútil e não óbvio que é:
   medido na legislatura, "Administração Pública" e/ou "Direitos Humanos e Minorias"
@@ -470,3 +472,169 @@ O escopo desta fase (guildas + panorama nacional, ~25 textos) foi escolhido para
 em **revisão humana integral**. Estender ao parlamentar individual são 594 parágrafos
 sobre pessoas nomeadas, impossíveis de revisar um a um — o contrato já aceita a chave
 `parlamentar:<slug>`, mas a decisão de gerá-los é separada.
+
+---
+
+## 11. "Virou lei" — o desfecho, não a intenção
+
+Todo o resto do produto mede **atividade**: quanto se apresentou (Ataque), quanto
+andou (Eficiência), sobre o quê (Prioridades), quanto se gastou (Economia). Esta
+seção mede **desfecho** — a proposição de autoria principal que foi *transformada em
+norma jurídica*. É o dado mais duro do site e o mais raro: a maioria dos
+parlamentares não tem nenhum.
+
+### O que conta
+
+- **Autoria principal** (`proponente = 1` na Câmara, `IndicadorAutorPrincipal = Sim`
+  no Senado). Uma lei tem muitas mãos — relatoria, emendas, articulação — e a
+  plataforma credita só a assinatura que a fonte registra como proponente. A UI diz
+  isso em todas as três superfícies.
+- **Norma jurídica**, não "lei" no sentido estrito: lei ordinária, lei complementar,
+  emenda constitucional ou decreto legislativo. O tipo aparece no nome de cada linha,
+  então o leitor nunca precisa deduzir qual é qual.
+- **O mesmo recorte dos atributos**: proposições *numeradas nesta legislatura*. Um
+  projeto de 2019 sancionado agora não aparece — e a nota de rodapé de cada painel diz
+  isso, porque sem ela a lista se leria como o currículo completo do parlamentar.
+
+### O nome da norma: uma casa publica, a outra não
+
+A proposição tem um nome (`PL 358/2025`); a norma tem outro (`Lei 15.172/2025`), e é
+o segundo que o leitor reconhece. As duas casas o expõem de formas muito diferentes:
+
+| Casa | Onde está | Confiabilidade |
+|---|---|---|
+| Senado | campo `normaGerada` do `/processo` ("Lei nº 15.042 de 11/12/2024") | vocabulário fechado, parse trivial |
+| Câmara | **em campo nenhum** — só na PROSA do despacho da tramitação | exige varrer todas as tramitações |
+
+⚠️ Duas armadilhas medidas na Câmara: o `urnFinal` vem **vazio** no bulk e na API (é o
+campo que existe para isso), e o `ultimoStatus_despacho` do bulk **não serve** — depois
+de virar lei a matéria continua tramitando (ofícios, autógrafos, retificações), então
+em 9 de cada 10 casos o último despacho fala de outra coisa: só **78 de 793**
+proposições transformadas tinham ali o número da norma. Por isso a ingestão busca
+`/proposicoes/{id}/tramitacoes` de cada transformada (centenas de chamadas, cache
+permanente em `data/raw/normas-camara.json`) e procura o despacho `"Transformado
+no(a) …"`.
+
+**Quando não casa, o número é OMITIDO — nunca estimado.** A linha cai para a
+identificação do projeto e fica visivelmente mais modesta, que é a leitura correta:
+não sabemos o nome da lei. Mesmo princípio da frase de evidência dos títulos
+vermelhos.
+
+### Onde aparece
+
+| Superfície | O que mostra |
+|---|---|
+| Ficha do parlamentar | painel "📜 Virou lei" — cada norma com nome, ementa, data e link para a página oficial da casa |
+| Guilda | "📜 O que a bancada emplacou" — soma simples da bancada e quem emplacou, com o nº de membros na mesma frase |
+| Insights | seção própria `/insights/leis` — total das duas casas, Legisladores Efetivos (top 20) e o feed das normas mais recentes |
+
+### O que a seção NÃO faz
+
+**Não pontua.** A contagem já entra na Eficiência como bônus (`min(15, 5 × leis)`);
+exibi-la aqui é exibição, não um segundo atributo. Não cria Tier, não cria gate e não
+cria título — o único título envolvido, `Legislador Efetivo`, já existia e continua
+com a mesma regra.
+
+**A agregação de bancada é soma simples**, não taxa: uma lei sancionada é um evento
+inteiro, não uma fração. Por isso não há denominador de guilda — "o PT emplacou 14
+leis" é afirmação completa —, e o número de parlamentares vai na mesma linha para que a
+comparação entre bancadas de tamanhos diferentes seja do leitor.
+
+**Uma lei com dois autores principais é UMA linha com dois nomes** no feed dos
+Insights, nunca duas: agrupar por proposição impede que a mesma norma seja contada
+duas vezes no que se apresenta como cronologia.
+
+### Autoria coletiva — por que as contagens não somam entre si
+
+Uma matéria pode ter **dezenas de autores principais** (medido: até 59 numa só). Isso
+não é ruído da fonte: é como o Congresso assina projetos de bancada. Duas consequências
+que a UI precisa dizer em voz alta, porque ambas seriam lidas erradas em silêncio:
+
+1. **A mesma lei entra na conta de cada autor.** Somar as contagens individuais do
+   ranking dá um número maior que o de normas distintas (medido: 445 contagens para 191
+   normas). Por isso os Insights publicam as duas grandezas lado a lado.
+2. **O feed não nomeia autoria coletiva acima de 3.** Nomear os 59 vira parede de nomes
+   que soterra a ementa; nomear "os 3 primeiros" seria **crédito arbitrário** — a ordem
+   em que a fonte lista os autores não é hierarquia. Acima do limite o painel *conta* em
+   vez de escolher ("autoria coletiva — 34 parlamentares em exercício"), e o link leva à
+   lista oficial completa. Mesmo princípio da omissão do nome do fornecedor pessoa
+   física: quando nomear não acrescenta ao que o painel afirma, não se nomeia.
+
+### O que o Congresso aprova, por tema — e por que NÃO é a IA que agrupa
+
+A contagem de leis responde "quanto". Para responder **"o quê"**, as normas são
+agrupadas pela **classificação temática oficial** das duas casas — exatamente a das
+Prioridades (§10), com cobertura medida de **100% nas normas** (139/139 na Câmara,
+52/52 no Senado).
+
+A alternativa considerada e **descartada** foi pedir à IA que lesse as 191 ementas e
+inventasse segmentos. Ela cai por três motivos, na ordem em que importam:
+
+1. **Joga fora dado oficial com cobertura total** para substituí-lo por juízo de modelo.
+2. **Deixa de ser auditável**: o leitor não tem contra o que conferir, e duas execuções
+   podem produzir segmentos diferentes sobre os mesmos dados.
+3. **Contradiz o contrato da camada de IA** deste projeto, que é explícito — a IA *lê*,
+   não classifica e não conta (§10 e `scripts/lib/analises.mjs`).
+
+A IA entra onde sempre entrou: escrevendo o **parágrafo de leitura** da tabela, com selo,
+modelo, data e link para o prompt versionado (`docs/prompts/leis-v1.md`), sob alvos
+próprios (`leis:nacional`, `leis:guilda:<sigla>`) para que um texto sobre o que se
+*aprova* nunca apareça ao lado da tabela do que se *apresenta*.
+
+**Duas contas que não se confundem** (`scripts/lib/leis-temas.mjs`, com teste):
+
+| Grandeza | O que é | Armadilha |
+|---|---|---|
+| **% das normas** | composição — quanto do aprovado toca o tema | contagem CHEIA, não soma 100% |
+| **taxa de conversão** | normas ÷ proposições apresentadas no mesmo tema | os dois lados precisam ser DEDUPLICADOS |
+
+A taxa é a que responde "de fato". Ela exige que o denominador seja de proposições
+**distintas**, como o numerador: comparar um lado deduplicado com outro multiplicado por
+coautoria daria uma taxa inventada. E ela só é publicada acima de um **piso de normas** —
+com 2 leis num tema, "50% de aproveitamento" seria ruído vendido como fato; abaixo do
+piso a linha existe com a contagem, sem a razão.
+
+### Homenagens e datas — publicar o número, recusar o adjetivo
+
+Um recorte tem tratamento próprio: as normas classificadas como **Homenagens e Datas**
+("Homenagens e Datas Comemorativas" na Câmara, "Honorífico" no Senado) — conferir a um
+município o título de "Capital Nacional de X", instituir dia ou semana nacional,
+inscrever um nome no Livro dos Heróis da Pátria, reconhecer manifestação cultural.
+
+Ele existe porque é **o único lugar do site em que o leitor avalia o CONTEÚDO do que foi
+aprovado**, e não o volume. Medido na legislatura: **60 das 191 normas (31%)**, sendo 23
+exclusivamente disso. É também o tema de **maior taxa de conversão** — enquanto Saúde
+converte 0,5% e Direito/Justiça 0,3%.
+
+A regra editorial é a que sustenta o recorte: **a plataforma conta, o leitor julga.**
+O rótulo é da fonte, não nosso, e a classificação de cada norma é conferível na página
+oficial dela. Chamar essas leis de "inúteis" ou "vazias" seria opinião da plataforma —
+o mesmo erro que derrubou o título "Safra Eleitoral" (§ Convenções). O número de 1 em
+cada 3 sustenta o argumento melhor que qualquer adjetivo, e sobrevive à contestação.
+Nenhuma cor de alarme acompanha o painel, pela mesma razão do `higherIsBetter: null`.
+
+### Tema clicável — por que a lista fica no site, e não num link para a Câmara
+
+Na ficha do parlamentar, cada tema do painel "No que trabalha" abre as proposições
+dele naquele tema, com ementa e link para a página oficial de cada uma.
+
+O caminho óbvio — mandar o leitor para uma busca na Câmara já filtrada — **não existe**:
+
+| Caminho | Por que não serve |
+|---|---|
+| Busca do portal da Câmara | não tem filtro por tema **nem** campo de nome de autor (só partido, UF, situação, órgão) — verificado no formulário avançado |
+| API de Dados Abertos | cruza autor × tema (e aceita vários `codTema`, cobrindo nossos rótulos fundidos), mas devolve **JSON cru** e conta diferente: inclui coautoria, e nós contamos só autoria principal — medido, **42 contra 39** |
+| Portal do Senado | outro vocabulário e outro site: nenhuma URL da Câmara serve para metade das fichas |
+
+Mandar o leitor para uma lista que **contradiz o número da tela** seria pior que não
+ter link — é a mesma regra que mantém o `fonteHash` nas análises de IA.
+
+A lista servida no site sai do **mesmo dado que produziu o número** (conferido: 303 no
+arquivo, 303 no painel), funciona nas duas casas, e cada linha continua levando à fonte
+oficial — que era o objetivo.
+
+**Onde os dados moram**: `public/data/props/<slug>.json`, um arquivo por parlamentar
+(~584 arquivos, ~11 MB, ~19 KB cada), buscado pela ilha client no **primeiro clique** —
+nunca no carregamento. São ~33 mil proposições no total: como campo do
+`politicians.json` elas quadruplicariam o JSON lido por toda página do site para servir
+a um painel que a maioria não abre.

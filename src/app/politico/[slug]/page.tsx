@@ -5,6 +5,7 @@ import { FutStat } from '@/components/FutStat';
 import { CotaBreakdown } from '@/components/CotaBreakdown';
 import { GuildCrest } from '@/components/GuildCrest';
 import { Prioridades } from '@/components/Prioridades';
+import { Leis } from '@/components/Leis';
 import { ReadingDisclaimer } from '@/components/ReadingDisclaimer';
 import { ShareButton } from '@/components/ShareButton';
 import { TitleBadge } from '@/components/TitleBadge';
@@ -341,6 +342,10 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
           // "da Câmara dos Deputados" × "do Senado Federal": mesmo idioma dos tooltips
           // de atributo, que já resolvem o artigo pelo `p.casa`
           sub={`${p.prioridades.nComTema} proposições de autoria principal com tema oficial — classificação ${p.casa === 'camara' ? 'da' : 'do'} ${casaLabel(p.casa)}`}
+          // clicar no tema abre as proposições dele naquele tema. A lista sai do
+          // MESMO dado que produziu o número — a busca da Câmara não cruza autor
+          // com tema, então um link para fora contradiria a tela (ver TemaProposicoes)
+          navegavel={{ slug: p.slug, casaLabel: `${p.casa === 'camara' ? 'na' : 'no'} ${casaLabel(p.casa)}` }}
         />
       )}
 
@@ -367,6 +372,23 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
           </div>
         </div>
       )}
+
+      {/* fecha a narrativa dos três painéis anteriores: o ASSUNTO (prioridades), o
+          VOLUME (produção anual) e agora o DESFECHO — o que de fato virou norma.
+          Exibição pura: a contagem já pontuou como bônus da Eficiência, e repetir
+          isso aqui como atributo seria contar duas vezes. */}
+      {p.leis?.length ? (
+        <Leis
+          leis={p.leis}
+          casa={p.casa}
+          sub={<>
+            {p.leis.length === 1
+              ? 'uma proposição de autoria principal já foi transformada'
+              : `${p.leis.length} proposições de autoria principal já foram transformadas`} em
+            norma jurídica — de {p.statRaw?.ataque ?? p.leis.length} apresentadas nesta legislatura
+          </>}
+        />
+      ) : null}
 
       {p.rawNumbers && (
         <div className="panel">

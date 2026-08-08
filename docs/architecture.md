@@ -40,7 +40,7 @@ scripts/ingest-real.mjs            (única fonte: Câmara + Senado)
 | `output: 'export'` em vez de ISR/SSR | Dados mudam ~1×/dia → rebuild agendado é mais simples e barato que servidor. Nada para escalar, nada para invadir, TTFB de CDN. |
 | Todas as páginas pré-renderizadas (1 por parlamentar/guilda/UF/título/seção) | O usuário navega de card em card; prefetch do Next + HTML pronto = navegação instantânea. |
 | JSON importado em build (não `fetch`) | `src/lib/data.ts` importa os JSONs direto — o bundler resolve em build; runtime não tem I/O de dados. |
-| Ilhas client mínimas, alimentadas por dado estático | Só o `BattleClient` faz fetch (`/data/index.json`, ~240 KB, imutável). As demais ilhas (`TierListClient`, `BrazilMap`, `MapExplorer`, `ScatterChart`, `GuildRanking`, `FutStat`, `ShareButton`, `SiteNav`, `TitleBadge`) recebem tudo por prop serializada no build — o HTML inicial já vem renderizado e nenhum fetch acontece em runtime. |
+| Ilhas client mínimas, alimentadas por dado estático | Duas fazem fetch, e as duas de ARQUIVO ESTÁTICO: `BattleClient` (`/data/index.json`, ~240 KB) e `TemaProposicoes` (`/data/props/<slug>.json`, ~19 KB, **só no primeiro clique** — a maioria dos leitores nunca abre). As demais (`TierListClient`, `BrazilMap`, `MapExplorer`, `ScatterChart`, `GuildRanking`, `FutStat`, `ShareButton`, `SiteNav`, `InsightsTabs`, `PoliticianLink`, `TitleBadge`) recebem tudo por prop serializada no build — o HTML inicial já vem renderizado e nenhuma chamada de API acontece em runtime. |
 | Charts do Insights server-rendered | SVG/HTML puro com tooltips via `<title>` nativo — zero JS de biblioteca de gráfico. |
 | Fontes via `next/font` | Cinzel + Sometype Mono self-hosted no build: sem request a Google Fonts em runtime, sem FOUT de terceiros. |
 | Cloudflare Web Analytics (beacon) | Único script externo em runtime: cookieless, sem consentimento necessário. Só é emitido onde `NEXT_PUBLIC_CF_BEACON_TOKEN` existe (produção). |
@@ -52,6 +52,7 @@ scripts/ingest-real.mjs            (única fonte: Câmara + Senado)
 ```
 /_next/static/*   Cache-Control: public, max-age=31536000, immutable
 /data/*.json      Cache-Control: public, max-age=31536000, immutable   (nome muda a cada release se necessário)
+/data/props/*     idem — o glob `/data/*` da Netlify casa caminhos aninhados
 /fotos/*.webp     Cache-Control: public, max-age=31536000, immutable   (id-keyed, só muda em redeploy)
 *.html            Cache-Control: public, max-age=0, must-revalidate    (revalida rápido, corpo raramente muda → 304)
 ```
@@ -62,6 +63,32 @@ marca — `/data/*` e `/fotos/*`. Brotli/gzip a Netlify negocia sozinha p/ texto
 
 Atualização de dados = rodar `npm run data:real && npm run build` no CI (cron diário) e
 publicar `out/`. Nenhuma invalidação além do HTML.
+
+⚠️ **`immutable` num arquivo cujo CONTEÚDO muda é uma tensão real, não resolvida.** A
+URL de `/data/index.json`, `/data/meta.json` e dos `/data/props/<slug>.json` é estável,
+mas o conteúdo muda a cada ingestão — e `max-age=31536000, immutable` manda o navegador
+NÃO revalidar por um ano. Quem já visitou pode ficar com a lista de proposições ou o
+índice da Batalha congelados. É o mesmo raciocínio que tirou `/og/*` do `immutable`
+(lá o problema foi notado e corrigido para 24h). Enquanto não for tratado, vale saber:
+o HTML revalida sempre, então **a página mostra número novo com lista velha** — o pior
+dos dois mundos, porque as duas superfícies discordam sem avisar. Correção natural:
+mover `/data/*` para `max-age=86400` (a cadência real dos dados) ou versionar as URLs
+por hash de ingestão.
+
+### `public/data/props/<slug>.json` — proposições por parlamentar
+
+Um arquivo por parlamentar (~19 KB cada) com as proposições de autoria principal que
+têm tema oficial: `{r: ref, e: ementa, u: url oficial, t: [temas]}`. Alimenta o painel
+"No que trabalha" da ficha, onde clicar num tema abre as proposições daquele tema.
+
+**Por que arquivo próprio e não campo do `politicians.json`:** são ~33 mil registros
+(~11 MB no total). Como campo, quadruplicariam o JSON que TODA página do site carrega
+em build-time, para servir um painel que a maioria dos leitores não abre. Como arquivo,
+custam um fetch de ~19 KB e só de quem clicou.
+
+**Por que a lista não é um link para a Câmara:** a busca do portal não cruza autor com
+tema (não há campo de tema nem de nome de autor), e a API de Dados Abertos — que cruza —
+conta diferente da nossa (inclui coautoria; medido: 42 contra 39). Ver product-spec §11.
 
 ## Camadas do código
 

@@ -12,10 +12,10 @@
  * as famílias neutras do mapa têm `higherIsBetter: null`).
  */
 import { agregarPrioridades, percentuaisPorTema, assinatura } from '../../scripts/lib/temas.mjs';
-import { analiseDe, alvoGuilda, alvoNacional } from '../../scripts/lib/analises.mjs';
+import { analiseDe, alvoGuilda, alvoNacional, alvoLeisNacional, alvoLeisGuilda } from '../../scripts/lib/analises.mjs';
 import analisesJson from '../../data/analises.json';
 import { politicians } from './data';
-import type { Analise, Casa, Politician } from './types';
+import type { AgregadoLeis, Analise, Casa, Politician } from './types';
 
 export const analises = analisesJson as Analise[];
 
@@ -90,4 +90,17 @@ export function analiseDaGuilda(sigla: string, agregado: AgregadoTemas): Analise
 }
 export function analiseNacional(agregado: AgregadoTemas): Analise | null {
   return analiseDe(analises, alvoNacional(), agregado) as Analise | null;
+}
+
+/**
+ * A leitura de "o que vira lei". Mesmo contrato das prioridades — a IA LÊ a
+ * tabela oficial e escreve o parágrafo; ela não agrupa lei nenhuma. Alvo
+ * separado (`leis:*`) porque a tabela é outra: aqui se conta o que foi APROVADO,
+ * lá o que foi apresentado.
+ */
+export function analiseLeis(agregado?: AgregadoLeis | null): Analise | null {
+  return agregado ? (analiseDe(analises, alvoLeisNacional(), agregado) as Analise | null) : null;
+}
+export function analiseLeisDaGuilda(sigla: string, agregado?: AgregadoLeis | null): Analise | null {
+  return agregado ? (analiseDe(analises, alvoLeisGuilda(sigla), agregado) as Analise | null) : null;
 }

@@ -33,6 +33,8 @@ import { referenciasDaCasa, evidenciaDeTitulos } from './lib/evidencia.mjs';
 import { resumoCurtoStats } from './lib/resumo-stat.mjs';
 import { licencaCamara, licencaSenado, causaDesconhecida } from './lib/licenciados.mjs';
 import { TEMAS, OUTROS, deTemaCamara, deClasseSenado, contarTemas, destaqueDoCard, agregarPrioridades } from './lib/temas.mjs';
+import { normaDoDespacho, normaDoSenado, resumoEmenta, ordenaLeis, urlProposicaoCamara, urlMateriaSenado } from './lib/norma.mjs';
+import { agruparLeis, apresentadoVersusAprovado, simbolicas } from './lib/leis-temas.mjs';
 import { fonteHash, contarObsoletas, alvoNacional, alvoGuilda } from './lib/analises.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -306,8 +308,73 @@ async function relatoresPorProposicao(ids, concorrencia = 8) {
   return cache;
 }
 
+/**
+ * Norma gerada por cada proposição TRANSFORMADA — id → "Lei 15.172/2025" + data.
+ *
+ * A Câmara não publica esse dado em campo nenhum: `urnFinal` vem vazio no bulk E na
+ * API (conferido nos dois). O número só existe na PROSA do despacho da tramitação que
+ * registrou a transformação — e não adianta ler o `ultimoStatus_despacho` do bulk:
+ * depois de virar lei a matéria continua tramitando (ofícios, autógrafos,
+ * retificações), então em 9 de cada 10 casos o ÚLTIMO despacho fala de outra coisa
+ * (medido: 78 de 793). Daí a varredura de todas as tramitações.
+ *
+ * Custo: uma chamada por proposição TRANSFORMADA (centenas, não os ~24 mil do
+ * `relatoresPorProposicao`), com cache PERMANENTE — o número de uma lei não muda.
+ *
+ * Falha nunca vira "sem norma": só grava quando a lista de tramitações veio
+ * não-vazia, e o que não respondeu é logado com ⚠️. O efeito de um vazio gravado
+ * aqui seria mudo — a lei sumiria do rótulo e a linha continuaria plausível.
+ */
+async function normasPorProposicao(ids, concorrencia = 4) {
+  const file = join(RAW, 'normas-camara.json');
+  const cache = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  const faltam = ids.filter((id) => !(id in cache));
+  if (faltam.length) {
+    console.log(`[normas] buscando a norma de ${faltam.length} proposições transformadas (${Object.keys(cache).length} em cache)…`);
+    const gravar = () => writeFileSync(file, JSON.stringify(cache));
+    let i = 0, feitos = 0;
+    const falhas = [];
+    await Promise.all(Array.from({ length: concorrencia }, async () => {
+      while (i < faltam.length) {
+        const id = faltam[i++];
+        let ok = false;
+        for (let t = 1; t <= 5 && !ok; t++) {
+          try {
+            const res = await fetch(`${API}/api/v2/proposicoes/${id}/tramitacoes`, { headers: { Accept: 'application/json' } });
+            if (res.status >= 500 || res.status === 429) throw new Error(`${res.status}`);
+            if (!res.ok) { ok = true; break; } // 404: nada a gravar, e não é falha de rede
+            const { dados } = JSON.parse(await res.text());
+            // 200 com envelope vazio é a falha nº 1 do projeto: NÃO conclui "sem norma"
+            // de primeira. Joga para a retentativa; se as 5 passarem vazias, entra em
+            // `falhas` e o cache segue sem a chave — a próxima execução pergunta de novo.
+            if (!dados?.length) throw new Error('envelope vazio');
+            // a ÚLTIMA transformação vence: retificação republica a norma
+            const achada = [...dados].reverse().find((d) => normaDoDespacho(d.despacho));
+            cache[id] = achada
+              ? { norma: normaDoDespacho(achada.despacho), data: (achada.dataHora ?? '').slice(0, 10) || null }
+              : null;
+            ok = true;
+          } catch { await sleep(1200 * t); }
+        }
+        if (!ok) falhas.push(id);
+        if (++feitos % 200 === 0) gravar();
+      }
+    }));
+    gravar();
+    if (falhas.length) {
+      console.log(`⚠️  [normas] ${falhas.length} proposições não responderam após 5 tentativas — elas aparecem só com a identificação do projeto, sem o nº da lei. Reingerir completa (o cache retoma).`);
+    }
+  }
+  const comNumero = Object.values(cache).filter(Boolean).length;
+  console.log(`[normas] ${comNumero} de ${Object.keys(cache).length} proposições transformadas com o nº da norma identificado`);
+  return cache;
+}
+
 async function fetchStatusProposicoes() {
   const statusById = new Map();
+  // detalhe SÓ das transformadas (são centenas, contra ~180 mil no statusById):
+  // guardar ementa de todas estouraria a memória sem servir a ninguém
+  const leiById = new Map();
   const relatoriasByDep = new Map();
   const relatoriasAvancadasByDep = new Map();
   const emendaIds = new Set();   // ids de EMC/EMP/EMR  → Técnica
@@ -322,6 +389,9 @@ async function fetchStatusProposicoes() {
     const iTipo = header.indexOf('siglaTipo');
     const iDesc = header.indexOf('descricaoTipo');
     const iSit = header.indexOf('ultimoStatus_descricaoSituacao');
+    const iNum = header.indexOf('numero');
+    const iAno = header.indexOf('ano');
+    const iEmenta = header.indexOf('ementa');
     for (const r of rows) {
       const tipo = r[iTipo];
       const desc = r[iDesc] ?? '';
@@ -335,7 +405,23 @@ async function fetchStatusProposicoes() {
       if (!principal) continue; // o resto abaixo só vale para PL/PLP/PEC/PDL
 
       const sit = r[iSit] ?? '';
-      statusById.set(r[iId], { tipo, aprovada: APROVADA_RE.test(sit), avancou: AVANCOU_RE.test(sit) });
+      const aprovada = APROVADA_RE.test(sit);
+      // ref/ementa de TODA proposição principal (não só das aprovadas): é o que
+      // permite abrir "as 39 de Saúde" no clique do tema. A ementa já entra cortada
+      // — guardar o texto integral de ~60 mil proposições em memória para depois
+      // truncar tudo custaria centenas de MB sem servir a ninguém.
+      statusById.set(r[iId], {
+        tipo, aprovada, avancou: AVANCOU_RE.test(sit),
+        ref: `${tipo} ${r[iNum]}/${r[iAno]}`,
+        ementa: resumoEmenta(r[iEmenta], 180),
+      });
+      if (aprovada) {
+        leiById.set(r[iId], {
+          ref: `${tipo} ${r[iNum]}/${r[iAno]}`,
+          ementa: resumoEmenta(r[iEmenta]), // painel de leis: corte mais generoso
+          url: urlProposicaoCamara(r[iId]),
+        });
+      }
     }
     console.log(`[status] ${y}: ${statusById.size} proposições principais · ${emendaIds.size} emendas · ${fiscalIds.size} de fiscalização (acumulado)`);
   }
@@ -351,7 +437,17 @@ async function fetchStatusProposicoes() {
   }
   const totalRel = [...relatoriasByDep.values()].reduce((s, v) => s + v, 0);
   console.log(`[status] ${totalRel} relatorias (histórico completo de tramitação, não só o relator atual)`);
-  return { statusById, relatoriasByDep, relatoriasAvancadasByDep, emendaIds, fiscalIds };
+
+  // nº da norma ("Lei 15.172/2025") e data da sanção — só para as transformadas.
+  // Sem isso a ficha diria "PL 358/2025 virou lei" sem dizer QUAL lei, que é
+  // justamente o nome pelo qual o leitor reconhece o resultado.
+  const normas = await normasPorProposicao([...leiById.keys()]);
+  for (const [id, lei] of leiById) {
+    const n = normas[id];
+    if (n?.norma) lei.norma = n.norma;
+    if (n?.data) lei.data = n.data;
+  }
+  return { statusById, leiById, relatoriasByDep, relatoriasAvancadasByDep, emendaIds, fiscalIds };
 }
 
 /**
@@ -394,8 +490,16 @@ async function fetchTemasCamara() {
   return porProposicao;
 }
 
-async function fetchProposicoes(statusById, emendaIds, fiscalIds, temasPorProp) {
+async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temasPorProp) {
   const propsByDep = new Map();     // id → {total, aprovadas, avancadas, porAno}
+  const leisByDep = new Map();      // id → [{ref, norma?, ementa, data?, url}] — "o que virou lei"
+  // proposição DISTINTA de autoria parlamentar → temas. É o denominador da taxa
+  // "quanto de cada tema vira lei": o lado das aprovadas é deduplicado, então o
+  // lado das apresentadas precisa ser também — comparar um deduplicado com um
+  // multiplicado por coautoria daria uma taxa inventada.
+  const apresentadasDistintas = new Map();
+  // id do deputado → proposições COM tema, para o clique no tema abrir a lista
+  const propsByTemaDep = new Map();
   const emendasByDep = new Map();   // id → nº de emendas de autoria
   const fiscalByDep = new Map();    // id → nº de atos de fiscalização
   // id → um array de rótulos POR PROPOSIÇÃO (não um contador): a contagem cheia
@@ -435,17 +539,40 @@ async function fetchProposicoes(statusById, emendaIds, fiscalIds, temasPorProp) 
       e.total++;
       e.porAno[y] = (e.porAno[y] ?? 0) + 1;
       if (st.avancou) e.avancadas++;
-      if (st.aprovada) { e.aprovadas++; aprov++; }
+      if (st.aprovada) {
+        e.aprovadas++; aprov++;
+        const lei = leiById.get(r[iId]);
+        if (lei) {
+          // tema OFICIAL da norma — o mesmo vocabulário das prioridades. É o que
+          // permite responder "o que o Congresso aprova" sem pedir juízo a um
+          // modelo: a classificação já vem da casa, com 100% de cobertura nas
+          // transformadas (medido: 139/139 na Câmara).
+          lei.temas ??= [...(temasPorProp.get(r[iId]) ?? [])];
+          leisByDep.set(id, [...(leisByDep.get(id) ?? []), lei]);
+        }
+      }
       propsByDep.set(id, e);
       // prioridades: uma entrada por proposição, mesmo sem tema (a proposição sem
       // classificação é CONTADA como sem tema — some seria mentir no denominador)
       if (!temasByDep.has(id)) temasByDep.set(id, []);
-      temasByDep.get(id).push([...(temasPorProp.get(r[iId]) ?? [])]);
+      const temasDela = [...(temasPorProp.get(r[iId]) ?? [])];
+      temasByDep.get(id).push(temasDela);
+      // lista navegável do painel "No que trabalha": só as COM tema, porque é do
+      // tema que se chega até elas. Chaves curtas — são ~33 mil registros no total.
+      if (temasDela.length) {
+        if (!propsByTemaDep.has(id)) propsByTemaDep.set(id, []);
+        propsByTemaDep.get(id).push({
+          r: st.ref, e: st.ementa, u: urlProposicaoCamara(r[iId]), t: temasDela,
+        });
+      }
+      if (!apresentadasDistintas.has(r[iId])) {
+        apresentadasDistintas.set(r[iId], [...(temasPorProp.get(r[iId]) ?? [])]);
+      }
       count++;
     }
     console.log(`[props] ${y}: ${count} autorias principais (PL/PLP/PEC/PDL) · ${aprov} viraram norma · ${nEmd} emendas · ${nFis} atos de fiscalização`);
   }
-  return { propsByDep, emendasByDep, fiscalByDep, temasByDep };
+  return { propsByDep, leisByDep, emendasByDep, fiscalByDep, temasByDep, apresentadasDistintas, propsByTemaDep };
 }
 
 // ---------- 4. Economia: cota parlamentar (CEAP) ----------
@@ -902,6 +1029,9 @@ async function fetchProcessosSenado() {
   // codigoMateria → idProcesso: as autorias do /senador só trazem o Codigo, e o
   // detalhe do processo (de onde sai a classificação temática) é chaveado pelo id
   const idPorMateria = new Map();
+  // codigoMateria → { norma, data } — ao contrário da Câmara, o Senado publica a
+  // norma gerada em CAMPO ESTRUTURADO (`normaGerada`), com vocabulário fechado
+  const normaPorMateria = new Map();
   for (const sigla of TIPOS_PRINCIPAIS) {
     for (const ano of YEARS) {
       const j = await senadoJson(`sen-processos-${sigla}-${ano}.json`,
@@ -909,11 +1039,20 @@ async function fetchProcessosSenado() {
       for (const p of asArray(j)) {
         situacaoPorMateria.set(String(p.codigoMateria), p.situacaoAtual ?? '');
         if (p.id) idPorMateria.set(String(p.codigoMateria), p.id);
+        const n = normaDoSenado(p.normaGerada);
+        // sem `normaGerada` parseável, a data da situação atual ainda serve: a
+        // matéria está TRANSFORMADA, então é a data em que ela virou norma
+        if (n || p.dataSituacaoAtual) {
+          normaPorMateria.set(String(p.codigoMateria), {
+            ...(n?.norma ? { norma: n.norma } : {}),
+            ...(n?.data ?? p.dataSituacaoAtual ? { data: n?.data ?? p.dataSituacaoAtual } : {}),
+          });
+        }
       }
     }
   }
   console.log(`[senado] ${situacaoPorMateria.size} processos com situação de tramitação (PL/PLP/PEC/PDL 2023+)`);
-  return { situacaoPorMateria, idPorMateria };
+  return { situacaoPorMateria, idPorMateria, normaPorMateria };
 }
 
 /**
@@ -1010,7 +1149,7 @@ async function fetchClassificacoesSenado(codigos, idPorMateria, concorrencia = 4
 }
 
 async function fetchSenado(socialMap) {
-  const { situacaoPorMateria, idPorMateria } = await fetchProcessosSenado();
+  const { situacaoPorMateria, idPorMateria, normaPorMateria } = await fetchProcessosSenado();
   const lista = await senadoJson('senado-lista.json', 'https://legis.senado.leg.br/dadosabertos/senador/lista/atual.json');
   const parls = asArray(lista.ListaParlamentarEmExercicio.Parlamentares.Parlamentar)
     .map((p) => p.IdentificacaoParlamentar)
@@ -1224,7 +1363,14 @@ async function fetchSenado(socialMap) {
     // qual é qual.
     const sit = (m) => situacaoPorMateria.get(String(m.Codigo));
     const avancadas = autorias.filter((m) => senadoAvancou(sit(m))).length;
-    const aprovadas = autorias.filter((m) => senadoVirouNorma(sit(m))).length;
+    const viraramNorma = autorias.filter((m) => senadoVirouNorma(sit(m)));
+    const aprovadas = viraramNorma.length;
+    const leis = ordenaLeis(viraramNorma.map((m) => ({
+      ref: m.DescricaoIdentificacao ?? `${m.Sigla} ${m.Numero}/${m.Ano}`,
+      ementa: resumoEmenta(m.Ementa),
+      url: urlMateriaSenado(m.Codigo),
+      ...(normaPorMateria.get(String(m.Codigo)) ?? {}),
+    })));
     const relatoriasPrinc = relatoriasTodas
       .map((r) => r.Materia)
       .filter((m) => m && TIPOS_PRINCIPAIS.has(m.Sigla) && Number(m.Ano) >= 2023);
@@ -1237,8 +1383,9 @@ async function fetchSenado(socialMap) {
       // códigos das autorias — a classificação temática é buscada em LOTE depois do
       // laço (uma chamada por matéria dentro dele seria serial por senador)
       autoriaCodigos: autorias.map((m) => String(m.Codigo)),
+      autorias, // objetos da matéria (ref/ementa) — a lista navegável sai deles
       sabatinas, votacoesAbertas, compareceuN,
-      avancadas, aprovadas, relatoriasPrinc: relatoriasPrinc.length, relatoriasAvancadas,
+      avancadas, aprovadas, leis, relatoriasPrinc: relatoriasPrinc.length, relatoriasAvancadas,
       gasto: gasto ?? 0, cotaResumo: resolveCota(s.nome, nomeCivil),
       fornLancamentos: resolveForn(s.nome, nomeCivil),
       social: socialMap.get(`senado:${s.id}`) ?? null,
@@ -1253,7 +1400,25 @@ async function fetchSenado(socialMap) {
   const classifPorMateria = await fetchClassificacoesSenado(codigosAutoria, idPorMateria);
   for (const r of porSenador) {
     r.temasPorProposicao = r.autoriaCodigos.map((c) => [...(classifPorMateria.get(c) ?? [])]);
+    // mesma lista navegável da Câmara, no mesmo formato — o painel é um só
+    r.propsPorTema = r.autorias
+      .map((m) => ({
+        r: m.DescricaoIdentificacao ?? `${m.Sigla} ${m.Numero}/${m.Ano}`,
+        e: resumoEmenta(m.Ementa, 180),
+        u: urlMateriaSenado(m.Codigo),
+        t: [...(classifPorMateria.get(String(m.Codigo)) ?? [])],
+      }))
+      .filter((x) => x.t.length);
+    // as leis são montadas DENTRO do laço acima, antes desta busca em lote — daí
+    // o tema ser anexado só agora. O código da matéria é o sufixo da url oficial.
+    for (const l of r.leis) l.temas = [...(classifPorMateria.get(l.url.split('/').pop()) ?? [])];
   }
+  // universo do Senado para a taxa "quanto de cada tema vira lei": matérias
+  // DISTINTAS de autoria principal, como na Câmara
+  const apresentadasSenado = new Map(
+    [...new Set(porSenador.flatMap((r) => r.autoriaCodigos))]
+      .map((c) => [c, [...(classifPorMateria.get(c) ?? [])]]),
+  );
 
   const totalVotacoesSen = totalSessoesVot.size;
   console.log(`[senado] ${totalVotacoesSen} votações nominais distintas no período`);
@@ -1347,6 +1512,7 @@ async function fetchSenado(socialMap) {
       cotaResumo: r.cotaResumo,
       seguidores: 0,
       leisAprovadas: r.aprovadas,
+      ...(r.leis.length ? { leis: r.leis } : {}),
       relatoriasN: r.relatoriasPrinc,
       relatoriasAvancadasN: r.relatoriasAvancadas,
       statRaw: {
@@ -1374,6 +1540,7 @@ async function fetchSenado(socialMap) {
       mesesExercicio: r.mesesExercicio,
       producaoAnual: YEARS.map((y) => r.propsAno[y] ?? 0),
       temasProps: r.temasPorProposicao ?? [], // consumido e removido no cálculo das prioridades
+      propsTema: r.propsPorTema ?? [],
       sabatinas: r.sabatinas,              // presença nas votações de autoridades (art. 52)
       votacoesAbertas: r.votacoesAbertas,  // presença nas demais votações nominais
       compareceuN: r.compareceuN,          // esteve no plenário (inclui o P-NRV)
@@ -1406,7 +1573,7 @@ async function fetchSenado(socialMap) {
   const normasSenado = [...situacaoPorMateria.values()].filter(senadoVirouNorma).length;
   // fornPorSenador fica FORA do objeto do senador: é dado cru de build (dezenas de
   // milhares de lançamentos), usado só pelo agregado de empresas dos Insights.
-  return { senadores: out, normasSenado, fornPorSenador: new Map(porSenador.map((r) => [r.id, r.fornLancamentos])) };
+  return { senadores: out, normasSenado, apresentadasSenado, fornPorSenador: new Map(porSenador.map((r) => [r.id, r.fornLancamentos])) };
 }
 
 // ---------- 5b. Licenciados: os ausentes NOMEADOS ----------
@@ -1514,9 +1681,9 @@ const deputados = await fetchDeputados();
 const partidoNomes = await fetchPartidos();
 const { votesByDep, totalVotacoes, votacaoData, votoPorDep } = await fetchVotos();
 const orientacaoGov = await fetchOrientacoesGoverno();
-const { statusById, relatoriasByDep, relatoriasAvancadasByDep, emendaIds, fiscalIds } = await fetchStatusProposicoes();
+const { statusById, leiById, relatoriasByDep, relatoriasAvancadasByDep, emendaIds, fiscalIds } = await fetchStatusProposicoes();
 const temasPorProp = await fetchTemasCamara();
-const { propsByDep, emendasByDep, fiscalByDep, temasByDep } = await fetchProposicoes(statusById, emendaIds, fiscalIds, temasPorProp);
+const { propsByDep, leisByDep, emendasByDep, fiscalByDep, temasByDep, apresentadasDistintas, propsByTemaDep } = await fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temasPorProp);
 const { gastoByDep, catByDep, fornByDep } = await fetchCeap(deputados);
 
 console.log(`[base] ${deputados.length} deputados atuais · ${totalVotacoes} votações nominais no período`);
@@ -1603,9 +1770,11 @@ const raw = deputados.map((d) => {
   mandatoParcial: mesesExercicio < MESES_MIN_RANK,
   props: propsByDep.get(d.id)?.total ?? 0,
   aprovadas: propsByDep.get(d.id)?.aprovadas ?? 0,
+  leis: ordenaLeis(leisByDep.get(d.id) ?? []),
   avancadas: propsByDep.get(d.id)?.avancadas ?? 0,
   propsAno: propsByDep.get(d.id)?.porAno ?? {},
   temasProps: temasByDep.get(d.id) ?? [], // rótulos de cada proposição de autoria
+  propsTema: propsByTemaDep.get(d.id) ?? [], // as proposições em si, p/ o clique no tema
   relatorias: relatoriasByDep.get(d.id) ?? 0,
   relatoriasAvancadas: relatoriasAvancadasByDep.get(d.id) ?? 0,
   emendas: emendasByDep.get(d.id) ?? 0,
@@ -1724,10 +1893,14 @@ const full = raw.map((r) => {
     mandatoParcial: r.mandatoParcial,
     // internos p/ títulos e insights (persistidos; extras são inofensivos)
     leisAprovadas: r.aprovadas,
+    // as leis em si — a contagem sozinha não é auditável, e é o número da norma
+    // ("Lei 15.172/2025") que o leitor reconhece
+    ...(r.leis.length ? { leis: r.leis } : {}),
     relatoriasN: r.relatorias,
     relatoriasAvancadasN: r.relatoriasAvancadas, // p/ títulos de relatoria (só Câmara)
     producaoAnual: YEARS.map((y) => r.propsAno[y] ?? 0),
     temasProps: r.temasProps ?? [], // consumido e removido no cálculo das prioridades
+    propsTema: r.propsTema ?? [],   // idem: vira arquivo próprio, não fica no politicians.json
     // valor bruto numérico por atributo (base dos rankings "quem tem mais X")
     statRaw: {
       ataque: r.props, stamina: r.votos, eficiencia: eficAndou(r), tecnica: tecnicaBruta(r),
@@ -1849,7 +2022,7 @@ for (const p of full) {
 }
 
 // ---------- Senado: merge ----------
-const { senadores, normasSenado, fornPorSenador } = await fetchSenado(social);
+const { senadores, normasSenado, apresentadasSenado, fornPorSenador } = await fetchSenado(social);
 full.push(...senadores);
 
 // ---------- PRIORIDADES: no que cada parlamentar trabalha (informativo) ----------
@@ -1860,6 +2033,22 @@ full.push(...senadores);
 // NÃO PONTUA: não entra no Poder, não gera Tier, não gera gate e não gera título. Um
 // selo "Deputado da Saúde" seria rótulo sobre pauta política — o mesmo erro que tirou a
 // Fiscalização do Poder. Aqui só se descreve.
+// As proposições de cada parlamentar viram um ARQUIVO PRÓPRIO, não um campo do
+// politicians.json: são ~33 mil registros no total (~7 MB), que quadruplicariam o
+// JSON lido por TODA página do site para servir a um painel que só abre no clique.
+// Servidas como estático sob demanda, custam ~12 KB e só de quem clicou.
+const DIR_PROPS = join(OUT_PUBLIC, 'props');
+mkdirSync(DIR_PROPS, { recursive: true });
+let nArquivos = 0, nProps = 0;
+for (const p of full) {
+  const lista = p.propsTema ?? [];
+  delete p.propsTema; // dado de trabalho — nunca vai para o politicians.json
+  if (!lista.length) continue;
+  writeFileSync(join(DIR_PROPS, `${p.slug}.json`), JSON.stringify(lista));
+  nArquivos++; nProps += lista.length;
+}
+console.log(`[props-tema] ${nProps} proposições com tema em ${nArquivos} arquivos (public/data/props/)`);
+
 for (const p of full) {
   const { temas, nComTema, nSemTema, pares } = contarTemas(p.temasProps ?? []);
   delete p.temasProps; // dado de trabalho — não vai para o JSON público
@@ -2075,12 +2264,63 @@ const renovacao = {
 };
 // distinct: nº de proposições principais que viraram norma na legislatura
 const leisTotal = [...statusById.values()].filter((s) => s.aprovada).length + normasSenado;
+// todas as leis de quem está em exercício, ainda COM repetição por coautoria —
+// `agruparLeis`/`simbolicas` deduplicam por proposição (é responsabilidade delas,
+// para que nenhum chamador possa esquecer e contar a lei de 34 autores 34 vezes)
+const todasAsLeis = full.flatMap((p) => p.leis ?? []);
+const leisPorTema = agruparLeis(todasAsLeis);
+const simbolicasNacional = simbolicas(todasAsLeis);
+// denominador da taxa: proposições DISTINTAS de autoria principal nas duas casas
+const apresentadasNacional = contarTemas([
+  ...apresentadasDistintas.values(), ...apresentadasSenado.values(),
+]);
+console.log(`[leis] ${leisPorTema.nLeis} normas distintas · ${leisPorTema.nComTema} com tema oficial · ${simbolicasNacional.n} de homenagem/data (${simbolicasNacional.pct.toFixed(0)}%, ${simbolicasNacional.exclusivas} só isso)`);
+if (leisPorTema.nSemTema > leisPorTema.nLeis * 0.2) {
+  console.log(`⚠️  [leis] ${leisPorTema.nSemTema} de ${leisPorTema.nLeis} normas SEM tema oficial — a classificação temática cobria 100% quando medida; confira a fonte antes de publicar as barras`);
+}
+
 const leis = {
   total: leisTotal,
   legisladores: RANK.filter((p) => (p.leisAprovadas ?? 0) >= 1).length,
   ranking: [...RANK].filter((p) => (p.leisAprovadas ?? 0) >= 1)
-    .sort((a, b) => b.leisAprovadas - a.leisAprovadas).slice(0, 8)
+    .sort((a, b) => (b.leisAprovadas - a.leisAprovadas) || (b.ops - a.ops)).slice(0, 20)
     .map((p) => ({ ...slim(p), n: p.leisAprovadas })),
+  // as normas mais recentes do Congresso, com quem as assinou. É o que separa
+  // "emplacou 3 leis" de "esta é a lei" — a contagem não é auditável sozinha.
+  // Inclui quem está fora do ranking: aqui não se compara ninguém, e uma lei
+  // sancionada não deixa de existir porque o autor tomou posse há pouco.
+  // ---- "o que o Congresso APROVA", por tema oficial ----
+  // As barras são factuais: mesma taxonomia das Prioridades, publicada em
+  // /como-calculamos. A IA não agrupa nada aqui — o contrato dela é LER a tabela
+  // e escrever o parágrafo (ver analises.mjs). Trocar a classificação oficial
+  // (100% de cobertura nas transformadas) por juízo de modelo tornaria o
+  // agrupamento não-auditável e daria segmentos diferentes a cada execução.
+  temas: leisPorTema,
+  // e o contraste que responde "de fato": o que se APRESENTA × o que VIRA norma
+  apresentadas: { temas: apresentadasNacional.temas, nComTema: apresentadasNacional.nComTema },
+  comparativo: apresentadoVersusAprovado(leisPorTema, apresentadasNacional),
+  // o único recorte em que o leitor avalia o CONTEÚDO do que foi aprovado, e não
+  // o volume. Rótulo descritivo de propósito: a plataforma conta, o leitor julga.
+  simbolicas: simbolicasNacional,
+  // normas DISTINTAS creditadas a quem está em exercício. É menor que a soma das
+  // contagens individuais porque autoria coletiva é real e frequente (uma matéria
+  // chega a 59 autores principais): a mesma lei entra na conta de cada um deles.
+  // Sem este número ao lado, o ranking pareceria somar leis diferentes.
+  distintas: new Set(full.flatMap((p) => (p.leis ?? []).map((l) => l.url))).size,
+  recentes: (() => {
+    // agrupa por PROPOSIÇÃO: quando dois parlamentares constam como autores
+    // principais da mesma matéria, é UMA lei com dois autores — repetir a linha
+    // faria o feed contar a mesma norma duas vezes
+    const porLei = new Map();
+    for (const p of full) {
+      for (const l of p.leis ?? []) {
+        const e = porLei.get(l.url) ?? { ...l, autores: [] };
+        e.autores.push(slim(p));
+        porLei.set(l.url, e);
+      }
+    }
+    return ordenaLeis([...porLei.values()]).filter((l) => l.data).slice(0, 12);
+  })(),
 };
 // ---------- A Sabatina: o trabalho que só o Senado faz ----------
 // Aprovar autoridades (CF art. 52, III e IV — STF, STJ, TCU, Banco Central, agências,

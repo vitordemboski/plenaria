@@ -1,4 +1,5 @@
 import { rampColor } from '@/lib/ramp';
+import { TemaProposicoes } from '@/components/TemaProposicoes';
 import { REPO_URL } from '@/lib/site';
 import type { AgregadoTemas, LinhaAssinatura } from '@/lib/prioridades';
 import type { Analise } from '@/lib/types';
@@ -36,7 +37,7 @@ function NotaDoDenominador({ porProposicao, nSemTema }: { porProposicao: number;
  * ("41 das 120 proposições tocam Saúde") em vez de uma fatia sem referência.
  */
 export function Prioridades({
-  agregado, titulo = '🗂️ No que trabalha', sub, limite = 8,
+  agregado, titulo = '🗂️ No que trabalha', sub, limite = 8, navegavel,
 }: {
   // aceita tanto o agregado de uma bancada quanto o `prioridades` de um único
   // parlamentar: o percentual é derivado aqui, então quem chama nunca precisa
@@ -47,6 +48,12 @@ export function Prioridades({
   titulo?: string;
   sub?: string;
   limite?: number;
+  /**
+   * Só na ficha do parlamentar: torna cada tema clicável, abrindo as proposições
+   * dele naquele tema. Ausente na guilda e nos Insights, onde o agregado é de
+   * muita gente e não existe uma lista única que o explique.
+   */
+  navegavel?: { slug: string; casaLabel: string };
 }) {
   const { temas, nComTema } = agregado;
   if (!nComTema || !temas.length) return null;
@@ -54,32 +61,52 @@ export function Prioridades({
   const maior = lista[0].pct || 1;
   const n = lista.length;
 
+  // o conteúdo da linha é o MESMO nos dois modos: só o invólucro muda (um <li>
+  // estático ou o <button> da ilha). Duplicar a barra aqui seria duplicar a
+  // fórmula da largura, que é onde um erro passaria despercebido.
+  const conteudo = (t: (typeof lista)[number], i: number) => (
+    <>
+      <span className="prio-tema">{t.tema}</span>
+      <span className="prio-track">
+        {/* largura relativa ao MAIOR tema, não a 100: com percentuais que não
+            somam 100 e um topo de 34%, barras sobre 100 ficariam todas curtas
+            e a comparação entre elas — que é o ponto — sumiria */}
+        <i
+          className="prio-fill"
+          style={{ width: `${Math.max((t.pct / maior) * 100, 1.5)}%`, background: rampColor(n === 1 ? 1 : 1 - i / (n - 1)) }}
+        />
+      </span>
+      <span className="prio-num">
+        <b>{Math.round(t.pct)}%</b>
+        <small>{nf.format(t.n)} de {nf.format(nComTema)}</small>
+      </span>
+    </>
+  );
+
   return (
     <div className="panel prio-panel">
       <h3>{titulo}</h3>
       <p className="sub">
         {sub ?? <>{nf.format(nComTema)} proposições de autoria com tema oficial (PL, PLP, PEC, PDL)</>}
       </p>
-      <ul className="prio-list">
-        {lista.map((t, i) => (
-          <li key={t.tema} className="prio-row">
-            <span className="prio-tema">{t.tema}</span>
-            <span className="prio-track">
-              {/* largura relativa ao MAIOR tema, não a 100: com percentuais que não
-                  somam 100 e um topo de 34%, barras sobre 100 ficariam todas curtas
-                  e a comparação entre elas — que é o ponto — sumiria */}
-              <i
-                className="prio-fill"
-                style={{ width: `${Math.max((t.pct / maior) * 100, 1.5)}%`, background: rampColor(n === 1 ? 1 : 1 - i / (n - 1)) }}
-              />
-            </span>
-            <span className="prio-num">
-              <b>{Math.round(t.pct)}%</b>
-              <small>{nf.format(t.n)} de {nf.format(nComTema)}</small>
-            </span>
-          </li>
-        ))}
+      <ul className={`prio-list${navegavel ? ' prio-nav' : ''}`}>
+        {lista.map((t, i) => (navegavel ? (
+          <TemaProposicoes
+            key={t.tema}
+            slug={navegavel.slug}
+            casaLabel={navegavel.casaLabel}
+            tema={t.tema}
+            n={t.n}
+          >
+            {conteudo(t, i)}
+          </TemaProposicoes>
+        ) : (
+          <li key={t.tema} className="prio-row">{conteudo(t, i)}</li>
+        )))}
       </ul>
+      {navegavel && (
+        <p className="prio-dica">Toque num tema para ver as proposições ↓</p>
+      )}
       <NotaDoDenominador porProposicao={agregado.temasPorProposicao} nSemTema={agregado.nSemTema} />
     </div>
   );
@@ -108,10 +135,12 @@ export function AssinaturaDaGuilda({
     <div className="panel prio-panel prio-assinatura">
       <h3>🧭 Assinatura da guilda</h3>
       <p className="sub">
-        Os temas em que o {sigla} legisla <b>mais que o Congresso</b> — a mesma conta para os dois lados,
-        em pontos percentuais
+        Os temas em que o {sigla} legisla <b>mais que o Congresso</b>, e quanto mais
       </p>
+      {/* cabeçalho da coluna: sem ele "+8,3" é um número sem unidade ao lado de duas
+          porcentagens — e é justamente a diferença entre elas */}
       <ul className="prio-list">
+        <li className="asn-head" aria-hidden><span /><span /><span>acima da média</span></li>
         {top.map((l) => (
           <li key={l.tema} className="prio-row prio-row-asn">
             <span className="prio-tema">{l.tema}</span>
@@ -119,15 +148,16 @@ export function AssinaturaDaGuilda({
               <i className="prio-fill prio-fill-asn" style={{ width: `${Math.max((l.desvio / maior) * 100, 2)}%` }} />
             </span>
             <span className="prio-num">
-              <b>+{pct1(l.desvio)}</b>
-              <small>{Math.round(l.pct)}% aqui · {Math.round(l.pctNacional)}% no Congresso</small>
+              <b>+{pct1(l.desvio)} <small className="asn-unid">p.p.</small></b>
+              <small>{Math.round(l.pct)}% aqui, {Math.round(l.pctNacional)}% no Congresso</small>
             </span>
           </li>
         ))}
       </ul>
       <p className="prio-nota">
-        Comparação, não avaliação: nenhum tema vale mais que outro aqui. O eixo diz apenas em que esta
-        bancada se distingue da média das duas casas.
+        <b>p.p. = pontos percentuais</b>, a diferença entre as duas porcentagens da linha — não é o
+        mesmo que &ldquo;x% a mais&rdquo;. Comparação, não avaliação: nenhum tema vale mais que outro
+        aqui. O eixo diz apenas em que esta bancada se distingue da média das duas casas.
       </p>
     </div>
   );
@@ -159,8 +189,8 @@ export function AnaliseIA({ analise }: { analise: Analise | null }) {
         Texto interpretativo, e por isso separado do resto do site: <b>não pontua no Poder, não muda
         o Tier e não gera título</b>. Os números acima são a classificação temática oficial das duas
         casas — a IA leu as ementas e os rótulos, não produziu quantidade nenhuma.{' '}
-        <a href={`${REPO_URL}/blob/main/docs/prompts/prioridades-${analise.promptVersao}.md`} target="_blank" rel="noopener">
-          ver o prompt ({analise.promptVersao})
+        <a href={`${REPO_URL}/blob/main/docs/prompts/${analise.prompt ?? 'prioridades'}-${analise.promptVersao}.md`} target="_blank" rel="noopener">
+          ver o prompt ({analise.prompt ?? 'prioridades'} {analise.promptVersao})
         </a>
       </p>
     </div>

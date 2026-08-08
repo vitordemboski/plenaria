@@ -45,9 +45,11 @@ Os dados **quase não mudam** (atualização em batch, no máximo diária). Por 
   **alimentada por JSON estático** (nunca por fetch de API em runtime).
 - As ilhas client (`'use client'`) são hoje: `BattleClient`, `BrazilMap`, `FutStat`,
   `GuildRanking`, `InsightsTabs`, `MapExplorer`, `PoliticianLink`, `ScatterChart`,
-  `ShareButton`, `SiteNav`, `TierListClient`, `TitleBadge`. Só o `BattleClient` faz
-  fetch (`/data/index.json`, estático); as demais recebem tudo por prop do Server
-  Component. O `InsightsTabs` é só comportamento (recentraliza a aba ativa no carrossel
+  `ShareButton`, `SiteNav`, `TemaProposicoes`, `TierListClient`, `TitleBadge`. Só
+  `BattleClient` (`/data/index.json`) e `TemaProposicoes` (`/data/props/<slug>.json`)
+  fazem fetch — de ARQUIVO ESTÁTICO, nunca de API; as demais recebem tudo por prop do
+  Server Component. O `TemaProposicoes` busca no PRIMEIRO CLIQUE, nunca no carregamento:
+  são ~19 KB que a maioria dos leitores nunca abre. O `InsightsTabs` é só comportamento (recentraliza a aba ativa no carrossel
   mobile após a navegação recriar o `<nav>`); não recebe dado, envolve os `<Link>` das
   abas. O `PoliticianLink` também é só comportamento: aquece a foto da ficha no
   `pointerdown` — no apertar, não no hover, que baixaria a foto de todo card que o
@@ -138,8 +140,9 @@ Armadilhas conhecidas das APIs:
   recalculava sobre dados velhos (log 100% `[cache]`, zero byte baixado) e ainda
   carimbava a data de hoje no `meta.json`. Hoje o volátil (bulks, cota, votações,
   autorias, Senado) expira em 24h (`PLENARIA_CACHE_TTL_H`; `--fresh` ignora), e
-  `dep-hist-*`/`dep-legs-*` (504 em rajada) e `relatores-historico.json` (~24 mil
-  chamadas) são PERMANENTES — só voltam se o arquivo sumir. Efeito colateral disso:
+  `dep-hist-*`/`dep-legs-*` (504 em rajada), `relatores-historico.json` (~24 mil
+  chamadas) e `normas-camara.json` (nº da lei; uma lei publicada não muda de número)
+  são PERMANENTES — só voltam se o arquivo sumir. Efeito colateral disso:
   relatoria nova em proposição antiga não aparece sem apagar o `relatores-historico`.
 - **`updatedAt` é a data da fonte mais velha**, não a da execução (essa é `geradoEm`).
   O dado é tão atual quanto sua parte mais velha, e é o `updatedAt` que
@@ -180,6 +183,54 @@ Armadilhas conhecidas das APIs:
 - **O bruto do card de GUILDA é OUTRA conta, não o bruto do percentil médio**
   (`scripts/lib/guilda-bruto.mjs`, com teste): contagem vira média por parlamentar, taxa
   vira soma÷soma da bancada. Detalhe em docs/architecture.md.
+- **O nº da lei ("Lei 15.172/2025") NÃO existe em campo na Câmara — e o último despacho
+  não serve.** O `urnFinal` vem vazio no bulk E na API (conferido nos dois); o número só
+  aparece na PROSA do despacho da tramitação que registrou a transformação. E ler o
+  `ultimoStatus_despacho` do bulk é a armadilha: depois de virar lei a matéria continua
+  tramitando (ofícios, autógrafos, retificações), então em 9 de cada 10 casos o ÚLTIMO
+  despacho fala de outra coisa — medido, só 78 de 793 transformadas tinham ali o número.
+  Por isso `normasPorProposicao` varre `/proposicoes/{id}/tramitacoes` de cada
+  transformada (centenas de chamadas, cache PERMANENTE em `normas-camara.json`). O Senado
+  é o oposto: `normaGerada` do `/processo` é campo estruturado com vocabulário fechado
+  (Lei / Lei Complementar / Emenda Constitucional / Decreto Legislativo). **Sem match, o
+  número é OMITIDO, nunca deduzido** — a linha cai para a identificação do projeto.
+  Lógica pura em `scripts/lib/norma.mjs` (com teste). Detalhe em docs/product-spec.md §11.
+- **Tema clicável da ficha: a lista fica NO SITE porque nenhum link para fora bate com
+  o número.** A busca da Câmara não tem filtro de tema nem campo de nome de autor (só
+  partido/UF/situação/órgão — conferido no formulário avançado); a API de Dados Abertos
+  cruza os dois, mas devolve JSON cru e conta **42 onde contamos 39** (ela inclui
+  coautoria, nós só autoria principal); e o Senado é outro vocabulário e outro portal.
+  Mandar o leitor a uma lista que contradiz a tela é pior que não ter link. A lista sai
+  do MESMO dado do número (conferido: 303 no arquivo × 303 no painel), em
+  `public/data/props/<slug>.json` (~584 arquivos, ~19 KB cada) buscado pela ilha
+  `TemaProposicoes` **no primeiro clique** — como campo do `politicians.json` as ~33 mil
+  proposições quadruplicariam o JSON lido por TODA página. Detalhe em docs/product-spec.md §11.
+- **Quem agrupa as leis por tema é a CLASSIFICAÇÃO OFICIAL, não a IA** — e isso foi
+  decidido com o número na mão: a cobertura temática das normas é de **100%** (139/139
+  na Câmara, 52/52 no Senado, medido). Trocar isso por "IA lê as ementas e cria
+  segmentos" jogaria fora dado auditável, daria agrupamento diferente a cada execução e
+  contradiz o contrato da camada (a IA **lê**, não classifica — ver `analises.mjs`). O
+  papel dela é o parágrafo, sob alvos próprios (`leis:nacional`, `leis:guilda:<sigla>`)
+  para que texto sobre o que se APROVA nunca caia ao lado da tabela do que se APRESENTA.
+- **Composição ≠ taxa de conversão** (`scripts/lib/leis-temas.mjs`, com teste). "31% das
+  normas são de Homenagens" e "3,6% das proposições de homenagem viram norma" são fatos
+  diferentes sobre a MESMA linha. A taxa exige os **dois lados deduplicados** — comparar
+  numerador deduplicado com denominador multiplicado por coautoria dá taxa inventada — e
+  só é publicada acima de um piso de normas: com 2 leis, "50% de aproveitamento" é ruído
+  vendido como fato. Abaixo do piso a taxa é `null`, **nunca 0** ("não dá para afirmar" e
+  "0% de aproveitamento" são coisas diferentes, e a segunda seria falsa).
+- **Homenagens e datas: publique o NÚMERO, recuse o ADJETIVO.** 60 das 191 normas (31%)
+  são honoríficas — título de "Capital Nacional", data comemorativa, Livro dos Heróis —,
+  e é o tema de MAIOR taxa de conversão (3,6%, contra 0,5% da Saúde). É o único recorte
+  do site em que o leitor avalia o CONTEÚDO do aprovado, e por isso ele existe. Mas o
+  rótulo é da fonte (`HOMENAGENS` em temas.mjs), não nosso: chamar de "lei inútil" seria
+  a plataforma opinando — o mesmo erro que derrubou a "Safra Eleitoral". Sem cor de
+  alarme, e o prompt da IA proíbe o adjetivo explicitamente (`docs/prompts/leis-v1.md`).
+- **"Virou lei" NÃO pontua** — a contagem já entra na Eficiência como bônus; o painel só
+  a EXIBE. Exibir não pode virar segundo atributo, senão a mesma lei conta duas vezes. E a
+  agregação de guilda é **soma simples**, não soma÷soma como as prioridades: uma lei
+  sancionada é evento inteiro, não fração — por isso o nº de membros da bancada anda junto
+  do total, como denominador à vista do leitor.
 - Câmara `/proposicoes` limita janelas de data a 3 meses — para séries, use os
   arquivos bulk (`/arquivos/...`), nunca a API paginada.
 - **A cota da Câmara vem da API por deputado, NÃO do bulk `cotas/Ano-{ano}.csv.zip`** —
@@ -356,7 +407,8 @@ Armadilhas conhecidas das APIs:
 Câmara + Senado (cache incremental em `data/raw/`), normaliza por percentil
 DENTRO de cada casa (Câmara ≠ Senado — exceto a Economia, linear no gasto), calcula Poder/Tier/gates e títulos, e emite
 `data/politicians.json`, `insights.json`, `guilds.json`, `title-defs.json`, `meta.json`,
-`licenciados.json` e `public/data/index.json`. `src/lib/types.ts` é o contrato.
+`licenciados.json`, `public/data/index.json` e um `public/data/props/<slug>.json` por
+parlamentar (proposições com tema, servidas sob demanda). `src/lib/types.ts` é o contrato.
 
 **Não existe gerador de dados sintéticos** — e não reintroduza um. Um fallback que
 inventa parlamentares é pior que um erro: se `data/` sumir, o site sobe com gente
@@ -395,6 +447,13 @@ como contestar. O contato ali precisa ser um endereço que alguém realmente lê
   componente novo deve ser verificado a 390px de largura.
 - Rampa sequencial dourada dos charts (`#3a2f18 → #f6e39b`) foi validada para dark
   surface; degraus escuros exigem "relief" (borda 1px interna + rótulo + tooltip).
+- **Ponto percentual não é porcentagem — e o número precisa carregar a unidade.** A
+  assinatura da guilda é a DIFERENÇA entre duas porcentagens da mesma linha (37% na
+  bancada − 20% no Congresso = 17 **p.p.**), e "+17" sozinho, em destaque dourado ao
+  lado de dois percentuais, se lê como pontuação arbitrária. Regra: todo número que for
+  diferença de porcentagens sai com `p.p.` (minúsculo — "P.P." não é abreviação de nada)
+  e com a frase que o reconstrói ao lado. Vale para qualquer painel novo que compare
+  duas taxas.
 - **A cor não pode julgar o que a métrica não julga.** Famílias de mapa (`map-data.ts`)
   têm `higherIsBetter`: use `null` para o que é neutro. Alinhamento com o Governo é
   neutro — pintar "mais governista = verde" (ou = vermelho) seria a plataforma tomando

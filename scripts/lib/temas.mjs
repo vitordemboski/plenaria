@@ -29,6 +29,20 @@
 export const OUTROS = 'Outros temas';
 
 /**
+ * O rótulo das leis SIMBÓLICAS — título de "Capital Nacional de X", data
+ * comemorativa, inscrição no Livro dos Heróis da Pátria, reconhecimento de
+ * manifestação cultural.
+ *
+ * Vale um nome próprio porque é o único tema cujo CONTEÚDO o leitor consegue
+ * julgar sozinho: os demais respondem "sobre o quê", este responde "com que
+ * efeito". Medido na legislatura, 60 das 191 normas o carregam. É classificação
+ * OFICIAL das duas casas ("Homenagens e Datas Comemorativas" na Câmara,
+ * "Honorífico" no Senado) — não é adjetivo nosso, e é por isso que pode ser
+ * publicado: a plataforma conta, o leitor conclui.
+ */
+export const HOMENAGENS = 'Homenagens e Datas';
+
+/**
  * O vocabulário comum, em ordem alfabética (a ordem de exibição é sempre por
  * contagem; esta aqui é só para o meta.json e para a tabela da /como-calculamos).
  */

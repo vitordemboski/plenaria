@@ -441,10 +441,150 @@ a.plate:hover { border-color: var(--gold-2); background: rgba(212, 175, 55, 0.14
   .prio-track { grid-column: 1 / -1; grid-row: 2; }
 }
 
+/* ---------- "Virou lei": o desfecho da produção legislativa (ver Leis.tsx) ----------
+   Lista de blocos, não tabela: a ementa é texto corrido de comprimento imprevisível
+   e uma célula de tabela a espremeria numa coluna de 3 palavras. */
+.lei-list { list-style: none; display: grid; gap: 2px; }
+.lei-row { padding: 11px 0; border-top: 1px solid var(--line); }
+.lei-row:first-child { border-top: 0; padding-top: 2px; }
+.lei-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 5px; }
+/* o nome da NORMA é o destaque — é por ele que a lei existe no mundo */
+.lei-norma {
+  font-family: var(--font-display), serif; font-weight: 700; font-size: 14.5px;
+  color: var(--gold-2); letter-spacing: 0.01em;
+}
+/* sem nº de norma publicado, o destaque é o projeto: a linha fica visivelmente
+   mais modesta, que é a leitura correta — não sabemos o nome da lei */
+.lei-norma.sem { color: var(--ink); font-size: 13px; }
+.lei-ref, .lei-data { font-size: 10.5px; color: var(--muted); }
+.lei-data { margin-left: auto; white-space: nowrap; }
+.lei-ementa { font-size: 12px; line-height: 1.6; color: var(--ink); margin: 0; }
+.lei-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-top: 7px; }
+.lei-autor { font-size: 11px; color: var(--ink); text-decoration: none; }
+.lei-autor b { font-weight: 700; }
+.lei-autor:hover b { color: var(--gold-2); }
+.lei-autor small { color: var(--muted); font-size: 10px; }
+.lei-coletiva { font-size: 11px; color: var(--muted); font-style: italic; }
+/* a taxa de conversão é o número que responde "o que vira lei DE FATO" — ela
+   precisa se destacar do percentual de composição ao lado, senão os dois viram
+   a mesma coisa aos olhos */
+.lei-taxa { color: var(--gold-2); font-weight: 700; }
+/* homenagens/datas: o único recorte em que o leitor avalia o CONTEÚDO aprovado.
+   Sem cor de alarme — a métrica não julga, e pintar de vermelho seria a
+   plataforma opinando pelo CSS (mesma regra do higherIsBetter: null do mapa) */
+.lei-simb-num { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 6px; }
+.lei-simb-num b { font-family: var(--font-display), serif; font-size: 40px; color: var(--gold-2); line-height: 1; }
+.lei-simb-num span { font-size: 12.5px; color: var(--ink); }
+.lei-simb-num i { color: var(--muted); font-style: normal; }
+.lei-fonte { font-size: 10.5px; color: var(--gold-2); text-decoration: underline; margin-left: auto; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  /* a data sai do canto direito e vira mais um item da linha: com o rótulo da
+     norma longo ("Emenda Constitucional 132/2023") o `margin-left: auto` empurrava
+     a data para uma segunda linha vazia */
+  .lei-data, .lei-fonte { margin-left: 0; }
+}
+
 .carta-back { font-size: 11px; color: var(--muted); text-align: center; }
 .carta-back a { color: var(--gold-2); text-decoration: underline; }
 
 @media (max-width: 640px) {
   .futc-head { grid-template-columns: 74px 1fr; }
   .futc-ops { font-size: 46px; }
+}
+/* cauda cortada da lista de quem emplacou (ver MAX_AUTORES_GUILDA) */
+.lei-mais { font-size: 11px; color: var(--muted); margin-top: 8px; font-style: italic; }
+
+/* ---------- "O que vira lei, por tema": grade de 4 colunas ----------
+   A 4ª coluna (conversão) só existe com `com-taxa`. Sem ela, o componente cai
+   na grade de 3 do .prio-row e serve a guilda, onde a taxa por tema seria ruído. */
+.leis-tema.com-taxa .leis-tema-row {
+  grid-template-columns: minmax(88px, 150px) 1fr auto auto;
+  column-gap: 14px;
+}
+.leis-tema-head {
+  display: grid; grid-template-columns: minmax(88px, 150px) 1fr auto auto;
+  column-gap: 14px; align-items: end; padding-bottom: 2px; margin-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.leis-tema-head span:nth-child(n + 3) {
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  text-align: right; white-space: nowrap;
+}
+/* larguras mínimas iguais às das células que rotulam, senão o cabeçalho e o
+   número não se alinham e a coluna deixa de nomear o que está embaixo dela */
+.leis-tema-head span:nth-child(3), .leis-tema-row .prio-num:not(.leis-conv) { min-width: 74px; }
+.leis-tema-head span:nth-child(4), .leis-conv { min-width: 96px; }
+.lei-taxa.vazio { color: var(--muted); font-weight: 400; }
+
+@media (max-width: 640px) {
+  /* a barra desce para a própria linha (como no .prio-row) e as DUAS colunas
+     numéricas dividem a de cima: espremidas ao lado do rótulo elas ficariam com
+     ~40px cada e os dois números colariam de novo — o problema que a coluna resolve */
+  .leis-tema.com-taxa .leis-tema-row { grid-template-columns: 1fr auto auto; row-gap: 4px; }
+  .leis-tema.com-taxa .leis-tema-row .prio-track { grid-column: 1 / -1; grid-row: 2; }
+  .leis-tema-head { grid-template-columns: 1fr auto auto; }
+  .leis-tema-head span:nth-child(2) { display: none; }
+}
+
+/* ---------- tema clicável: abre as proposições daquele tema (TemaProposicoes) ----------
+   O <button> herda a MESMA grade do .prio-row para que a linha não se mova ao
+   virar clicável — trocar o invólucro não pode deslocar a barra nem o número. */
+.prio-nav { gap: 2px; }
+.prio-item { list-style: none; }
+.prio-btn {
+  width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+  font: inherit; color: inherit; padding: 6px 4px; border-radius: 7px;
+  /* a 4ª coluna é a setinha; as três primeiras repetem o .prio-row */
+  grid-template-columns: minmax(96px, 168px) 1fr auto 14px;
+}
+.prio-btn:hover, .prio-btn:focus-visible { background: rgba(212, 175, 55, 0.07); }
+.prio-btn:focus-visible { outline: 1px solid var(--gold); outline-offset: -1px; }
+.prio-btn.aberto { background: rgba(212, 175, 55, 0.09); }
+.prio-caret { font-size: 9px; color: var(--muted); font-style: normal; justify-self: end; }
+.prio-btn.aberto .prio-caret { color: var(--gold-2); }
+/* a lista aberta recua e ganha um filete: sem isso ela se lê como continuação da
+   lista de temas, e não como o detalhe DAQUELE tema */
+.prio-props {
+  margin: 2px 0 10px 6px; padding: 6px 0 2px 12px;
+  border-left: 2px solid rgba(212, 175, 55, 0.3);
+}
+.prio-props-vazio { font-size: 11.5px; color: var(--muted); padding: 6px 0; }
+.prio-retry { background: none; border: 0; padding: 0; font: inherit; color: var(--gold-2); text-decoration: underline; cursor: pointer; }
+.prio-dica { font-size: 10.5px; color: var(--muted); margin-top: 10px; font-style: italic; }
+
+@media (max-width: 640px) {
+  /* mesma quebra do .prio-row: a barra desce para a própria linha, e a setinha
+     acompanha o número em vez de criar uma 4ª coluna de 14px no estreito */
+  .prio-btn { grid-template-columns: 1fr auto 14px; row-gap: 4px; }
+  .prio-btn .prio-track { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* ---------- assinatura da guilda: o "+17" precisa de unidade e de rótulo ----------
+   O número é a DIFERENÇA entre duas porcentagens da mesma linha (pontos percentuais).
+   Sem unidade, ele se lê como pontuação; e no Insights ele ocupava o lugar de honra
+   que pertence ao TEMA, que é a resposta da seção. */
+.asn-row .nm b { font-size: 13px; }
+.asn-row .nm small { line-height: 1.45; }
+.asn-sigla { color: var(--gold-2); font-weight: 700; }
+.asn-gap { text-align: right; line-height: 1.1; white-space: nowrap; }
+.asn-gap b { font-family: var(--font-display), serif; font-size: 17px; color: var(--gold-2); }
+/* SEM uppercase: a abreviação de "pontos percentuais" é `p.p.` minúsculo —
+   "P.P." é outra coisa (e nenhuma) */
+.asn-gap small { display: block; font-size: 9.5px; letter-spacing: 0.06em; color: var(--muted); }
+.asn-unid { font-size: 9px; letter-spacing: 0.06em; color: var(--muted); font-family: var(--font-mono), monospace; }
+.asn-head {
+  display: grid; grid-template-columns: minmax(96px, 168px) 1fr auto; gap: 10px;
+  align-items: end; padding-bottom: 2px; margin-bottom: 2px; border-bottom: 1px solid var(--line);
+}
+.asn-head span:nth-child(3) {
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  text-align: right; white-space: nowrap; min-width: 96px;
+}
+/* a linha da assinatura no Insights tem 3 filhos, não os 4 do .lrow padrão */
+.lrow.asn-row { grid-template-columns: 24px 1fr auto; }
+
+@media (max-width: 640px) {
+  .asn-head { grid-template-columns: 1fr auto; }
+  .asn-head span:nth-child(2) { display: none; }
 }

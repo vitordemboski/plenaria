@@ -298,8 +298,53 @@ export default function MethodologyPage() {
         </p>
       </div>
 
+      <div className="panel detail-block" id="leis">
+        <h3>6. &ldquo;Virou lei&rdquo; — o desfecho</h3>
+        <p>
+          O resto do site mede <b>atividade</b>: quanto se apresentou, quanto andou, sobre o quê, quanto
+          se gastou. Esta seção mede <span className="key">desfecho</span> — a proposição de{' '}
+          <b>autoria principal</b> que foi transformada em <span className="key">norma jurídica</span>.
+          É o dado mais duro do site e o mais raro: a maioria dos parlamentares não tem nenhum.
+        </p>
+        <div className="legend-list">
+          <div><b>Autoria principal</b> — a assinatura que a fonte oficial registra como proponente. Uma lei
+            tem muitas mãos (relatoria, emendas, articulação) e nós creditamos só essa, porque só ela é
+            derivável do dado. Coautor de apoio não entra, e o autor principal não &ldquo;fez a lei
+            sozinho&rdquo;.</div>
+          <div><b>Norma jurídica</b>, não &ldquo;lei&rdquo; no sentido estrito — lei ordinária, lei
+            complementar, emenda constitucional ou decreto legislativo. O tipo vai no nome de cada linha,
+            então nada precisa ser deduzido.</div>
+          <div><b>Recorte</b> — proposições <span className="key">numeradas nesta legislatura</span>, o mesmo
+            de todos os atributos. Um projeto de 2019 sancionado agora <b>não aparece</b>: a lista é o que a
+            plataforma consegue medir no período, não o currículo completo de ninguém.</div>
+          <div><b>O número da lei</b> — o Senado publica a norma gerada em campo estruturado; a{' '}
+            <span className="key">Câmara não publica em campo nenhum</span> (o campo que existiria para isso
+            vem vazio), só na prosa do despacho de tramitação. Nós varremos as tramitações atrás dele e,
+            quando não achamos, <b>a linha sai sem o número da lei</b> — omitido, nunca deduzido.</div>
+          <div><b>Não pontua duas vezes</b> — a contagem já entra na Eficiência como bônus. Aqui ela é só
+            exibida: não cria atributo, não muda o Tier e não gera título novo.</div>
+          <div><b>O agrupamento por tema é OFICIAL, não de IA</b> — as normas são agrupadas pela mesma
+            classificação temática das duas casas usada nas Prioridades (item 5), que cobre 100% delas.
+            Pedir a um modelo que lesse as ementas e inventasse segmentos jogaria fora dado oficial
+            auditável e daria agrupamentos diferentes a cada execução. Onde a IA entra é no{' '}
+            <span className="key">parágrafo</span> ao lado das barras, sempre marcado como tal.</div>
+          <div><b>Taxa de conversão</b> — normas ÷ proposições apresentadas no mesmo tema. É o número que
+            responde &ldquo;o que o Congresso aprova de fato&rdquo;, e é diferente do percentual de
+            composição ao lado dele. Só é publicada acima de um piso de normas: com 2 leis num tema,
+            &ldquo;50% de aproveitamento&rdquo; seria ruído apresentado como fato.</div>
+          <div><b>Homenagens e datas</b> — títulos de &ldquo;Capital Nacional&rdquo;, dias e semanas
+            nacionais, Livro dos Heróis da Pátria. Contamos e publicamos a proporção porque é o único
+            recorte em que se avalia o <span className="key">conteúdo</span> do que foi aprovado, não o
+            volume. O rótulo é da fonte oficial; se isso é pouco ou demais para o tempo de plenário do
+            Congresso é <b>juízo de quem lê</b> — a plataforma não adjetiva essas leis.</div>
+          <div><b>Na guilda é soma simples</b>, não taxa: uma lei sancionada é um evento inteiro, não uma
+            fração. Por isso o número de parlamentares da bancada vai na mesma frase — comparar bancadas de
+            tamanhos diferentes é do leitor, com o denominador à vista.</div>
+        </div>
+      </div>
+
       <div className="panel detail-block">
-        <h3>6. De onde vêm os dados</h3>
+        <h3>7. De onde vêm os dados</h3>
         <p>
           <span className="key">Dados reais</span>, atualizados em {meta.updatedAt}. Fontes:
           Dados Abertos da <span className="key">Câmara</span> (autorias, votos nominais, normas geradas,
@@ -312,7 +357,7 @@ export default function MethodologyPage() {
       </div>
 
       <div className="panel detail-block">
-        <h3>7. Auditar por conta própria</h3>
+        <h3>8. Auditar por conta própria</h3>
         <p>
           Nada nesta página é uma promessa que só nós podemos verificar: o{' '}
           <span className="key">código é aberto</span>, sob licença MIT, em{' '}
