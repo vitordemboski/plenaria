@@ -31,10 +31,16 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# Dados servidos ao cliente (`index.json` da Batalha, `meta.json`, e os ~584
+# `props/<slug>.json` — o glob casa caminhos aninhados). NÃO são `immutable`, pelo
+# mesmo motivo de /og/*: a URL é keyed por slug e estável, mas o CONTEÚDO é o da
+# última ingestão. Com `immutable` o navegador não revalida por um ano enquanto o
+# HTML revalida sempre — quem já visitou via NÚMERO NOVO COM LISTA VELHA, as duas
+# superfícies discordando sem avisar. 24h acompanha a cadência real (batch diário).
 [[headers]]
   for = "/data/*"
   [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+    Cache-Control = "public, max-age=86400"
 
 # Cards de compartilhamento por parlamentar. NÃO são `immutable`, ao contrário de
 # /fotos/*: a URL é keyed por slug, mas o CONTEÚDO tem os números da última

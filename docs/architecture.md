@@ -51,7 +51,7 @@ scripts/ingest-real.mjs            (única fonte: Câmara + Senado)
 
 ```
 /_next/static/*   Cache-Control: public, max-age=31536000, immutable
-/data/*.json      Cache-Control: public, max-age=31536000, immutable   (nome muda a cada release se necessário)
+/data/*.json      Cache-Control: public, max-age=86400                 (URL estável, conteúdo da última ingestão → revalida)
 /data/props/*     idem — o glob `/data/*` da Netlify casa caminhos aninhados
 /fotos/*.webp     Cache-Control: public, max-age=31536000, immutable   (id-keyed, só muda em redeploy)
 *.html            Cache-Control: public, max-age=0, must-revalidate    (revalida rápido, corpo raramente muda → 304)
@@ -64,16 +64,20 @@ marca — `/data/*` e `/fotos/*`. Brotli/gzip a Netlify negocia sozinha p/ texto
 Atualização de dados = rodar `npm run data:real && npm run build` no CI (cron diário) e
 publicar `out/`. Nenhuma invalidação além do HTML.
 
-⚠️ **`immutable` num arquivo cujo CONTEÚDO muda é uma tensão real, não resolvida.** A
+⚠️ **`immutable` só vale para URL cujo CONTEÚDO não muda — e `/data/*` não é assim.** A
 URL de `/data/index.json`, `/data/meta.json` e dos `/data/props/<slug>.json` é estável,
-mas o conteúdo muda a cada ingestão — e `max-age=31536000, immutable` manda o navegador
-NÃO revalidar por um ano. Quem já visitou pode ficar com a lista de proposições ou o
-índice da Batalha congelados. É o mesmo raciocínio que tirou `/og/*` do `immutable`
-(lá o problema foi notado e corrigido para 24h). Enquanto não for tratado, vale saber:
-o HTML revalida sempre, então **a página mostra número novo com lista velha** — o pior
-dos dois mundos, porque as duas superfícies discordam sem avisar. Correção natural:
-mover `/data/*` para `max-age=86400` (a cadência real dos dados) ou versionar as URLs
-por hash de ingestão.
+mas o conteúdo é o da última ingestão. Sob `max-age=31536000, immutable` o navegador não
+revalidava por um ano enquanto o HTML revalida sempre: quem já tinha visitado via
+**número novo com lista velha** — o pior dos dois mundos, porque as duas superfícies
+discordam sem avisar. Corrigido em 2026-08 para `max-age=86400`, a cadência real dos
+dados, pelo mesmo raciocínio que já tirara `/og/*` do `immutable`. `/fotos/*` continua
+`immutable` de propósito: é id-keyed e o conteúdo não muda entre ingestões.
+
+Duas consequências ao aplicar isso: (1) quem visitou ANTES da correção guarda o
+`immutable` antigo no cache do navegador até um ano — o header novo não alcança quem já
+tem o antigo; só o hard-refresh ou a expiração resolve, e não há como forçar do servidor;
+(2) na borda, é preciso **purgar o cache da Cloudflare** uma vez após o deploy, senão ela
+continua servindo a resposta velha com o header velho pelo TTL que já tinha.
 
 ### `public/data/props/<slug>.json` — proposições por parlamentar
 

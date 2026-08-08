@@ -61,11 +61,19 @@ Os dados **quase não mudam** (atualização em batch, no máximo diária). Por 
   `Fmt = 'money' | 'pct' | 'plain'` do `ScatterChart`, que serve a dois gráficos com
   eixos diferentes sem duplicar o componente).
 - Em produção, sirva `out/` com `Cache-Control: public, max-age=31536000, immutable`
-  para `/_next/static/*`, `/data/*` e `/fotos/*`; HTML com `max-age=0, must-revalidate`.
+  para `/_next/static/*` e `/fotos/*`; HTML com `max-age=0, must-revalidate`.
   Na Netlify isso é versionado no `netlify.toml` da raiz: o `@netlify/plugin-nextjs`
   já marca `/_next/static/*` (content-hash) e o HTML, e o `netlify.toml` cobre o que
-  ele NÃO marca — `/data/*` e `/fotos/*` (id-keyed, só mudam em redeploy). Brotli/gzip
-  a Netlify negocia sozinha p/ texto (HTML/JS/JSON), então compressão já está de pé.
+  ele NÃO marca — `/fotos/*` (id-keyed, só mudam em redeploy), `/og/*` e `/data/*`.
+  Brotli/gzip a Netlify negocia sozinha p/ texto (HTML/JS/JSON), então compressão já
+  está de pé.
+- **`immutable` só para URL cujo CONTEÚDO não muda.** `/data/*` (índice da Batalha,
+  `meta.json`, os ~584 `props/<slug>.json` — o glob da Netlify casa caminhos aninhados)
+  e `/og/*` têm URL estável e conteúdo da última ingestão: sob `immutable` o navegador
+  não revalidava por um ano enquanto o HTML revalida sempre, e o leitor recorrente via
+  **número novo com lista velha**, as duas superfícies discordando sem avisar. Os dois
+  são `max-age=86400`, a cadência real dos dados. Superfície nova servida de arquivo
+  regerado pela ingestão nasce assim — `immutable` é só para id-keyed de verdade.
 
 ## Modos de dados e o meta.json
 
