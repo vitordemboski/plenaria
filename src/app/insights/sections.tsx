@@ -386,7 +386,7 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
     fiscalizacao: 'quem mais cobra o Executivo (requerimentos, convocações e PFC)',
     influencia: 'quem tem mais seguidores nas redes',
     economia: 'quem menos usa a cota (mais frugal)',
-    comando: 'quem ocupa mais comissões e presidências',
+    comando: 'quem ocupa mais comissões, presidências e lideranças de bancada',
     alinhamento: 'quem mais vota com a orientação do Governo',
   };
   // rankings excluem mandato parcial (posse recente) — mesma regra do resto do produto

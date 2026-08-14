@@ -638,3 +638,70 @@ oficial — que era o objetivo.
 nunca no carregamento. São ~33 mil proposições no total: como campo do
 `politicians.json` elas quadruplicariam o JSON lido por toda página do site para servir
 a um painel que a maioria não abre.
+
+---
+
+## 12. Liderança de bancada — o cargo que faltava no Comando
+
+O Comando se apresenta como **peso institucional**, mas media só comissões: a liderança
+de bancada — o posto mais forte da Casa depois da Presidência — simplesmente não existia
+no pipeline. `/deputados/{id}/orgaos` **não a publica** (os 43 títulos que o endpoint
+devolve vão de "Titular" a "Ouvidor-Geral"; não há um único "Líder"), então o atributo
+punha **10 dos 21 líderes da Câmara abaixo de 40**, a faixa vermelha. O oposto do que ele
+afirma medir.
+
+**Fonte:** `legis.senado.leg.br/dadosabertos/composicao/lideranca` — UMA chamada, cobre as
+DUAS casas (`casa`: CD/SF/CN), traz a composição vigente com `dataDesignacao`. Cache
+volátil: liderança troca no meio da legislatura. Lógica pura em
+`scripts/lib/lideranca.mjs` (com teste).
+
+### O que pontua, e o que só é nomeado
+
+| Papel (`siglaTipoLideranca`) | Bônus | Por quê |
+|---|---|---|
+| `L` Líder | **+3**, uma vez | mesmo peso da presidência de comissão |
+| `V` Vice-líder · `1` 1º vice-líder | 0 | **163 dos 512 deputados (32%) e 19 dos 81 senadores** ocupam uma; 104 dos 246 vices são de bloco na Câmara. Peso que um terço da casa tem não distingue ninguém |
+| `R` Representante | 0 | ver abaixo |
+
+**Representante não é Líder.** Bancada pequena demais para ter liderança indica um
+*Representante*, e a fonte escolhe a palavra de propósito: ele não tem tempo de liderança
+nem assento no Colégio de Líderes. A armadilha é que **`/partidos/{id}` da Câmara devolve
+essa mesma pessoa dentro de `status.lider`** — duas fontes oficiais, dois rótulos para o
+mesmo fato. Publicar "Líder" porque uma delas foi mais generosa seria escolher o rótulo,
+não lê-lo. Vale a regra geral do projeto: o rótulo é o da fonte.
+
+### Armadilhas medidas
+
+- **Liderança de bloco no SENADO (unidade 2) vem sem o nome do bloco**; a da Câmara
+  (unidade 10) vem com. Recusar o registro custava a liderança de 6 senadores, 4 deles
+  LÍDERES, em silêncio. Sem o nome, publica-se o rótulo genérico da própria fonte
+  ("Líder de Bloco no Senado") — falta *qual* bloco, não a liderança.
+- **`siglaBloco` guarda a lista inteira de partidos.** O maior bloco da Câmara saía como
+  "Vice-líder do UNIÃO, PP, PSD, REPUBLICANOS, MDB, Federação PSDB CIDADANIA, PODE na
+  Câmara". Acima de um partido, publica-se a contagem ("de Bloco (7 partidos)").
+- **O match do DEPUTADO é por NOME.** `codigoParlamentar` é sempre código do sistema do
+  Senado, inclusive nos registros de deputado (Antonio Brito vem como 5221, que não é o id
+  dele na Câmara). Senador casa por id direto — exigir que o nome também confira ali
+  derrubava 6 senadores, o mesmo match nominal que já quebrou no CEAPS. Nos registros de
+  CD/CN o id só é aceito com o nome confirmando, porque o espaço de códigos é compartilhado
+  e um código de deputado pode cair sobre um senador nosso sem que nada denuncie.
+- **Os três motivos de descarte são logados SEPARADAMENTE** (sem parlamentar na base ·
+  sem rótulo publicável · código desconhecido). Num balde só, o aviso apontou a causa
+  errada: 6 senadores caíram por falta do nome do bloco e o log mandou investigar um match
+  nominal que estava intacto.
+
+### O que NÃO entrou: obstrução
+
+Medida e descartada. O voto "Obstrução" existe no bulk (5.272 registros em 4 anos), mas
+falha no teste que este projeto aplica antes de deixar qualquer métrica pontuar — o eixo
+governo/oposição: **mediana de 2 obstruções entre governistas (alinhamento ≥ 70) contra
+56 na oposição (< 40)**, um fator de 28×. A Fiscalização, informativa justamente por
+isso, tinha ~10×. Não mede método de trabalho, mede posição no espectro.
+
+Some-se a isso que **o instrumento real não é publicado** — não existe requerimento de
+adiamento de discussão, de votação, de retirada de pauta ou de verificação de quórum no
+bulk de proposições (conferidos todos os subtipos de REQ) —, que o sinal está sumindo
+(3.222 em 2023 → 35 em 2026, porque a obstrução migrou para orientação de bancada) e que
+"atrapalhar para negociar" é **intenção**, não fato derivável: o mesmo erro que rebatizou
+a "Safra Eleitoral". Obstrução já conta como voto registrado na Stamina, e é só isso que
+se pode afirmar sobre ela.

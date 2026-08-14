@@ -38,7 +38,10 @@ export function resumoCurtoStats(n) {
 
   if (n.eficTocou != null && n.eficAndou != null) {
     r.eficiencia = n.eficTocou
-      ? `${nf.format(n.eficAndou)} de ${nf.format(n.eficTocou)} matérias avançaram · ${pct(n.eficAndou / n.eficTocou)}`
+      // "que tocou" não é enfeite: na imagem não há tooltip, e o denominador aqui é
+      // MAIOR que o do Ataque (autoria + relatoria × só autoria). Sem essas duas
+      // palavras as duas linhas se leem como se uma contradissesse a outra.
+      ? `${nf.format(n.eficAndou)} de ${nf.format(n.eficTocou)} matérias que tocou avançaram · ${pct(n.eficAndou / n.eficTocou)}`
       : 'nenhuma matéria de autoria ou relatoria';
   }
 

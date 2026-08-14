@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { politicians, getPolitician, getTitle, getGuild, SCORING_STAT_META, INFO_STAT_META, TIER_LABEL, casaLabel, meta, foraDoRanking } from '@/lib/data';
+import { politicians, getPolitician, getTitle, getGuild, SCORING_STAT_META, INFO_STAT_META, TIER_LABEL, casaLabel, meta, foraDoRanking, dataBR } from '@/lib/data';
 import { FutStat } from '@/components/FutStat';
 import { CotaBreakdown } from '@/components/CotaBreakdown';
 import { GuildCrest } from '@/components/GuildCrest';
@@ -433,6 +433,20 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
           <div style={{ marginTop: 10 }}>
             🏛️ Membro atual de <b>{p.comissoes.total}</b> {p.comissoes.total === 1 ? 'órgão' : 'órgãos'}
             {p.comissoes.cargos.length > 0 && <> — {p.comissoes.cargos.map((c) => `${c.cargo} da ${c.sigla}`).join(', ')}</>}.
+          </div>
+        )}
+        {/* Liderança sai de outra fonte que as comissões (`/deputados/{id}/orgaos` não
+            publica o título "Líder") e por isso é linha própria. O rótulo é o da fonte:
+            vice-líder e representante NÃO viram "líder" aqui — ver lib/lideranca.mjs. */}
+        {p.lideranca && (
+          <div style={{ marginTop: 10 }}>
+            👑 {p.lideranca.map((l, i) => (
+              <span key={l.rotulo}>{i > 0 && ' · '}<b>{l.rotulo}</b> desde {dataBR(l.desde)}</span>
+            ))}.
+            {p.lideranca.every((l) => l.papel !== 'lider') && (
+              <> Vice-liderança e representação de bancada são <b>nomeadas, mas não pontuam</b> no
+              Comando: um terço da Câmara ocupa uma delas.</>
+            )}
           </div>
         )}
         <div style={{ marginTop: 10 }} className="muted">

@@ -132,6 +132,11 @@ export interface Politician {
     mandatos?: number };
   /** órgãos/comissões ATUAIS + cargos de comando (presidências etc.) */
   comissoes?: { total: number; cargos: { sigla: string; nome: string; cargo: string }[] };
+  /** liderança de bancada VIGENTE (líder primeiro). O `papel` separa o que pontua no
+   *  Comando do que só é nomeado: vice-liderança é cargo de um terço da Câmara e
+   *  `representante` é o rótulo que a fonte dá a quem lidera bancada pequena demais
+   *  para ter liderança — nenhum dos dois é "Líder". Ver scripts/lib/lideranca.mjs. */
+  lideranca?: { papel: 'lider' | 'vice' | 'representante'; rotulo: string; desde: string }[];
 }
 
 /** Registro slim servido em /data/index.json para busca e Modo Batalha. */
@@ -142,6 +147,11 @@ export interface PoliticianIndex {
   casa: Casa;
   uf: string;
   partido: string;
+  /** liderança de bancada VIGENTE (líder primeiro). O `papel` separa o que pontua no
+   *  Comando do que só é nomeado: vice-liderança é cargo de um terço da Câmara e
+   *  `representante` é o rótulo que a fonte dá a quem lidera bancada pequena demais
+   *  para ter liderança — nenhum dos dois é "Líder". Ver scripts/lib/lideranca.mjs. */
+  lideranca?: { papel: 'lider' | 'vice' | 'representante'; rotulo: string; desde: string }[];
   tier: Tier;
   ops: number;
   stats: Stats;

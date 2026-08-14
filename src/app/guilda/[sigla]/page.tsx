@@ -70,6 +70,9 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
   const members = politicians.filter((p) => p.partido === guild.sigla && !foraDoRanking(p));
   const parciais = politicians.filter((p) => p.partido === guild.sigla && foraDoRanking(p));
   const n = members.length || 1;
+  // líder de bancada inclui quem está fora do ranking: o cargo é fato institucional
+  // e não depende de ter Tier (a presidência da Casa, por ex., fica fora do roster)
+  const lideres = [...members, ...parciais].filter((p) => p.lideranca?.some((l) => l.papel === 'lider'));
 
   const avgStats = Object.fromEntries(
     SCORING_STAT_META.map((s) => {
@@ -411,6 +414,18 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
           <h2 style={{ fontSize: 22 }}>MEMBROS</h2>
           <p>todos os parlamentares da guilda, por tier</p>
         </div>
+        {/* Só quem LIDERA — vice-líder é cargo de um terço da Câmara e a linha viraria
+            um segundo roster. Quem é vice tem o cargo nomeado na própria ficha. */}
+        {lideres.length > 0 && (
+          <div className="sub" style={{ marginBottom: 16 }}>
+            👑 {lideres.map((p, i) => (
+              <span key={p.slug}>
+                {i > 0 && ' · '}
+                <b>{p.nome}</b> — {p.lideranca!.filter((l) => l.papel === 'lider').map((l) => l.rotulo).join(', ')}
+              </span>
+            ))}
+          </div>
+        )}
         {TIER_ORDER.map((t) => {
           const list = byTier.get(t)!;
           if (!list.length) return null;

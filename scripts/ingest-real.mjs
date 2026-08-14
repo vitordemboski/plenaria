@@ -149,12 +149,16 @@ const REDE_LABEL = { instagram: 'Instagram', x: 'X (Twitter)', outra: 'rede soci
 const fmtSeg = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace('.', ',')} mi` : new Intl.NumberFormat('pt-BR').format(n));
 
 // ---------- 1. Deputados atuais + partidos ----------
+// Com retentativa (e cache VOLÁTIL — a lista muda): esta é a PRIMEIRA chamada da
+// ingestão, e sem ela um 504 transitório da Câmara — o mesmo de rajada documentado no
+// cachedRetry — abortava a execução inteira no primeiro passo, com a página 2 falhando
+// duas vezes seguidas. Só o 404 é definitivo; 5xx é para insistir e só então explodir.
 async function fetchDeputados() {
   const all = [];
   for (let pag = 1; ; pag++) {
-    const body = await cached(`deputados-p${pag}.json`,
-      `${API}/api/v2/deputados?itens=100&pagina=${pag}&ordem=ASC&ordenarPor=nome`, { json: true });
-    const { dados } = JSON.parse(body);
+    const { dados } = await cachedRetry(`deputados-p${pag}.json`,
+      `${API}/api/v2/deputados?itens=100&pagina=${pag}&ordem=ASC&ordenarPor=nome`,
+      { permanente: false });
     all.push(...dados);
     if (dados.length < 100) break;
   }
@@ -589,7 +593,13 @@ async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temas
 // `idLegislatura` devolve os 4 anos numa passada e é o recorte que já queríamos.
 const CEAP_FILTRO = `idLegislatura=${LEG_ATUAL}`;
 
-async function fetchCeapDeputado(id, tentativas = 6) {
+// 8 tentativas com backoff crescente, a mesma dosagem do cachedRetry: com 6 tentativas
+// de 600ms×t (~9s no total) a cota abortava a ingestão inteira depois de ~40 min de
+// trabalho, e num deputado DIFERENTE a cada execução — o que descarta particularidade do
+// parlamentar e aponta carga. Abortar continua certo (cota vazia não deprime, ELOGIA:
+// gasto mínimo → Economia alta → Guardião do Cofre); o que estava errado era desistir
+// cedo de um 5xx transitório, que o próprio AGENTS.md manda insistir.
+async function fetchCeapDeputado(id, tentativas = 8) {
   const file = join(RAW, `cota-${id}.json`);
   if (cacheServe(file)) {
     registraFonte(file, false);
@@ -604,8 +614,8 @@ async function fetchCeapDeputado(id, tentativas = 6) {
       try {
         const res = await fetch(url, { headers: { Accept: 'application/json' } });
         if (res.ok) dados = (await res.json()).dados ?? [];
-        else await new Promise((r) => setTimeout(r, 600 * (t + 1)));
-      } catch { await new Promise((r) => setTimeout(r, 600 * (t + 1))); }
+        else await new Promise((r) => setTimeout(r, 1500 * (t + 1)));
+      } catch { await new Promise((r) => setTimeout(r, 1500 * (t + 1))); }
     }
     // lista vazia = "o mais frugal da casa" em silêncio: esgotou, aborta.
     if (!dados) throw new Error(`CEAP: ${tentativas} tentativas falharam no deputado ${id}, página ${pagina}`);
@@ -641,7 +651,10 @@ async function fetchCeapDeputado(id, tentativas = 6) {
   return lancamentos;
 }
 
-async function fetchCeap(deputados, concorrencia = 6) {
+// Concorrência 4, não 6: é a mesma lição que a classificação do Senado já custou (ver
+// AGENTS.md) — a API da Câmara devolve 5xx sob paralelismo, e aqui isso não degrada o
+// dado, aborta a execução.
+async function fetchCeap(deputados, concorrencia = 4) {
   const gastoByDep = new Map(); // id → total R$ (valorLiquido)
   const catByDep = new Map();   // id → Map<tipoDespesa, R$>
   const fornByDep = new Map();  // id → Map<chaveFornecedor(doc, nome), R$>
@@ -814,12 +827,13 @@ const LEGISLATURAS = Array.from({ length: 20 }, (_, i) => 38 + i).join(',');
  *  NUNCA engula a falha devolvendo vazio: o histórico define meses de exercício,
  *  e histórico vazio = "0 meses" = deputado apagado do ranking em silêncio. Se
  *  esgotar as tentativas, é para explodir mesmo — melhor abortar que corromper. */
-async function cachedRetry(name, url, tentativas = 8) {
+async function cachedRetry(name, url, { tentativas = 8, permanente = true } = {}) {
   for (let i = 1; ; i++) {
-    // permanente: são as 513 chamadas que estouram em 504 sob carga. Expirá-las
+    // permanente por padrão: são as 513 chamadas que estouram em 504 sob carga. Expirá-las
     // por tempo faria TODA ingestão correr o risco de abortar (ver comentário do
-    // cacheServe) — para refazer, apague os `dep-hist-*.json` à mão.
-    try { return await cachedGentil(name, url, { permanente: true }); }
+    // cacheServe) — para refazer, apague os `dep-hist-*.json` à mão. Quem precisa do dado
+    // FRESCO (a listagem de deputados) pede `permanente: false` e leva só a retentativa.
+    try { return await cachedGentil(name, url, { permanente }); }
     catch (e) {
       if (i >= tentativas || !/^5\d\d /.test(e.message ?? '')) throw e;
       console.log(`  [retry ${i}/${tentativas - 1}] ${e.message}`);
@@ -897,28 +911,148 @@ function intervalosCamara(hist) {
 // tamanho de bancada e senioridade, não por mérito individual — pontuar enviesaria
 // a nota a favor de veteranos e partidos grandes, contra estreantes.
 const ehPresidente = (cargo) => /^presidente$/i.test(cargo ?? '');
-function comandoRawDe(comissoes) {
+function comandoRawDe(comissoes, liderancas) {
   const cargos = comissoes?.cargos ?? [];
   const pres = cargos.filter((c) => ehPresidente(c.cargo)).length;
   const vices = cargos.length - pres;
-  return (comissoes?.total ?? 0) + 3 * pres + vices;
+  return (comissoes?.total ?? 0) + 3 * pres + vices + pesoLideranca(liderancas);
 }
-function comandoTexto(comissoes) {
+function comandoTexto(comissoes, liderancas) {
   const cargos = comissoes?.cargos ?? [];
   const pres = cargos.filter((c) => ehPresidente(c.cargo)).length;
   const vices = cargos.length - pres;
   const partes = [`${comissoes?.total ?? 0} comissões/órgãos ativos`];
   if (pres) partes.push(`preside ${pres}`);
   if (vices) partes.push(`vice-presidência em ${vices}`);
+  const lid = textoLideranca(liderancas);
+  if (lid) partes.push(lid);
   return partes.join(' · ');
+}
+
+/**
+ * Liderança de bancada + Comando, para as duas casas de uma vez.
+ *
+ * A liderança NÃO sai de `/deputados/{id}/orgaos` (aquele endpoint não tem o título
+ * "Líder" — conferido nos 43 títulos que ele devolve). Sai de `composicao/lideranca`
+ * do Senado: UMA chamada, composição vigente, `casa` CD/SF/CN. Antes disso, o Comando
+ * — o atributo que se chama peso institucional — punha 10 dos 21 líderes da Câmara
+ * abaixo de 40, a faixa vermelha.
+ *
+ * Cache VOLÁTIL: liderança troca no meio da legislatura, e um cache permanente aqui
+ * deixaria um ex-líder liderando para sempre.
+ *
+ * Falha de rede aqui só custa o BÔNUS, nunca o atributo: o Comando continua saindo das
+ * comissões. Por isso não aborta — mas loga, porque "todo mundo sem liderança" é
+ * exatamente o sucesso vazio que este projeto mais persegue.
+ */
+async function aplicaComando(todos) {
+  let registros = [];
+  try {
+    registros = await senadoJson('liderancas.json',
+      'https://legis.senado.leg.br/dadosabertos/composicao/lideranca',
+      (j) => Array.isArray(j) && j.length > 0);
+  } catch (e) {
+    console.log(`⚠️  [lideranca] fonte indisponível (${e.message}) — Comando sai só das comissões`);
+  }
+
+  const { porSlug, semMatch, semRotulo, desconhecidos } = indexaLiderancas(registros, todos, HOJE);
+  for (const p of todos) {
+    const lids = porSlug.get(p.slug);
+    if (lids?.length) p.lideranca = lids;
+  }
+
+  for (const casa of ['camara', 'senado']) {
+    const daCasa = todos.filter((p) => p.casa === casa);
+    const dim = daCasa.map((p) => comandoRawDe(p.comissoes, p.lideranca)).sort((a, b) => a - b);
+    for (const p of daCasa) {
+      const rawC = comandoRawDe(p.comissoes, p.lideranca);
+      p.stats.comando = percentileRank(dim, rawC);
+      p.statRaw.comando = rawC;
+      p.rawNumbers.comando = comandoTexto(p.comissoes, p.lideranca);
+    }
+  }
+
+  const lideres = [...porSlug.values()].filter((l) => l.some((x) => x.papel === 'lider')).length;
+  console.log(`[lideranca] ${porSlug.size} parlamentares com liderança (${lideres} líderes) de ${registros.length} registros`);
+  // Unidades é o normal (vice-líder licenciado, suplente que saiu). Dezenas é match
+  // nominal quebrado — o deputado casa por NOME, e é aí que este pipeline já se queimou.
+  if (semMatch.length) {
+    console.log(`⚠️  [lideranca] ${semMatch.length} registros sem parlamentar na base: ${semMatch.map((r) => `${r.nomeParlamentar} (${r.casa})`).join(', ')}`);
+  }
+  if (semRotulo.length) {
+    console.log(`⚠️  [lideranca] ${semRotulo.length} registros que não viraram rótulo publicável (bancada sem nome ou sem data de designação): ${semRotulo.map((r) => `${r.nomeParlamentar} (unidade ${r.idTipoUnidadeLideranca})`).join(', ')}`);
+  }
+  for (const r of desconhecidos) {
+    console.log(`⚠️  [lideranca] código NÃO classificado: siglaTipoLideranca="${r.siglaTipoLideranca}" idTipoUnidadeLideranca=${r.idTipoUnidadeLideranca} (${r.nomeParlamentar}) — declare-o em lib/lideranca.mjs`);
+  }
 }
 
 // menos de 12 meses em exercício efetivo (~1 ano de 41) = mandato parcial: fora do
 // ranking. Unifica posse recente E licença/ministério prolongados (quase-ausentes).
 const MESES_MIN_RANK = 12;
+  const lid = textoLideranca(liderancas);
+  if (lid) partes.push(lid);
 
 // ---------- Presidência da Casa: fora do ranking (cargo institucional) ----------
 // Quem preside a Câmara/Senado não vota (só desempate/secreto), não autora nem relata
+/**
+ * Liderança de bancada + Comando, para as duas casas de uma vez.
+ *
+ * A liderança NÃO sai de `/deputados/{id}/orgaos` (aquele endpoint não tem o título
+ * "Líder" — conferido nos 43 títulos que ele devolve). Sai de `composicao/lideranca`
+ * do Senado: UMA chamada, composição vigente, `casa` CD/SF/CN. Antes disso, o Comando
+ * — o atributo que se chama peso institucional — punha 10 dos 21 líderes da Câmara
+ * abaixo de 40, a faixa vermelha.
+ *
+ * Cache VOLÁTIL: liderança troca no meio da legislatura, e um cache permanente aqui
+ * deixaria um ex-líder liderando para sempre.
+ *
+ * Falha de rede aqui só custa o BÔNUS, nunca o atributo: o Comando continua saindo das
+ * comissões. Por isso não aborta — mas loga, porque "todo mundo sem liderança" é
+ * exatamente o sucesso vazio que este projeto mais persegue.
+ */
+async function aplicaComando(todos) {
+  let registros = [];
+  try {
+    registros = await senadoJson('liderancas.json',
+      'https://legis.senado.leg.br/dadosabertos/composicao/lideranca',
+      (j) => Array.isArray(j) && j.length > 0);
+  } catch (e) {
+    console.log(`⚠️  [lideranca] fonte indisponível (${e.message}) — Comando sai só das comissões`);
+  }
+
+  const { porSlug, semMatch, semRotulo, desconhecidos } = indexaLiderancas(registros, todos, HOJE);
+  for (const p of todos) {
+    const lids = porSlug.get(p.slug);
+    if (lids?.length) p.lideranca = lids;
+  }
+
+  for (const casa of ['camara', 'senado']) {
+    const daCasa = todos.filter((p) => p.casa === casa);
+    const dim = daCasa.map((p) => comandoRawDe(p.comissoes, p.lideranca)).sort((a, b) => a - b);
+    for (const p of daCasa) {
+      const rawC = comandoRawDe(p.comissoes, p.lideranca);
+      p.stats.comando = percentileRank(dim, rawC);
+      p.statRaw.comando = rawC;
+      p.rawNumbers.comando = comandoTexto(p.comissoes, p.lideranca);
+    }
+  }
+
+  const lideres = [...porSlug.values()].filter((l) => l.some((x) => x.papel === 'lider')).length;
+  console.log(`[lideranca] ${porSlug.size} parlamentares com liderança (${lideres} líderes) de ${registros.length} registros`);
+  // Unidades é o normal (vice-líder licenciado, suplente que saiu). Dezenas é match
+  // nominal quebrado — o deputado casa por NOME, e é aí que este pipeline já se queimou.
+  if (semMatch.length) {
+    console.log(`⚠️  [lideranca] ${semMatch.length} registros sem parlamentar na base: ${semMatch.map((r) => `${r.nomeParlamentar} (${r.casa})`).join(', ')}`);
+  }
+  if (semRotulo.length) {
+    console.log(`⚠️  [lideranca] ${semRotulo.length} registros que não viraram rótulo publicável (bancada sem nome ou sem data de designação): ${semRotulo.map((r) => `${r.nomeParlamentar} (unidade ${r.idTipoUnidadeLideranca})`).join(', ')}`);
+  }
+  for (const r of desconhecidos) {
+    console.log(`⚠️  [lideranca] código NÃO classificado: siglaTipoLideranca="${r.siglaTipoLideranca}" idTipoUnidadeLideranca=${r.idTipoUnidadeLideranca} (${r.nomeParlamentar}) — declare-o em lib/lideranca.mjs`);
+  }
+}
+
 // como os demais — o cargo suprime Stamina, Ataque e Técnica de uma vez. Compará-lo a
 // deputados de bancada é injusto (mesma lógica do ministro licenciado = mandato parcial).
 // Presidentes ATUAIS são detectados nos órgãos (Mesa Diretora, cargo "Presidente");
@@ -1559,14 +1693,8 @@ async function fetchSenado(socialMap) {
       },
     });
   }
-  // Comando (informativo): percentil DENTRO do Senado
-  const dimComandoSen = out.map((o) => comandoRawDe(o.comissoes)).sort((a, b) => a - b);
-  for (const o of out) {
-    const rawC = comandoRawDe(o.comissoes);
-    o.stats.comando = percentileRank(dimComandoSen, rawC);
-    o.statRaw.comando = rawC;
-    o.rawNumbers.comando = comandoTexto(o.comissoes);
-  }
+  // Comando fica para depois do merge das duas casas: ele depende da liderança de
+  // bancada, cuja fonte é uma só e cobre Câmara e Senado juntos (ver aplicaComando).
 
   // total de matérias do Senado que viraram norma na legislatura — mesma semântica do
   // leisTotal da Câmara (conta a matéria, não o autor), para o painel "Leis" somar as duas casas.
@@ -1955,14 +2083,6 @@ for (const p of full) {
   // mesesExercicio/mandatoParcial já vêm calculados do raw (histByDep) — não refazer.
 }
 
-// Comando (informativo): percentil DENTRO da Câmara, já com comissões carregadas
-const dimComandoCam = full.map((p) => comandoRawDe(p.comissoes)).sort((a, b) => a - b);
-for (const p of full) {
-  const rawC = comandoRawDe(p.comissoes);
-  p.stats.comando = percentileRank(dimComandoCam, rawC);
-  p.statRaw.comando = rawC;
-  p.rawNumbers.comando = comandoTexto(p.comissoes);
-}
 
 // ---------- títulos FACTUAIS (só regras 100% deriváveis dos dados reais) ----------
 const TITLE_DEFS_REAIS = [
@@ -2025,6 +2145,13 @@ for (const p of full) {
 const { senadores, normasSenado, apresentadasSenado, fornPorSenador } = await fetchSenado(social);
 full.push(...senadores);
 
+// ---------- Liderança de bancada + Comando (informativo) ----------
+// Uma chamada só, cobrindo as DUAS casas — por isso o Comando é calculado aqui, e não
+// dentro de cada casa: liderança é a maior parcela do peso institucional e a fonte é
+// comum. Ver scripts/lib/lideranca.mjs para as três decisões (vice não pontua,
+// representante não é líder, o bônus é 3 uma vez).
+await aplicaComando(full);
+
 // ---------- PRIORIDADES: no que cada parlamentar trabalha (informativo) ----------
 // Universo = autoria principal de PL/PLP/PEC/PDL, o mesmo do Ataque: é a pauta que o
 // parlamentar ESCOLHEU. Relatoria fica de fora de propósito — ela é designação da mesa
@@ -2073,6 +2200,13 @@ for (const p of full) {
 const licenciados = await fetchLicenciados(deputados, senadores);
 
 // ---------- títulos POSITIVOS / de senioridade (ambas as casas) ----------
+// ---------- Liderança de bancada + Comando (informativo) ----------
+// Uma chamada só, cobrindo as DUAS casas — por isso o Comando é calculado aqui, e não
+// dentro de cada casa: liderança é a maior parcela do peso institucional e a fonte é
+// comum. Ver scripts/lib/lideranca.mjs para as três decisões (vice não pontua,
+// representante não é líder, o bônus é 3 uma vez).
+await aplicaComando(full);
+
 // aplicados após o merge para cobrir Câmara e Senado com a mesma regra.
 // Todos green/purple → nenhum bloqueia o gate do Tier S (que só olha red).
 for (const p of full) {

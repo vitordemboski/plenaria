@@ -282,8 +282,8 @@ Armadilhas conhecidas das APIs:
   escritório"), a pessoa não é agente público, e nomeá-la ao lado do parlamentar faz o leitor
   completar a acusação sozinho. Vale p/ toda superfície nova que exiba fornecedor.
 - **INVESTIGADO E DESCARTADO — não reintroduza sem reler o motivo** (detalhe em
-  docs/product-spec.md §9). Os três caem pelo MESMO teste: uma métrica precisa valer nas
-  DUAS casas e medir o exercício do mandato.
+  docs/product-spec.md §9 e §12). Todos caem pelo MESMO teste: uma métrica precisa valer
+  nas DUAS casas e medir o exercício do mandato, não posição política.
   - **Karma (TCU)**: só alcançava deputados (o Senado não expõe CPF) enquanto os cortes de
     Tier são absolutos entre as casas — o viés estrutural que o resto do projeto combate.
     Ainda media fato possivelmente anterior ao mandato. Com ele saiu a leitura do CPF, e a
@@ -295,6 +295,22 @@ Armadilhas conhecidas das APIs:
     publica por NOME — risco de homônimo). É valor ~fixo, quase não move o percentil. A
     Economia é só a cota CEAP/CEAPS; "auxílio-moradia" no spec §1 era drift do design
     original. Só reabre se as duas casas publicarem por ID.
+  - **Obstrução**: o voto "Obstrução" (só a Câmara o publica) media posição, não método —
+    mediana de 2 entre governistas contra 56 na oposição, 28× de gap, contra os ~10× que
+    já bastaram para tirar a Fiscalização do Poder. E o instrumento REAL não é publicado:
+    não há requerimento de adiamento, retirada de pauta ou verificação de quórum no bulk
+    (conferidos todos os subtipos de REQ). "Atrapalhar para negociar" é INTENÇÃO. A
+    obstrução já conta como voto registrado na Stamina; é só isso que se afirma dela.
+- **Liderança de bancada NÃO está em `/deputados/{id}/orgaos`** — nenhum dos títulos que
+  o endpoint devolve é "Líder". Enquanto o Comando saiu só dali, o atributo que se chama
+  *peso institucional* punha 10 dos 21 líderes da Câmara na faixa vermelha (< 40). Vem
+  de `composicao/lideranca` (Senado): uma chamada, as duas casas. Duas decisões que um
+  agente reverteria sem saber: **vice-liderança é nomeada mas NÃO pontua** (um terço da
+  Câmara ocupa uma — peso que quase todos têm não distingue), e **"Representante" não é
+  "Líder"** — a fonte usa a palavra para bancada pequena demais para ter liderança,
+  enquanto `/partidos/{id}` da Câmara devolve a MESMA pessoa em `status.lider`. Duas
+  fontes oficiais, dois rótulos: publicar o mais generoso é escolher, não ler. Lógica e
+  armadilhas em `scripts/lib/lideranca.mjs` (com teste) e docs/product-spec.md §12.
 - **A lista das duas casas é só quem está EM EXERCÍCIO**: o titular licenciado não vem, e
   some do site sem explicação. `fetchLicenciados` emite `data/licenciados.json` só para a
   guilda e o estado o NOMEAREM — ele não entra no ranking (não há atividade publicada).
@@ -306,6 +322,22 @@ Armadilhas conhecidas das APIs:
   `codigoMateria → idProcesso` vinda dos `sen-processos-*.json` já cacheados. Cache
   PERMANENTE em `classificacoes-senado.json`, como o de relatores. Para recuperar de uma
   execução ruim: purgue os vazios do cache e reingira.
+  - **Obstrução**: o voto "Obstrução" (só a Câmara o publica) media posição, não método —
+    mediana de 2 entre governistas contra 56 na oposição, 28× de gap, contra os ~10× que
+    já bastaram para tirar a Fiscalização do Poder. E o instrumento REAL não é publicado:
+    não há requerimento de adiamento, retirada de pauta ou verificação de quórum no bulk
+    (conferidos todos os subtipos de REQ). "Atrapalhar para negociar" é INTENÇÃO. A
+    obstrução já conta como voto registrado na Stamina; é só isso que se afirma dela.
+- **Liderança de bancada NÃO está em `/deputados/{id}/orgaos`** — nenhum dos títulos que
+  o endpoint devolve é "Líder". Enquanto o Comando saiu só dali, o atributo que se chama
+  *peso institucional* punha 10 dos 21 líderes da Câmara na faixa vermelha (< 40). Vem
+  de `composicao/lideranca` (Senado): uma chamada, as duas casas. Duas decisões que um
+  agente reverteria sem saber: **vice-liderança é nomeada mas NÃO pontua** (um terço da
+  Câmara ocupa uma — peso que quase todos têm não distingue), e **"Representante" não é
+  "Líder"** — a fonte usa a palavra para bancada pequena demais para ter liderança,
+  enquanto `/partidos/{id}` da Câmara devolve a MESMA pessoa em `status.lider`. Duas
+  fontes oficiais, dois rótulos: publicar o mais generoso é escolher, não ler. Lógica e
+  armadilhas em `scripts/lib/lideranca.mjs` (com teste) e docs/product-spec.md §12.
 - **Prioridade temática NÃO pontua e NÃO vira título** (`p.prioridades`,
   `scripts/lib/temas.mjs`): fora do Poder, do Tier e dos gates. "Deputado da Saúde" seria
   rótulo sobre pauta política — o mesmo motivo da Fiscalização informativa —, e nenhuma

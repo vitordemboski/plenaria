@@ -75,9 +75,15 @@ export default function MethodologyPage() {
             Por que {joinPt(statsInformativos.map((s) => s.label))}{' '}
             <span className="key">não pontuam</span>: <span className="key">Influência</span> mediria
             popularidade, não trabalho — engajamento puro não compra Tier (rende o título &quot;Blogueiro
-            de Plenário&quot;). <span className="key">Comando</span> (comissões e presidências) é
-            distribuído por tamanho de bancada e senioridade, não por mérito individual — pontuá-lo
-            enviesaria a nota a favor de veteranos e partidos grandes, contra estreantes.
+            de Plenário&quot;). <span className="key">Comando</span> (comissões, presidências e
+            liderança de bancada) é distribuído por tamanho de bancada e senioridade, não por mérito
+            individual — pontuá-lo enviesaria a nota a favor de veteranos e partidos grandes, contra
+            estreantes. Dentro dele, <b>só quem LIDERA soma</b> (+3, uma vez, ainda que lidere o
+            partido e o bloco que o contém): <b>vice-liderança e representação de bancada são
+            nomeadas na ficha mas valem 0</b>, porque um terço da Câmara ocupa uma delas e peso que
+            quase todos têm não distingue ninguém. E <b>&quot;representante&quot; não vira
+            &quot;líder&quot;</b> aqui: bancada pequena demais para ter liderança indica um
+            representante, e é esse o rótulo que a fonte usa.
             {temFiscalizacao && (
               <> <span className="key">Fiscalização</span> fica de fora porque fiscalizar o Executivo é,
               na prática, fazer oposição a ele: na base atual, a oposição protocola em média{' '}
