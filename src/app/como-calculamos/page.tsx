@@ -329,6 +329,15 @@ export default function MethodologyPage() {
             quando não achamos, <b>a linha sai sem o número da lei</b> — omitido, nunca deduzido.</div>
           <div><b>Não pontua duas vezes</b> — a contagem já entra na Eficiência como bônus. Aqui ela é só
             exibida: não cria atributo, não muda o Tier e não gera título novo.</div>
+          <div><b>A norma puramente honorífica não entra no bônus</b> — quando o{' '}
+            <span className="key">único tema oficial</span> da norma é &ldquo;Homenagens e Datas&rdquo;,
+            ela não soma no volume nem no bônus por lei da Eficiência. É o tema de <b>maior</b> taxa de
+            conversão do Congresso (3,6%, contra 0,5% da Saúde): premiá-la igual faria a Eficiência medir
+            facilidade de tramitação em vez de entrega. O corte é <b>estrito</b> — norma que trata de
+            homenagem <span className="key">e</span> de outro tema (o &ldquo;Dia Nacional&rdquo; que
+            também dispõe sobre segurança pública) continua pontuando, assim como a norma que a fonte
+            deixou sem classificação. Ela <b>continua contada e exibida</b> nesta seção e no painel da
+            ficha: o que muda é só o que pontua.</div>
           <div><b>O agrupamento por tema é OFICIAL, não de IA</b> — as normas são agrupadas pela mesma
             classificação temática das duas casas usada nas Prioridades (item 5), que cobre 100% delas.
             Pedir a um modelo que lesse as ementas e inventasse segmentos jogaria fora dado oficial

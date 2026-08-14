@@ -234,6 +234,17 @@ Armadilhas conhecidas das APIs:
   rótulo é da fonte (`HOMENAGENS` em temas.mjs), não nosso: chamar de "lei inútil" seria
   a plataforma opinando — o mesmo erro que derrubou a "Safra Eleitoral". Sem cor de
   alarme, e o prompt da IA proíbe o adjetivo explicitamente (`docs/prompts/leis-v1.md`).
+- **Norma só de "Homenagens e Datas" não pontua na Eficiência** — nem no `2 × leis` do
+  volume, nem no bônus `min(15, 5 × leis)`. É o tema de MAIOR conversão do Congresso
+  (3,6% × 0,5% da Saúde): título de Capital Nacional tramita sem oposição, e premiá-lo
+  como entrega faz a Eficiência medir facilidade de tramitação. O corte é ESTRITO
+  (`soHomenagem`, com teste) — homenagem + outro tema PONTUA, e norma **sem tema** também
+  (vazio é ausência de informação, não evidência de homenagem; tratá-lo como desconto
+  seria o Sucesso Vazio pela porta dos fundos). Ela continua CONTADA e EXIBIDA em toda
+  superfície: muda o que pontua, não o que se afirma. **O título `Legislador Efetivo` lê
+  `leisPontuaveis`, não `leisAprovadas`** — selo e pontuação têm de dizer a mesma coisa —,
+  e por isso o painel dos Insights que conta TODAS as normas se chama "Quem mais emplacou":
+  nome igual com regra diferente é a plataforma se contradizendo em duas telas.
 - **"Virou lei" NÃO pontua** — a contagem já entra na Eficiência como bônus; o painel só
   a EXIBE. Exibir não pode virar segundo atributo, senão a mesma lei conta duas vezes. E a
   agregação de guilda é **soma simples**, não soma÷soma como as prioridades: uma lei

@@ -73,9 +73,19 @@ export interface Politician {
   seguidores: number;
   /** proposições relevantes (PL/PLP/PEC/PDL) apresentadas por ano, 2023..2026 */
   producaoAnual: number[];
-  /** nº de proposições de autoria principal que viraram norma jurídica. Alimenta o
-   *  bônus da Eficiência e o título `legislador-efetivo`. */
+  /** nº de proposições de autoria principal que viraram norma jurídica. É o número
+   *  EXIBIDO em toda superfície — a contagem do que foi aprovado, sem adjetivo. */
   leisAprovadas: number;
+  /** destas, quantas PONTUAM: a norma cujo único tema oficial é "Homenagens e Datas"
+   *  não entra no volume nem no bônus da Eficiência, nem concede o título
+   *  `legislador-efetivo` (ver §11 do product-spec). Sempre ≤ `leisAprovadas`; a
+   *  diferença nunca é exibida como julgamento, só explica a pontuação.
+   *
+   *  OPCIONAL de propósito: quem lê o campo é só o gerador (o site nunca o exibe),
+   *  e torná-lo obrigatório faria o build quebrar sobre qualquer `politicians.json`
+   *  anterior a ele. Se um dia a UI passar a usá-lo, trate ausente como "não sei",
+   *  nunca como zero — zero aqui significaria "nenhuma lei conta". */
+  leisPontuaveis?: number;
   /** as leis em si, da mais recente para a mais antiga. Ausente = nenhuma.
    *  Mesmo recorte de tudo o mais: proposições NUMERADAS nesta legislatura. */
   leis?: Lei[];

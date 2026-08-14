@@ -41,13 +41,16 @@ export const TIER_LABEL: Record<Tier, string> = {
 export const STAT_META = [
   { key: 'ataque', icon: '⚔️', label: 'Ataque', desc: 'PL, PLP, PEC e PDL de autoria apresentados', weight: 24 },
   { key: 'stamina', icon: '🛡️', label: 'Stamina', desc: 'taxa de voto registrado nas votações nominais ocorridas no seu exercício (abstenção conta; presença sem voto não) — no Senado, incluídas as sabatinas de autoridades', weight: 20 },
-  { key: 'eficiencia', icon: '🎯', label: 'Eficiência', desc: 'proposições que avançaram — volume + aproveitamento, com bônus por lei', weight: 28 },
+  // "matérias que tocou (autoria + relatoria)" e não "proposições": o universo é maior
+  // que o do Ataque logo acima, e o mesmo substantivo nos dois fazia os brutos da ficha
+  // (305 × 737) parecerem contradição. Mesma frase nos rawNumbers do gerador.
+  { key: 'eficiencia', icon: '🎯', label: 'Eficiência', desc: 'matérias que tocou (autoria + relatoria) e avançaram — volume + aproveitamento, com bônus por lei (a norma só de homenagem ou data comemorativa não pontua)', weight: 28 },
   { key: 'tecnica', icon: '📜', label: 'Técnica', desc: 'relatorias e emendas — trabalho técnico sobre o texto', weight: 16 },
   { key: 'economia', icon: '🪙', label: 'Economia', desc: 'frugalidade no uso da cota parlamentar (CEAP/CEAPS) — gasto mensal médio durante o exercício', weight: 12 },
   // informativos: aparecem no card e nos títulos, mas NÃO pontuam no Poder
   { key: 'fiscalizacao', icon: '🔎', label: 'Fiscalização', desc: 'requerimentos de informação, convocações de ministro e PFC', weight: 0 },
   { key: 'influencia', icon: '📢', label: 'Influência', desc: 'projeção pública — seguidores nas redes sociais', weight: 0 },
-  { key: 'comando', icon: '👑', label: 'Comando', desc: 'peso institucional — comissões que integra e presidências que ocupa', weight: 0 },
+  { key: 'comando', icon: '👑', label: 'Comando', desc: 'peso institucional — comissões que integra, presidências que ocupa e liderança de bancada (vice-liderança é nomeada, mas não pontua)', weight: 0 },
   { key: 'alinhamento', icon: '🏛️', label: 'Alinhamento', desc: 'votos coincidentes com a orientação da bancada do Governo', weight: 0 },
 ] as const;
 

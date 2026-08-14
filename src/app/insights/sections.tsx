@@ -486,10 +486,16 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
       <AnaliseIA analise={analiseLeis(leis.temas)} />
 
       <div className="panel">
-        <h3>📖 Legisladores Efetivos</h3>
+        {/* NÃO se chama "Legisladores Efetivos": este ranking conta TODAS as normas
+            (é painel de exibição), enquanto o título de mesmo nome desconta a norma
+            puramente honorífica. Nome igual com regra diferente é a plataforma se
+            contradizendo em duas telas sem avisar — o mesmo motivo pelo qual o
+            número novo não pode conviver com a lista velha. */}
+        <h3>📖 Quem mais emplacou</h3>
         <div className="sub">
           quem mais teve proposições de autoria principal transformadas em norma — lei ordinária,
-          lei complementar, emenda constitucional ou decreto legislativo
+          lei complementar, emenda constitucional ou decreto legislativo. Conta <b>todas</b> as
+          normas, inclusive as de homenagem e data comemorativa, que não pontuam na Eficiência
         </div>
         {leis.ranking.map((p, i) => (
           <PoliticianLink key={p.slug} slug={p.slug} className="lrow">

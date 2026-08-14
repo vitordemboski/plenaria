@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { agruparLeis, apresentadoVersusAprovado, simbolicas } from './leis-temas.mjs';
+import { agruparLeis, apresentadoVersusAprovado, contarPontuaveis, simbolicas, soHomenagem } from './leis-temas.mjs';
 
 const lei = (url, temas) => ({ url, temas });
 
@@ -98,4 +98,38 @@ test('simbólicas: conta a norma que TEM o tema e a que só tem ele', () => {
 test('simbólicas: sem nenhuma, o painel não inventa percentual', () => {
   assert.deepEqual(simbolicas([lei('u1', ['Saúde'])]), { n: 0, exclusivas: 0, total: 1, pct: 0 });
   assert.deepEqual(simbolicas([]), { n: 0, exclusivas: 0, total: 0, pct: 0 });
+});
+
+test('só pontua quem NÃO é puramente honorífica', () => {
+  assert.equal(soHomenagem(['Homenagens e Datas']), true);
+  // mista: tem conteúdo substantivo junto, pontua
+  assert.equal(soHomenagem(['Homenagens e Datas', 'Segurança e Defesa']), false);
+  assert.equal(soHomenagem(['Saúde']), false);
+});
+
+test('lei SEM tema pontua — ausência de dado não é evidência de homenagem', () => {
+  // a fonte vindo vazia não pode virar desconto silencioso na Eficiência da casa
+  assert.equal(soHomenagem([]), false);
+  assert.equal(soHomenagem(undefined), false);
+  assert.equal(contarPontuaveis([lei('u1', []), lei('u2', undefined)]), 2);
+});
+
+test('o tema repetido na mesma lei não a torna "mista"', () => {
+  assert.equal(soHomenagem(['Homenagens e Datas', 'Homenagens e Datas']), true);
+});
+
+test('contarPontuaveis: dedup por url e desconto só das exclusivas', () => {
+  const leis = [
+    lei('u1', ['Homenagens e Datas']),                        // não pontua
+    lei('u2', ['Homenagens e Datas', 'Segurança e Defesa']),  // pontua
+    lei('u2', ['Homenagens e Datas', 'Segurança e Defesa']),  // repetida por coautoria
+    lei('u3', ['Saúde']),                                     // pontua
+  ];
+  assert.equal(contarPontuaveis(leis), 2);
+  assert.equal(contarPontuaveis([]), 0);
+});
+
+test('lei sem url conta uma vez cada — dedup impossível não vira dedup errado', () => {
+  const semUrl = [{ temas: ['Saúde'] }, { temas: ['Educação'] }];
+  assert.equal(contarPontuaveis(semUrl), 2);
 });

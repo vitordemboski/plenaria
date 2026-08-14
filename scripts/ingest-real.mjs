@@ -32,9 +32,10 @@ import { compareceu, registrouVoto, codigoDesconhecido } from './lib/voto-senado
 import { referenciasDaCasa, evidenciaDeTitulos } from './lib/evidencia.mjs';
 import { resumoCurtoStats } from './lib/resumo-stat.mjs';
 import { licencaCamara, licencaSenado, causaDesconhecida } from './lib/licenciados.mjs';
+import { indexaLiderancas, pesoLideranca, textoLideranca } from './lib/lideranca.mjs';
 import { TEMAS, OUTROS, deTemaCamara, deClasseSenado, contarTemas, destaqueDoCard, agregarPrioridades } from './lib/temas.mjs';
 import { normaDoDespacho, normaDoSenado, resumoEmenta, ordenaLeis, urlProposicaoCamara, urlMateriaSenado } from './lib/norma.mjs';
-import { agruparLeis, apresentadoVersusAprovado, simbolicas } from './lib/leis-temas.mjs';
+import { agruparLeis, apresentadoVersusAprovado, contarPontuaveis, simbolicas, soHomenagem } from './lib/leis-temas.mjs';
 import { fonteHash, contarObsoletas, alvoNacional, alvoGuilda } from './lib/analises.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -539,12 +540,18 @@ async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temas
 
       const st = statusById.get(r[iId]);
       if (!st) continue; // não é tipo principal → não conta no Ataque
-      const e = propsByDep.get(id) ?? { total: 0, aprovadas: 0, avancadas: 0, porAno: {} };
+      const e = propsByDep.get(id) ?? { total: 0, aprovadas: 0, aprovadasPontuaveis: 0, avancadas: 0, porAno: {} };
       e.total++;
       e.porAno[y] = (e.porAno[y] ?? 0) + 1;
       if (st.avancou) e.avancadas++;
       if (st.aprovada) {
         e.aprovadas++; aprov++;
+        // a norma PURAMENTE honorífica não pontua na Eficiência (nem no 2× do
+        // volume, nem no bônus): ela continua contada e exibida no painel, só
+        // não é premiada como entrega. Ver soHomenagem() para o porquê do
+        // recorte estrito. Aqui o tema vem do bulk, não do objeto `lei` — a
+        // proposição aprovada existe mesmo quando o leiById não a tem.
+        if (!soHomenagem([...(temasPorProp.get(r[iId]) ?? [])])) e.aprovadasPontuaveis++;
         const lei = leiById.get(r[iId]);
         if (lei) {
           // tema OFICIAL da norma — o mesmo vocabulário das prioridades. É o que
@@ -1546,6 +1553,10 @@ async function fetchSenado(socialMap) {
     // as leis são montadas DENTRO do laço acima, antes desta busca em lote — daí
     // o tema ser anexado só agora. O código da matéria é o sufixo da url oficial.
     for (const l of r.leis) l.temas = [...(classifPorMateria.get(l.url.split('/').pop()) ?? [])];
+    // as que PONTUAM na Eficiência: a norma puramente honorífica fica de fora do
+    // 2× do volume e do bônus (ver soHomenagem). Só dá para contar aqui, depois
+    // de o tema chegar — é por isso que o campo não sai do laço lá em cima.
+    r.aprovadasPontuaveis = contarPontuaveis(r.leis);
   }
   // universo do Senado para a taxa "quanto de cada tema vira lei": matérias
   // DISTINTAS de autoria principal, como na Câmara
@@ -1591,21 +1602,22 @@ async function fetchSenado(socialMap) {
   const dimI = comSoc.length >= 5 ? comSoc.map((r) => r.social.seguidores).sort((a, b) => a - b) : null;
 
   // Eficiência — MESMA fórmula da Câmara (ver eficBruta lá): blend do percentil da TAXA
-  // (andou ÷ tocou) com o do VOLUME (andou + 2× virou lei), mais bônus de +5 por lei
+  // (andou ÷ tocou) com o do VOLUME (andou + 2× virou lei PONTUÁVEL — a norma só de
+  // "Homenagens e Datas" não entra), mais bônus de +5 por lei
   // (teto +15), e percentil final para restaurar a distribuição 0–100. Ter a fórmula
   // idêntica é o que torna o atributo comparável entre as casas — os percentis é que são
   // calculados DENTRO de cada uma.
   const eficTocouS = (r) => r.props + r.relatoriasPrinc;
   const eficAndouS = (r) => r.avancadas + r.relatoriasAvancadas;
   const eficTaxaS = (r) => (eficTocouS(r) ? eficAndouS(r) / eficTocouS(r) : 0);
-  const eficVolS = (r) => eficAndouS(r) + 2 * r.aprovadas;
-  const bonusLeiS = (r) => Math.min(15, 5 * r.aprovadas); // não é redundante com o 2x — ver bonusLei da Câmara
+  const eficVolS = (r) => eficAndouS(r) + 2 * r.aprovadasPontuaveis;
+  const bonusLeiS = (r) => Math.min(15, 5 * r.aprovadasPontuaveis); // não é redundante com o 2x — ver bonusLei da Câmara
   const dimEfTaxaS = porSenador.map(eficTaxaS).sort((a, b) => a - b);
   const dimEfVolS = porSenador.map(eficVolS).sort((a, b) => a - b);
   const eficBrutaS = (r) =>
     (percentileRank(dimEfTaxaS, eficTaxaS(r)) + percentileRank(dimEfVolS, eficVolS(r))) / 2 + bonusLeiS(r);
   const dimEficS = porSenador.map(eficBrutaS).sort((a, b) => a - b);
-  console.log(`[senado] eficiência: ${porSenador.reduce((t, r) => t + r.avancadas, 0)} de ${porSenador.reduce((t, r) => t + r.props, 0)} autorias avançaram · ${porSenador.reduce((t, r) => t + r.aprovadas, 0)} viraram norma · ${porSenador.reduce((t, r) => t + r.relatoriasAvancadas, 0)} de ${porSenador.reduce((t, r) => t + r.relatoriasPrinc, 0)} relatorias andaram`);
+  console.log(`[senado] eficiência: ${porSenador.reduce((t, r) => t + r.avancadas, 0)} de ${porSenador.reduce((t, r) => t + r.props, 0)} autorias avançaram · ${porSenador.reduce((t, r) => t + r.aprovadas, 0)} viraram norma (${porSenador.reduce((t, r) => t + r.aprovadas - r.aprovadasPontuaveis, 0)} só de homenagem/data, que não pontuam) ·${porSenador.reduce((t, r) => t + r.relatoriasAvancadas, 0)} de ${porSenador.reduce((t, r) => t + r.relatoriasPrinc, 0)} relatorias andaram`);
 
   // Pesos do Senado (WEIGHTS_SENADO) — a casa não tem Fiscalização. A renormalização
   // por wSum abaixo cobre quem não tem Influência.
@@ -1646,6 +1658,7 @@ async function fetchSenado(socialMap) {
       cotaResumo: r.cotaResumo,
       seguidores: 0,
       leisAprovadas: r.aprovadas,
+      leisPontuaveis: r.aprovadasPontuaveis,
       ...(r.leis.length ? { leis: r.leis } : {}),
       relatoriasN: r.relatoriasPrinc,
       relatoriasAvancadasN: r.relatoriasAvancadas,
@@ -1685,7 +1698,7 @@ async function fetchSenado(socialMap) {
         ataque: `${nf.format(r.props)} matérias relevantes de autoria principal (PL, PLP, PEC, PDL)`,
         stamina: `${nf.format(r.votos)} votos registrados em ${nf.format(r.nVotacoes)} votações nominais ocorridas durante o seu exercício, incluídas as sabatinas de autoridades (${Math.round(staxaSen(r) * 100)}%)${r.compareceuN.presencas - r.votos > 0 ? ` — esteve presente em mais ${nf.format(r.compareceuN.presencas - r.votos)} sem registrar voto, então compareceu a ${Math.round((r.compareceuN.presencas / Math.max(r.compareceuN.total, 1)) * 100)}% das votações` : ''}`,
         tecnica: `relator designado em ${nf.format(r.relatoriasPrinc)} matérias relevantes (PL, PLP, PEC, PDL) desde 2023`,
-        eficiencia: `${nf.format(eficAndouS(r))} de ${nf.format(eficTocouS(r))} matérias que tocou avançaram na tramitação${eficTocouS(r) ? ` (${((eficAndouS(r) / eficTocouS(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${nf.format(r.avancadas)}/${nf.format(r.props)} de autoria, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatoriasPrinc)} de relatoria (PL, PLP, PEC, PDL)${r.aprovadas ? ` · ${nf.format(r.aprovadas)} já viraram norma (+${bonusLeiS(r)} de bônus na Eficiência)` : ''}`,
+        eficiencia: `${nf.format(eficAndouS(r))} de ${nf.format(eficTocouS(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocouS(r) ? ` (${((eficAndouS(r) / eficTocouS(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${nf.format(r.avancadas)}/${nf.format(r.props)} de autoria, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatoriasPrinc)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLeiS(r))}`,
         economia: `${fmtReais(r.gasto)} de cota (CEAPS) usados nos ${nf.format(Math.round(Math.max(r.mesesExercicio, 1)))} meses em exercício — média de R$ ${nf.format(Math.round(gastoMensalS(r) / 1000))} mil/mês`,
         ...(influencia !== null ? {
           influencia: `${fmtSeg(r.social.seguidores)} seguidores no ${REDE_LABEL[r.social.rede] ?? r.social.rede} (@${r.social.handle}${r.social.coletadoEm ? `, coletado em ${r.social.coletadoEm}` : ''})`,
@@ -1898,6 +1911,7 @@ const raw = deputados.map((d) => {
   mandatoParcial: mesesExercicio < MESES_MIN_RANK,
   props: propsByDep.get(d.id)?.total ?? 0,
   aprovadas: propsByDep.get(d.id)?.aprovadas ?? 0,
+  aprovadasPontuaveis: propsByDep.get(d.id)?.aprovadasPontuaveis ?? 0,
   leis: ordenaLeis(leisByDep.get(d.id) ?? []),
   avancadas: propsByDep.get(d.id)?.avancadas ?? 0,
   propsAno: propsByDep.get(d.id)?.porAno ?? {},
@@ -1923,6 +1937,13 @@ const staminaCam = escalaComparecimento(raw.map((r) => r.stTaxa)); // TAXA, não
 //   • aproveitamento (taxa): o que andou ÷ o que tocou → recompensa precisão
 //   • resultado (volume que andou): + 2×leis            → recompensa entrega,
 //     com a lei (rara) valendo o triplo de um mero avanço.
+//
+// "Leis", aqui e no bônus, são as PONTUÁVEIS: a norma cujo único tema oficial é
+// "Homenagens e Datas" fica de fora das duas contas. Título de Capital Nacional e
+// data comemorativa tramitam sem oposição e são o tema de MAIOR conversão do
+// Congresso (3,6%, contra 0,5% da Saúde) — premiá-las como entrega faria a
+// Eficiência medir facilidade de tramitação, não entrega. O recorte é o estrito
+// (só o tema, nada mais): ver soHomenagem() em lib/leis-temas.mjs.
 // Média dos dois percentis. Só a taxa faria um autor de muitos projetos com
 // vários avanços perder de quem tem poucos projetos e alta fração — sem sentido.
 //
@@ -1932,7 +1953,7 @@ const staminaCam = escalaComparecimento(raw.map((r) => r.stTaxa)); // TAXA, não
 const eficTocou = (r) => r.props + r.relatorias;
 const eficAndou = (r) => r.avancadas + r.relatoriasAvancadas;
 const eficTaxa = (r) => (eficTocou(r) ? eficAndou(r) / eficTocou(r) : 0);
-const eficVol = (r) => eficAndou(r) + 2 * r.aprovadas;
+const eficVol = (r) => eficAndou(r) + 2 * r.aprovadasPontuaveis;
 const dimEficTaxa = raw.map(eficTaxa).sort((a, b) => a - b);
 const dimEficVol = raw.map(eficVol).sort((a, b) => a - b);
 // bônus direto por lei sancionada (a conquista mais rara e valiosa): +5 por
@@ -1946,7 +1967,7 @@ const dimEficVol = raw.map(eficVol).sort((a, b) => a - b);
 // o autor de 3 leis cai de 83 para 72 em qualquer variante. Trocar o volume por
 // escala log é pior ainda (cai para 58, e a 17ª lei passa a valer 8 pontos em vez
 // de 15). A mistura de unidades é proposital; não "limpe" para um mecanismo só.
-const bonusLei = (r) => Math.min(15, 5 * r.aprovadas);
+const bonusLei = (r) => Math.min(15, 5 * r.aprovadasPontuaveis);
 // pontuação BRUTA de eficiência = blend (taxa + volume) + bônus por lei.
 const eficBruta = (r) =>
   (percentileRank(dimEficTaxa, eficTaxa(r)) + percentileRank(dimEficVol, eficVol(r))) / 2
@@ -1956,6 +1977,11 @@ const eficBruta = (r) =>
 // percentis puros) — sem o teto/enviesamento que o blend cru introduzia nos gates.
 const dimEfic = raw.map(eficBruta).sort((a, b) => a - b);
 const efic = (r) => percentileRank(dimEfic, eficBruta(r));
+// contagem por AUTORIA (a mesma norma aparece uma vez por autor, ao contrário do
+// painel nacional, que dedup). Serve para conferir a ordem de grandeza do
+// desconto honorífico a cada ingestão: zero aqui, com o painel nacional acusando
+// homenagens, é a classificação temática tendo vindo vazia.
+console.log(`[camara] eficiência: ${raw.reduce((t, r) => t + r.aprovadas, 0)} autorias viraram norma · ${raw.reduce((t, r) => t + r.aprovadas - r.aprovadasPontuaveis, 0)} só de homenagem/data (não pontuam)`);
 // Técnica = trabalho técnico sobre o texto: relatorias + emendas de autoria.
 // Escala LOG (não percentil): no percentil a cauda alta saturava — 1,9x o trabalho
 // de um colega no topo virava 1 ponto de atributo. O Ataque NÃO acompanha e segue
@@ -1983,6 +2009,24 @@ const dimInfl = comSocial.length >= INFL_MIN
   : null;
 
 const nf = new Intl.NumberFormat('pt-BR');
+
+/**
+ * O trecho de "virou lei" do tooltip da Eficiência, igual nas duas casas.
+ *
+ * A contagem exibida continua sendo a de TODAS as normas — o painel exibe o que
+ * foi aprovado. O que a frase precisa dizer é que uma parte delas não pontuou, e
+ * por quê: sem isso o leitor vê "3 já viraram norma" ao lado de um bônus de +5 e
+ * conclui que a conta está errada.
+ */
+function fraseLeis(aprovadas, pontuaveis, bonus) {
+  if (!aprovadas) return '';
+  const honorificas = aprovadas - pontuaveis;
+  const nota = !pontuaveis
+    ? `de homenagem/data, que não ${aprovadas > 1 ? 'pontuam' : 'pontua'} na Eficiência`
+    : `+${bonus} de bônus na Eficiência${honorificas ? `; ${nf.format(honorificas)} de homenagem/data não ${honorificas > 1 ? 'pontuam' : 'pontua'}` : ''}`;
+  return ` · ${nf.format(aprovadas)} já ${aprovadas > 1 ? 'viraram' : 'virou'} norma (${nota})`;
+}
+
 const full = raw.map((r) => {
   const ataque = percentileRank(dimAtaque, r.props);
   const stamina = staminaCam(r.stTaxa);
@@ -2021,6 +2065,7 @@ const full = raw.map((r) => {
     mandatoParcial: r.mandatoParcial,
     // internos p/ títulos e insights (persistidos; extras são inofensivos)
     leisAprovadas: r.aprovadas,
+    leisPontuaveis: r.aprovadasPontuaveis,
     // as leis em si — a contagem sozinha não é auditável, e é o número da norma
     // ("Lei 15.172/2025") que o leitor reconhece
     ...(r.leis.length ? { leis: r.leis } : {}),
@@ -2058,7 +2103,11 @@ const full = raw.map((r) => {
     rawNumbers: {
       ataque: `${nf.format(r.props)} proposições relevantes apresentadas (PL, PLP, PEC, PDL)`,
       stamina: `${nf.format(r.votos)} votos registrados em ${nf.format(r.votacoesMandato)} votações nominais ocorridas durante o seu exercício (${Math.round(r.stTaxa * 100)}%) — o dado publicado pela Câmara traz o voto efetivo, não a presença em plenário`,
-      eficiencia: `${nf.format(eficAndou(r))} de ${nf.format(eficTocou(r))} proposições que tocou avançaram na tramitação${eficTocou(r) ? ` (${((eficAndou(r) / eficTocou(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${nf.format(r.avancadas)}/${nf.format(r.props)} de autoria, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatorias)} de relatoria${r.aprovadas ? ` · ${nf.format(r.aprovadas)} já viraram norma (+${bonusLei(r)} de bônus na Eficiência)` : ''}`,
+      // "matérias que tocou (autoria + relatoria)", nunca só "proposições": o universo
+      // aqui é MAIOR que o do Ataque (que é só autoria), e com o mesmo substantivo nos
+      // dois painéis os números se leem como contradição até o leitor chegar ao
+      // travessão. A frase do Senado abaixo é idêntica de propósito.
+      eficiencia: `${nf.format(eficAndou(r))} de ${nf.format(eficTocou(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocou(r) ? ` (${((eficAndou(r) / eficTocou(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${nf.format(r.avancadas)}/${nf.format(r.props)} de autoria, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatorias)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLei(r))}`,
       tecnica: `${nf.format(tecnicaBruta(r))} atos de trabalho sobre o texto — relator designado em ${nf.format(r.relatorias)} proposições relevantes${r.relatorias ? ` (${nf.format(r.relatoriasAvancadas)} ${r.relatoriasAvancadas === 1 ? 'avançou' : 'avançaram'})` : ''} e autor de ${nf.format(r.emendas)} ${r.emendas === 1 ? 'emenda' : 'emendas'} (na comissão, de plenário ou de relator)`,
       fiscalizacao: `${nf.format(r.fiscal)} atos de cobrança ao Executivo — requerimentos de informação a ministro, convocações de ministro e propostas de fiscalização e controle (PFC)`,
       economia: `${fmtReais(r.gasto)} de cota (CEAP) usados nos ${nf.format(Math.round(Math.max(r.mesesExercicio, 1)))} meses em exercício — média de R$ ${nf.format(Math.round(gastoMensal(r) / 1000))} mil/mês`,
@@ -2102,7 +2151,7 @@ const TITLE_DEFS_REAIS = [
   { slug: 'presenca-de-ferro', label: '🛡️ Presença de Ferro', cor: 'green',
     regra: 'Stamina ≥ 95 — entre os 5% que mais registram voto nas votações nominais do seu mandato. O oposto do Fantasma do Plenário.' },
   { slug: 'legislador-efetivo', label: '📖 Legislador Efetivo', cor: 'green',
-    regra: 'Autor principal de pelo menos uma proposição já TRANSFORMADA EM NORMA JURÍDICA nesta legislatura. Vale nas duas casas: o desfecho da Câmara vem do CSV bulk de proposições; o do Senado, da situação da matéria no /processo.' },
+    regra: 'Autor principal de pelo menos uma proposição já TRANSFORMADA EM NORMA JURÍDICA nesta legislatura, sem contar as normas cujo único tema oficial é "Homenagens e Datas" (título de Capital Nacional, data comemorativa, Livro dos Heróis) — as mesmas que não pontuam na Eficiência. A norma que trata de homenagem E de outro tema conta. Vale nas duas casas: o desfecho da Câmara vem do CSV bulk de proposições; o do Senado, da situação da matéria no /processo.' },
   { slug: 'relator-que-entrega', label: '📜 Relator que Entrega', cor: 'green',
     regra: 'Designado relator em 5+ proposições relevantes e METADE OU MAIS delas avançou na tramitação. Ser designado não é entregar: na legislatura, só 26,6% das relatorias avançam Vale nas duas casas — o Senado publica o desfecho da matéria no /processo.' },
   { slug: 'relator-de-gaveta', label: '🗄️ Relator de Gaveta', cor: 'red',
@@ -2215,7 +2264,10 @@ for (const p of full) {
   if (p.stats.stamina >= 95) p.titles.push('presenca-de-ferro');
   // Estes três eram bloqueados no Senado por FALTA DE DADO, não por regra: a casa não
   // publicava o desfecho da matéria. O /processo publica — então valem para as duas casas.
-  if ((p.leisAprovadas ?? 0) >= 1) p.titles.push('legislador-efetivo');
+  // PONTUÁVEIS, não aprovadas: quem só tem norma de homenagem/data não recebe bônus
+  // na Eficiência, e o selo tem de dizer a mesma coisa que a pontuação. O painel
+  // continua exibindo a lei — o título é que não a trata como entrega.
+  if ((p.leisPontuaveis ?? 0) >= 1) p.titles.push('legislador-efetivo');
   // relatoria: designar ≠ entregar
   if ((p.relatoriasN ?? 0) >= 5 && (p.relatoriasAvancadasN ?? 0) / p.relatoriasN >= 0.5) p.titles.push('relator-que-entrega');
   if ((p.relatoriasN ?? 0) >= 10 && (p.relatoriasAvancadasN ?? 0) === 0) p.titles.push('relator-de-gaveta');

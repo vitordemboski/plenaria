@@ -105,3 +105,47 @@ export function simbolicas(leis) {
   }
   return { n, exclusivas, total: porUrl.size, pct: porUrl.size ? (n / porUrl.size) * 100 : 0 };
 }
+
+/**
+ * A norma é PURAMENTE honorífica? — o único critério pelo qual uma lei deixa de
+ * pontuar na Eficiência (nem no 2× do volume, nem no bônus de +5).
+ *
+ * O recorte é o `exclusivas` da função acima, e a escolha do recorte ESTRITO é a
+ * parte que não se deve afrouxar: "Dia Nacional do Policial Penal" é homenagem
+ * **e** segurança pública, e descontar toda norma que apenas ENCOSTA no tema
+ * derrubaria lei substantiva por causa de um rótulo secundário — 60 das 191
+ * normas carregam o tema, contra as poucas que são só isso. Errar para o lado de
+ * pontuar é o lado certo: o atributo mede entrega, e tirar ponto de quem entregou
+ * é acusação; deixar de tirar é só não premiar duas vezes.
+ *
+ * Pelo mesmo motivo, norma SEM classificação nenhuma pontua normalmente — ausência
+ * de tema é ausência de informação, nunca evidência de que é honorífica (a
+ * cobertura temática das normas foi medida em 100%, mas o dia em que a fonte vier
+ * vazia não pode virar desconto silencioso na Eficiência da casa inteira).
+ *
+ * Isto NÃO tira a lei do painel "Virou lei" nem da contagem exibida: ela foi
+ * aprovada, e o painel EXIBE o que foi aprovado. O que muda é só o que pontua.
+ *
+ * @param {string[]} [temas] classificação oficial da norma
+ */
+export function soHomenagem(temas) {
+  const t = [...new Set(temas ?? [])];
+  return t.length === 1 && t[0] === HOMENAGENS;
+}
+
+/**
+ * Quantas das leis creditadas ao parlamentar PONTUAM na Eficiência.
+ *
+ * Deduplica por url pelo mesmo motivo das funções acima — a mesma norma pode
+ * chegar aqui mais de uma vez.
+ *
+ * @param {{url?: string, temas?: string[]}[]} leis
+ */
+export function contarPontuaveis(leis) {
+  const porUrl = new Map();
+  for (const [i, l] of (leis ?? []).entries()) {
+    const k = l?.url ?? `#${i}`; // sem url não há como deduplicar: conta uma vez
+    if (!porUrl.has(k)) porUrl.set(k, l?.temas);
+  }
+  return [...porUrl.values()].filter((t) => !soHomenagem(t)).length;
+}
