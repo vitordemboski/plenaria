@@ -333,9 +333,26 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
         </div>
       )}
 
-      {/* "no que trabalha" fica logo depois de "quanto produz": a produção anual diz o
-          VOLUME, esta seção diz o ASSUNTO — separá-las por outros painéis quebraria a
-          leitura. Informativa: não pontua no Poder nem gera título. */}
+      {/* O olheiro fecha o bloco dos ATRIBUTOS: ele é o bruto por trás das barras e dos
+          selos logo acima, e é onde o leitor confere a afirmação enquanto ela ainda está
+          na tela. Depois dele começa outra narrativa — assunto, volume, desfecho. */}
+      {p.rawNumbers && (
+        <div className="panel">
+          <h3>🔭 Relatório de olheiro</h3>
+          <p className="sub">os números brutos por trás de cada atributo</p>
+          <div className="scout-list">
+            {todosStats.map((s) =>
+              p.rawNumbers![s.key] ? (
+                <div key={s.key}><b>{s.icon}</b> <span>{p.rawNumbers![s.key]}</span></div>
+              ) : null,
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* "no que trabalha" abre o trio que termina em "virou lei": esta seção diz o
+          ASSUNTO, a produção anual diz o VOLUME e as leis dizem o DESFECHO — separá-las
+          por outros painéis quebraria a leitura. Informativa: não pontua nem gera título. */}
       {p.prioridades && (
         <Prioridades
           agregado={p.prioridades}
@@ -389,20 +406,6 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
           </>}
         />
       ) : null}
-
-      {p.rawNumbers && (
-        <div className="panel">
-          <h3>🔭 Relatório de olheiro</h3>
-          <p className="sub">os números brutos por trás de cada atributo</p>
-          <div className="scout-list">
-            {todosStats.map((s) =>
-              p.rawNumbers![s.key] ? (
-                <div key={s.key}><b>{s.icon}</b> <span>{p.rawNumbers![s.key]}</span></div>
-              ) : null,
-            )}
-          </div>
-        </div>
-      )}
 
       {p.cotaResumo && <CotaBreakdown resumo={p.cotaResumo} sigla={p.casa === 'camara' ? 'CEAP' : 'CEAPS'} />}
 
