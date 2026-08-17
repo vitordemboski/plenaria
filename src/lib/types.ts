@@ -151,6 +151,37 @@ export interface Politician {
    *  `representante` é o rótulo que a fonte dá a quem lidera bancada pequena demais
    *  para ter liderança — nenhum dos dois é "Líder". Ver scripts/lib/lideranca.mjs. */
   lideranca?: { papel: 'lider' | 'vice' | 'representante'; rotulo: string; desde: string }[];
+  /**
+   * Pedido de REGISTRO de candidatura em 2026 (bulk do TSE). Estado factual, como
+   * partido e UF: não pontua no Poder, não é título e não abre nem fecha gate.
+   *
+   * **Ausente NÃO significa "não é candidato"** — significa que não houve
+   * correspondência: a pessoa pode ter registrado e o match ter falhado, ou o TSE
+   * ainda não ter publicado. Nenhuma superfície afirma a ausência (ver
+   * scripts/lib/candidatura.mjs).
+   *
+   * O verbo é "registrou", nunca "deferida": `DS_SITUACAO_CANDIDATURA` vinha `#NE`
+   * em 100% das linhas quando isto foi escrito — o TSE não publica deferimento nesse
+   * arquivo nessa fase.
+   */
+  candidatura2026?: Candidatura;
+}
+
+/** Ver `Politician.candidatura2026`. */
+export interface Candidatura {
+  /** rótulo pronto, de vocabulário fechado: "Senado", "Governo de MG"… */
+  cargo: string;
+  /** forma curta para o card da lista ("Gov. MG"), do mesmo vocabulário */
+  curto: string;
+  /** concorre ao MESMO cargo que ocupa hoje */
+  reeleicao: boolean;
+  /** suplente de senador — outra coisa que concorrer ao Senado */
+  suplente: boolean;
+  /** UF da CANDIDATURA — pode diferir da UF do mandato */
+  uf: string;
+  /** data de geração do arquivo do TSE (ISO). A imagem compartilhável a exibe:
+   *  ela circula sem o site e a candidatura pode ser indeferida depois. */
+  registroEm: string;
 }
 
 /** Registro slim servido em /data/index.json para busca e Modo Batalha. */
@@ -171,6 +202,8 @@ export interface PoliticianIndex {
   stats: Stats;
   /** stats existentes p/ este parlamentar (ausente = todos) */
   avail?: StatKey[];
+  /** candidatura 2026 (ver `Politician.candidatura2026`) — ausente NÃO afirma nada */
+  candidatura2026?: Candidatura;
   /** posse recente → fora dos rankings (marca p/ Batalha/busca) */
   mandatoParcial?: boolean;
   /** preside a Casa → fora dos rankings (marca p/ Batalha/busca) */
@@ -234,6 +267,10 @@ export interface DataMeta {
     /** média de temas por proposição no Congresso (a razão de não somar 100%) */
     porProposicao: number;
   };
+  /** Eleição de 2026, quando há chip de candidatura nesta geração. Ausente = a fonte
+   *  do TSE não respondeu OU o pleito já passou — nos dois casos ninguém tem chip, e
+   *  passado o pleito ele não volta (dizer "concorre" depois da eleição é falso). */
+  eleicao2026?: { registroEm: string; pleitoEm: string };
   titulosDisponiveis: boolean;
   aviso: string | null;
 }

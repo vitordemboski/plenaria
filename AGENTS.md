@@ -379,6 +379,20 @@ Armadilhas conhecidas das APIs:
   partidos, então o ranking absoluto pareceria funcionar sem distinguir bancada nenhuma.
   O mapa dos dois vocabulários oficiais é EDITORIAL e está publicado em
   `/como-calculamos` — mexeu no mapa, mexa lá. Detalhe em docs/product-spec.md §10.
+- **Candidatura 2026: a chave é o CPF na Câmara e o NOME CIVIL no Senado**
+  (`scripts/lib/candidatura.mjs`, com teste). Medido: CPF casou 499 dos 513 deputados;
+  nome civil + UF, 484; nome parlamentar + UF, 445 — casar por nome perde ~15 candidatos
+  REAIS, e perde mais quem usa nome de urna distante do civil. O CPF é lido só como chave,
+  em memória, e **a `/sobre` afirma isso ao público** — mexeu, mexa lá. O Senado não expõe
+  CPF: nome civil completo (único em 51 de 81), com UF e nascimento desempatando homônimo.
+  **Nascimento CONFIRMA, nunca reprova**: as fontes discordam (Carlos Viana 22×23/03/1963,
+  Jader Barbalho 1944×1945) e o filtro estrito descartava os dois. Três regras que um
+  agente reverteria: **ausência não afirma nada** (sem match não há chip, e nenhuma tela
+  escreve "não se candidatou"); o verbo é **"registrou pedido"**, nunca "deferida"
+  (`DS_SITUACAO_CANDIDATURA` vinha `#NE` em 100% das linhas); e **o chip morre no pleito**
+  (`aindaVale` — depois de 04/10 "concorre" fica falso sozinho). Cache **VOLÁTIL 24h**:
+  candidatura muda até a eleição. Suplente de senador é rótulo próprio, não "concorre ao
+  Senado". Detalhe em docs/product-spec.md §14.
 - **Análise de IA só aparece se o `fonteHash` bater** (`scripts/lib/analises.mjs`):
   `data/analises.json` guarda o parágrafo junto do hash dos números que ele descreve, e a
   UI não renderiza quando divergem — senão um texto de julho ficaria ao lado das barras
@@ -556,8 +570,13 @@ nenhuma delas gera erro — todas produzem um número plausível:
 node -e 'const P=require("./data/politicians.json");const z=k=>P.filter(k).length;
 console.log("cota zero:", z(p=>!p.gastoMensalMedioMil), "de", P.length);
 console.log("ataque zero (senado):", z(p=>p.casa==="senado"&&!p.statRaw?.ataque), "de 81");
-console.log("sem prioridades:", z(p=>!p.prioridades), "de", P.length);'
+console.log("sem prioridades:", z(p=>!p.prioridades), "de", P.length);
+console.log("com candidatura:", z(p=>p.candidatura2026), "de", P.length);'
 ```
+
+A candidatura tem forma própria: a Câmara casa quase inteira (~97%) e o Senado bem menos
+(~63% — só parte da casa está em fim de mandato). Câmara abaixo de 400 é chave quebrada,
+não desistência em massa; zero nas duas é a fonte do TSE vazia.
 
 Leia a FORMA do número, não um valor de referência (que envelheceria): **unidades** é o
 normal — sempre há quem renuncie à cota, tenha tomado posse ontem ou não tenha autoria

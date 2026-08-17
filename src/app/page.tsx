@@ -22,6 +22,7 @@ export default function Home() {
   const list: TierListEntry[] = politicians.filter((p) => !foraDoRanking(p)).map((p) => ({
     slug: p.slug, nome: p.nome, casa: p.casa, uf: p.uf, partido: p.partido,
     tier: p.tier, ops: p.ops,
+    ...(p.candidatura2026 ? { candidatura2026: p.candidatura2026 } : {}),
   }));
 
   return (

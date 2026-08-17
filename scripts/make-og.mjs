@@ -54,6 +54,12 @@ const GOLD_RULE = '#8a6a2f';
 /** cor do tier — a mesma tabela do ShareButton (TIER_COLOR) */
 const TIER_COR = { S: '#f6e39b', A: '#e0b84a', B: '#c9962b', C: '#9a7a1e', D: '#6b5518', F: '#55442a' };
 
+/** ISO → dd/mm/aaaa */
+const dataBR = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso ?? '');
+};
+
 /** Rótulo por atributo. A fonte da verdade é STAT_META (src/lib/data.ts), que é TS
  *  e não dá para importar daqui; o CONJUNTO de atributos que pontuam vem de
  *  `meta.pesos`, então mudar peso não dessincroniza — só renomear rótulo. */
@@ -137,7 +143,7 @@ function linhaStat({ label, valor, nota }) {
  * NB: nada de emoji. O satori só desenha emoji com fonte/asset extra
  * configurado; sem isso o ícone sai como caixa vazia. Os rótulos vão em texto.
  */
-function cardPolitico({ p, foto, stats, credito }) {
+function cardPolitico({ p, foto, stats, credito, candidatura }) {
   const cor = p.semRanking ? '#55442a' : (TIER_COR[p.tier] ?? GOLD_SUB);
   return h('div', {
     style: {
@@ -208,8 +214,13 @@ function cardPolitico({ p, foto, stats, credito }) {
         h('div', { style: { display: 'flex', flexDirection: 'column', width: '100%', flexShrink: 0 } },
           ...stats.map(linhaStat)),
 
-        // rodapé colado no fim da coluna: crédito + fórmula + domínio
+        // rodapé colado no fim da coluna: candidatura + crédito + fórmula + domínio
         h('div', { style: { display: 'flex', flexDirection: 'column', marginTop: 'auto', paddingTop: '18px', flexShrink: 0 } },
+          // Candidatura entra na peça que circula; TÍTULO não (mesma regra do
+          // ShareButton). Leva a data: pode ser indeferida depois.
+          ...(candidatura
+            ? [h('div', { style: { display: 'flex', fontSize: '14px', color: '#8a7534', marginBottom: '5px' } }, candidatura)]
+            : []),
           h('div', { style: { display: 'flex', fontSize: '14px', color: '#8a90a0' } },
             [credito ? `Foto: ${credito}` : null, 'fórmula em /como-calculamos'].filter(Boolean).join('  ·  ')),
           h('div', { style: { display: 'flex', marginTop: '6px', fontSize: '18px', fontWeight: 600, color: '#98a0b0' } }, 'plenariarpg.com'),
@@ -416,6 +427,9 @@ async function ogDoParlamentar(p, statKeys) {
     stats,
     // crédito SÓ se a foto entrou de fato — creditar imagem não desenhada é ruído
     credito: foto ? (p.casa === 'senado' ? 'Agência Senado' : 'Câmara dos Deputados') : null,
+    candidatura: p.candidatura2026
+      ? `Concorre em 2026: ${p.candidatura2026.cargo} · registro no TSE, ${dataBR(p.candidatura2026.registroEm)}`
+      : null,
   });
 }
 

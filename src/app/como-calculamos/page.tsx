@@ -373,7 +373,37 @@ export default function MethodologyPage() {
       </div>
 
       <div className="panel detail-block">
-        <h3>7. De onde vêm os dados</h3>
+        <h3>7. Candidatura 2026 — o que o chip diz (e o que ele não diz)</h3>
+        <p>
+          O chip <b>🗳️ Concorre em 2026</b> nomeia o cargo para o qual o parlamentar
+          <b> registrou pedido de candidatura</b>, segundo o arquivo público de candidaturas do{' '}
+          <span className="key">TSE</span> (Dados Abertos, licença CC-BY). É informação factual, como
+          partido e UF: <b>não pontua no Poder, não gera título e não interfere em Tier nem em gate</b> —
+          e não tem cor de status, porque concorrer não é mérito nem falta.
+        </p>
+        <div className="rule-list">
+          <div><b>&ldquo;Registrou&rdquo;, não &ldquo;foi deferida&rdquo;</b> — nessa fase o arquivo do
+            TSE não publica o deferimento do registro. O que afirmamos é o pedido, com a data do arquivo
+            ao lado. Uma candidatura pode ser indeferida depois.</div>
+          <div><b>O cargo é o que a fonte diz</b> — quem disputa a reeleição aparece como reeleição; quem
+            concorre ao Senado, a governo estadual ou à Presidência aparece com o cargo que pediu. Suplente
+            de senador é rótulo próprio: não é o mesmo que concorrer ao Senado.</div>
+          <div><b>Como sabemos que é a mesma pessoa</b> — na Câmara, pelo CPF (lido só para isso, em
+            memória, nunca publicado; ver a <a href="/sobre/#privacidade">Privacidade</a>). No Senado, que
+            não publica CPF, pelo nome civil completo, com UF e data de nascimento desempatando homônimo.
+            Sem certeza, não há chip.</div>
+          <div><b>Ausência de chip NÃO significa que a pessoa não é candidata</b> — significa que não
+            encontramos correspondência: o registro pode não ter sido publicado ainda, ou o cruzamento
+            pode ter falhado. Por isso o site nunca escreve &ldquo;não se candidatou&rdquo; sobre
+            ninguém.</div>
+          <div><b>O chip vale até o pleito</b> — passada a eleição, &ldquo;concorre&rdquo; deixa de ser
+            verdade, e ele some de todas as telas. Resultado de eleição é outro dado, que esta página
+            anunciará se um dia for publicado aqui.</div>
+        </div>
+      </div>
+
+      <div className="panel detail-block">
+        <h3>8. De onde vêm os dados</h3>
         <p>
           <span className="key">Dados reais</span>, atualizados em {meta.updatedAt}. Fontes:
           Dados Abertos da <span className="key">Câmara</span> (autorias, votos nominais, normas geradas,
@@ -386,7 +416,7 @@ export default function MethodologyPage() {
       </div>
 
       <div className="panel detail-block">
-        <h3>8. Auditar por conta própria</h3>
+        <h3>9. Auditar por conta própria</h3>
         <p>
           Nada nesta página é uma promessa que só nós podemos verificar: o{' '}
           <span className="key">código é aberto</span>, sob licença MIT, em{' '}

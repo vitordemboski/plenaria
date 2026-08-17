@@ -6,6 +6,7 @@ import { Licenciados } from '@/components/Licenciados';
 import { FutStat } from '@/components/FutStat';
 import { GuildCrest } from '@/components/GuildCrest';
 import { PoliticianLink } from '@/components/PoliticianLink';
+import { CandMini } from '@/components/CandMini';
 import { Prioridades, AssinaturaDaGuilda, AnaliseIA } from '@/components/Prioridades';
 import { prioridadesDaGuilda, analiseDaGuilda, analiseLeisDaGuilda } from '@/lib/prioridades';
 import { leisDaGuilda } from '@/lib/leis';
@@ -308,7 +309,7 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
               {leis.autores.slice(0, MAX_AUTORES_GUILDA).map((p, i) => (
                 <PoliticianLink key={p.slug} slug={p.slug} className="lrow">
                   <span className="pos">{i + 1}</span>
-                  <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.uf}</small></span>
+                  <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.uf}<CandMini c={p.candidatura2026} casa={p.casa} uf={p.uf} /></small></span>
                   <span />
                   <span className="sc" style={{ color: 'var(--gold-2)' }}>{p.n}</span>
                 </PoliticianLink>
@@ -370,7 +371,7 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
                 <span className={`tier-chip display tier-${p.tier}`}>{p.tier}</span>
                 <span className="nm">
                   <b>{p.nome}</b>
-                  <small>{casaLabel(p.casa, true)} · {p.uf}</small>
+                  <small>{casaLabel(p.casa, true)} · {p.uf}<CandMini c={p.candidatura2026} casa={p.casa} uf={p.uf} /></small>
                 </span>
                 <span className="ops">{p.ops}</span>
               </PoliticianLink>
@@ -444,7 +445,7 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
                     <span className="tier-chip display">{p.tier}</span>
                     <span className="nm">
                       <b>{p.nome}</b>
-                      <small>{casaLabel(p.casa, true)} · {p.uf}</small>
+                      <small>{casaLabel(p.casa, true)} · {p.uf}<CandMini c={p.candidatura2026} casa={p.casa} uf={p.uf} /></small>
                     </span>
                     <span className="ops">{p.ops}</span>
                   </PoliticianLink>
@@ -462,7 +463,7 @@ export default async function GuildPage({ params }: { params: Promise<{ sigla: s
               {parciais.map((p) => (
                 <PoliticianLink key={p.slug} slug={p.slug} className="mini-card">
                   <span className="tier-chip display">—</span>
-                  <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.uf}</small></span>
+                  <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.uf}<CandMini c={p.candidatura2026} casa={p.casa} uf={p.uf} /></small></span>
                   <span className="ops">—</span>
                 </PoliticianLink>
               ))}

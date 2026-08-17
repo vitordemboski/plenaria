@@ -796,3 +796,75 @@ legislatura, a norma é descartada. Lógica em `scripts/lib/legislatura.mjs`, co
   legislatura) e `anteriores` é o que veio da anterior. O tooltip exibe os dois separados,
   nunca somados em silêncio: o leitor vê "311 proposições apresentadas" na barra de cima e
   um "41/339" logo abaixo procuraria as 28 que faltam.
+
+## 14. Candidatura 2026 — a qual cargo cada um concorre
+
+O site descreve o mandato; em ano eleitoral, falta o que a pessoa está pedindo agora. O
+chip **🗳️ Concorre em 2026** nomeia o cargo do pedido de registro no TSE.
+
+**É informativo**: não pontua no Poder, não vira título, não abre nem fecha gate, e não
+tem cor de status — concorrer não é mérito nem falta (mesmo princípio do
+`higherIsBetter: null` do Alinhamento).
+
+Fonte: `consulta_cand_2026.zip` (Dados Abertos do TSE, CC-BY), arquivo
+`consulta_cand_2026_BRASIL.csv`, latin1, lido com `parseCsvBR` e um leitor de ZIP sem
+dependências (`scripts/lib/zip.mjs`). Cache **VOLÁTIL de 24h**: candidatura muda até o
+pleito (indeferimento, renúncia, substituição), e congelá-la publicaria candidato que
+desistiu.
+
+### A chave: CPF na Câmara, nome civil no Senado
+
+Medido em 2026-08-16, sobre 20.456 candidaturas:
+
+| chave | casou |
+|---|---|
+| CPF (Câmara) | **499 / 513** |
+| nome civil + UF (Câmara) | 484 / 513 |
+| nome parlamentar + UF (Câmara) | 445 / 513 |
+| nome civil completo (Senado) | **51 / 81**, zero colisões |
+
+Casar por nome perderia ~15 deputados **que registraram candidatura**, e perderia de
+forma desigual — some mais quem usa nome de urna distante do civil ("Doutor Luizinho",
+"Paulinho da Força"). O CPF vem de `dep-detalhe-{id}.json`, é usado só como chave e
+**não é gravado, logado nem consultado em lugar nenhum**; a `/sobre` afirma isso ao
+público. O Senado não publica CPF: lá a chave é o nome civil completo, com UF e
+nascimento desempatando homônimo; ambíguo até o fim fica **sem chip**.
+
+**A data de nascimento confirma, nunca reprova.** Exigir nome + nascimento iguais
+descartava dois senadores porque as fontes discordam: Carlos Viana é 22/03/1963 no
+Senado e 23/03 no TSE; Jader Barbalho é 1944 no Senado e 1945 no TSE. Nos dois o nome
+civil é idêntico e a UF bate — o filtro estrito tirava do ar candidato real.
+
+### O que se afirma, e o que não
+
+- **"Registrou pedido", nunca "candidatura deferida".** `DS_SITUACAO_CANDIDATURA` vinha
+  `#NE` em 100% das linhas: o TSE não publica deferimento nesse arquivo nessa fase.
+- **Ausência de chip não afirma nada.** Sem correspondência, o campo não é emitido e
+  nenhuma superfície escreve "não se candidatou" — falha de match viraria afirmação
+  falsa sobre pessoa nomeada, em ano eleitoral. O filtro da Tier List carrega essa
+  ressalva em texto, porque uma lista filtrada se lê como fato sobre quem ficou fora.
+- **Cargo é o da fonte, incluindo o Executivo.** Dos 499 deputados: 437 disputam a
+  Câmara, 42 o Senado, 10 assembleia, 5 governo, 1 vice-governo, 1 vice-presidência,
+  3 suplência. Dos 51 senadores: 32 o Senado, 9 governo, 4 suplência, 3 a Câmara, 2
+  assembleia, 1 a Presidência. São os 42 deputados candidatos ao Senado que tornam o
+  chip **um cargo**, e não um sim/não de reeleição: num binário eles apareceriam iguais
+  a quem não se candidatou.
+- **Suplente de senador é rótulo próprio**, não "concorre ao Senado" — são cargos
+  diferentes (Jader Barbalho é o caso real).
+- **Código de cargo desconhecido é logado e fica sem chip**, nunca vira rótulo cru.
+
+### O chip morre no pleito
+
+Em 04/10/2026 "concorre" fica falso sozinho, sem ninguém tocar no código. O gerador
+compara a data da execução com `meta.eleicao2026.pleitoEm` e **para de emitir o campo**;
+os chips e o filtro somem juntos, porque todos tratam ausência como silêncio.
+"Eleito / não eleito" é outra feature, com outro dataset.
+
+### Superfícies
+
+Ficha (chip + linha no relatório), cards das listas (`CandMini`, forma curta do
+gerador), filtro da Tier List (`?eleicao=`) e a **imagem do ShareButton / card OG**.
+A imagem é a exceção que confirma a regra dos títulos: selo é rótulo avaliativo que
+viaja sem a regra, sem o bruto e sem o canal de correção — "Concorre ao Senado" não
+avalia ninguém. Mas vai **com a data**, porque a peça circula sem revalidação e o
+registro pode ser indeferido depois.

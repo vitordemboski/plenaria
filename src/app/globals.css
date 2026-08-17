@@ -709,6 +709,24 @@ a.kpi-link:hover { border-color: var(--gold-2); }
 .lic-nota { font-size: 10.5px; color: var(--muted); line-height: 1.5; margin: 10px 0 0; }
 .lic-nota a { color: var(--gold-2); text-decoration: underline; }
 
+/* Neutro e discreto: não disputa espaço com o Tier nem julga. A 390px quebra
+   para a linha de baixo em vez de empurrar o layout. */
+.cand-mini {
+  display: inline-block; font-style: normal; white-space: nowrap;
+  margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+  border: 1px solid var(--line); background: rgba(212, 175, 55, 0.07);
+  color: var(--gold-2); font-size: 9.5px; letter-spacing: 0.02em;
+}
+.lrow .cand-mini, .mini-card .cand-mini { vertical-align: baseline; }
+@media (max-width: 420px) {
+  .cand-mini { margin-left: 0; margin-top: 3px; display: block; width: fit-content; }
+}
+.cand-nota {
+  max-width: 760px; margin: 0 auto 14px; padding: 0 4px;
+  color: var(--muted); font-size: 11px; line-height: 1.6; text-align: center;
+}
+.cand-nota b { color: var(--gold-2); }
+
 .lrow { display: grid; grid-template-columns: 24px 1fr auto 40px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; }
 .lrow:last-child { border-bottom: 0; }
 .lrow .pos { font-family: var(--font-display), serif; font-weight: 900; color: var(--muted); }

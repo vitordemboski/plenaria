@@ -27,6 +27,10 @@ export interface ShareCardData {
    *  casas licenciam a imagem com atribuição obrigatória (CC BY na Câmara), e esta
    *  imagem circula SOZINHA, longe do rodapé do site: é aqui que o crédito importa. */
   fotoCredito?: string;
+  /** "Concorre em 2026: Senado · registro no TSE, 16/08/2026". Fato oficial, não
+   *  rótulo avaliativo — por isso viaja, ao contrário dos títulos. A data é
+   *  obrigatória: a peça circula sem revalidação e o registro pode ser indeferido. */
+  candidatura?: string;
   score?: { a: number; b: number; nameA: string; nameB: string; result: string;
     /** presente quando os rounds empataram e o Poder foi o desempate */
     tie?: { opsA: number; opsB: number; label: string };
@@ -511,6 +515,16 @@ async function montarCanvas(card: ShareCardData): Promise<HTMLCanvasElement | nu
   // Câmara é CC BY e a política do Senado exige citar a Agência: atribuir no rodapé
   // do site e não na peça compartilhada seria cumprir no lugar errado.
   ctx.textAlign = 'center';
+  // A carta termina em BICO no centro, em y=928: a linha da candidatura fica logo
+  // abaixo dele e empurra as outras duas — só quando existe, para não mexer no
+  // rodapé já ajustado das cartas sem candidatura.
+  if (card.candidatura) {
+    ctx.font = `600 14px ${mono}`;
+    ctx.fillStyle = '#8a7534';
+    ctx.fillText(fitText(ctx, card.candidatura, W - 2 * M - 20), W / 2, 948);
+  }
+  const yCred = card.candidatura ? 976 : H - M - 66;
+  const yHost = card.candidatura ? 1004 : H - M - 34;
   ctx.font = `600 15px ${mono}`;
   ctx.fillStyle = '#4d525e';
   // caminho RELATIVO (não a URL cheia): o domínio já está na linha de baixo, e a
@@ -519,10 +533,10 @@ async function montarCanvas(card: ShareCardData): Promise<HTMLCanvasElement | nu
     fotoDesenhada && card.fotoCredito ? `Foto: ${card.fotoCredito}` : null,
     'fórmula em /como-calculamos',
   ].filter(Boolean).join('  ·  ');
-  ctx.fillText(fitText(ctx, creditos, W - 2 * M - 20), W / 2, H - M - 66);
+  ctx.fillText(fitText(ctx, creditos, W - 2 * M - 20), W / 2, yCred);
   ctx.fillStyle = '#565b68';
   ctx.font = `600 19px ${mono}`;
-  ctx.fillText(urlCompartilhavel().host, W / 2, H - M - 34);
+  ctx.fillText(urlCompartilhavel().host, W / 2, yHost);
 
   return canvas;
 }
@@ -869,6 +883,11 @@ async function desenharStory(card: ShareCardData): Promise<Blob | null> {
   // O link é o da fórmula, não o domínio solto: quem recebe a imagem no WhatsApp
   // precisa de um caminho para a régua e para o canal de correção, não para a home.
   ctx.textAlign = 'center';
+  // mesma linha da carta quadrada
+  if (card.candidatura) {
+    ctx.fillStyle = '#8a7534'; ctx.font = `600 22px ${mono}`;
+    ctx.fillText(fitText(ctx, card.candidatura, SW - 160), SW / 2, SH - 186);
+  }
   ctx.fillStyle = 'rgba(212,175,55,0.35)';
   ctx.fillRect(SW / 2 - 60, SH - 152, 120, 1.5);
   if (foto && card.fotoCredito) {

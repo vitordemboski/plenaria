@@ -110,7 +110,7 @@ export default function SobrePage() {
         </p>
       </div>
 
-      <div className="panel detail-block">
+      <div className="panel detail-block" id="privacidade">
         <h3>4. Privacidade</h3>
         <p>
           <span className="key">Sobre parlamentares.</span> Tratamos dados pessoais tornados públicos pelos
@@ -118,7 +118,15 @@ export default function SobrePage() {
           legal é o legítimo interesse no controle social da atividade parlamentar (LGPD, art. 7º, IX,
           combinado com o art. 7º, §3º, que trata do dado manifestamente público). Não publicamos endereço,
           telefone, CPF, dado de saúde, origem racial, opinião religiosa nem qualquer dado sensível, e não
-          tratamos dados de familiares — o CPF sequer é lido pelo processo de ingestão.
+          tratamos dados de familiares.
+        </p>
+        <p>
+          <span className="key">Sobre o CPF.</span> Ele é lido em um único ponto e para um único fim:
+          reconhecer, no arquivo público de candidaturas do TSE, qual registro corresponde a qual deputado
+          — é o que permite dizer a qual cargo cada um concorre em 2026 sem errar de pessoa. O número
+          existe apenas em memória durante a ingestão: <b>não é gravado em arquivo, não aparece em log,
+          não é publicado e não alimenta nenhuma consulta a terceiros</b>. No Senado ele nem existe na
+          fonte, e a correspondência é feita pelo nome civil completo.
         </p>
         <p>
           <span className="key">Sobre você, visitante.</span> O site é estático: não há login, não há

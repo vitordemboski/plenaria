@@ -14,6 +14,7 @@ import { breadcrumbLd, personLd } from '@/lib/jsonld';
 import { pageMeta } from '@/lib/seo';
 import { UF_NOME } from '@/lib/uf';
 import { guildSlug } from '@/lib/slug';
+import { rotuloCandidatura, explicaCandidatura, linhaCandidaturaShare } from '@/lib/candidatura';
 import type { StatKey } from '@/lib/types';
 
 /**
@@ -217,6 +218,16 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
         </div>
       </div>
 
+      {/* Sem cor de status: concorrer não é mérito nem falta. E ausência não é
+          afirmada — quem não tem chip não recebe "não se candidatou". */}
+      {p.candidatura2026 && (
+        <div className="carta-cand">
+          <span className="cand-chip" title={explicaCandidatura(p.candidatura2026, p.casa, p.uf)}>
+            🗳️ Concorre em 2026 · <b>{rotuloCandidatura(p.candidatura2026, p.uf)}</b>
+          </span>
+        </div>
+      )}
+
       <div className="carta-cta">
         {/* quem está fora do ranking não entra na Batalha — o link levaria a um
             seletor que ignora o ?a= e pareceria bug */}
@@ -239,6 +250,10 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
             semRanking: motivoFora,
             fotoUrl: p.fotoUrl,
             fotoCredito: p.casa === 'senado' ? 'Agência Senado' : 'Câmara dos Deputados',
+            // Vai na imagem, e a proibição de TÍTULOS ali continua de pé: aquela regra
+            // barra rótulo avaliativo que viaja sem prova. "Concorre ao Senado" não
+            // avalia ninguém — mas vai com a data, porque pode ser indeferida.
+            ...(p.candidatura2026 ? { candidatura: linhaCandidaturaShare(p.candidatura2026) } : {}),
             // A imagem NÃO leva títulos — nem os elogiosos. Um selo viaja sem a regra
             // que o concedeu, sem o número bruto e sem o canal de correção; fora do
             // site, vira rótulo sem prova. O que vai no lugar é o próprio dado
@@ -450,6 +465,18 @@ export default async function PoliticianPage({ params }: { params: Promise<{ slu
               <> Vice-liderança e representação de bancada são <b>nomeadas, mas não pontuam</b> no
               Comando: um terço da Câmara ocupa uma delas.</>
             )}
+          </div>
+        )}
+        {/* "Registrou pedido", não "deferida": o TSE não publica deferimento nesta
+            fase. A data vai junto — pode ser indeferida depois. */}
+        {p.candidatura2026 && (
+          <div style={{ marginTop: 10 }}>
+            🗳️ Registrou pedido de candidatura {p.candidatura2026.reeleicao
+              ? <>à <b>reeleição</b> para {p.casa === 'camara' ? 'a Câmara dos Deputados' : 'o Senado'}</>
+              : <>a <b>{p.candidatura2026.cargo}</b></>} nas eleições de 2026
+            {p.candidatura2026.uf !== 'BR' && p.candidatura2026.uf !== p.uf && <> (por {p.candidatura2026.uf})</>}.
+            Fonte: registro de candidaturas do TSE, arquivo de {dataBR(p.candidatura2026.registroEm)} —
+            o deferimento ainda não é publicado ali. Informativo: não pontua no Poder nem gera título.
           </div>
         )}
         <div style={{ marginTop: 10 }} className="muted">

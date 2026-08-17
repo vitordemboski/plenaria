@@ -38,6 +38,8 @@ import { normaDoDespacho, normaDoSenado, resumoEmenta, ordenaLeis, urlProposicao
 import { agruparLeis, apresentadoVersusAprovado, contarPontuaveis, simbolicas, soHomenagem } from './lib/leis-temas.mjs';
 import { fonteHash, contarObsoletas, alvoNacional, alvoGuilda } from './lib/analises.mjs';
 import { moveuNestaLegislatura, INICIO_LEGISLATURA } from './lib/legislatura.mjs';
+import { casaCandidaturas, coberturaPorCasa, motivoParaAbortar, aindaVale, dataIso, PLEITO_2026 } from './lib/candidatura.mjs';
+import { lerZip } from './lib/zip.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = join(ROOT, 'data', 'raw');
@@ -120,6 +122,26 @@ async function cached(name, url, { json = false, method = 'GET', body: reqBody, 
   writeFileSync(file, body);
   registraFonte(file, permanente);
   return body;
+}
+
+/** `cached` para arquivo BINÁRIO (.zip). O piso de bytes existe porque erro de CDN
+ *  chega como HTML de 200: sem ele, "Not Found" sobrescreveria o cache bom e o TTL
+ *  congelaria a falha por 24h. */
+async function cachedBin(name, url, { permanente = false, minBytes = 1024 } = {}) {
+  const file = join(RAW, name);
+  if (cacheServe(file, permanente)) {
+    console.log(`[cache] ${name}`);
+    registraFonte(file, permanente);
+    return readFileSync(file);
+  }
+  console.log(`[fetch] ${url}`);
+  const res = await fetch(url, { headers: { Accept: '*/*' } });
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length < minBytes) throw new Error(`resposta suspeita (${buf.length} bytes) em ${url}`);
+  writeFileSync(file, buf);
+  registraFonte(file, permanente);
+  return buf;
 }
 
 /** Parser p/ os CSVs da Câmara: campos todos entre aspas, separados por ';'. */
@@ -939,8 +961,9 @@ async function fichaCamara(id) {
     `${API}/api/v2/deputados?id=${id}&idLegislatura=${LEGISLATURAS}&itens=100`)).dados ?? [];
   const mandatos = new Set(legs.map((l) => l.idLegislatura)).size;
   return {
-    // CPF NÃO é lido: a única consulta que o usava (Cadirreg do TCU) saiu do pipeline.
-    // Vide docs/product-spec.md §9 — não reintroduzir sem reler o motivo.
+    // CPF é lido SÓ como chave do registro do TSE (`aplicaCandidaturas`), em memória:
+    // não é gravado, logado nem usado em consulta externa. O Cadirreg do TCU, único
+    // que já o consultou, saiu do pipeline (docs/product-spec.md §9).
     nomeCivil: d.nomeCivil ?? null,
     sexo: d.sexo === 'M' || d.sexo === 'F' ? d.sexo : null,
     ficha: {
@@ -1075,6 +1098,89 @@ async function aplicaComando(todos) {
   for (const r of desconhecidos) {
     console.log(`⚠️  [lideranca] código NÃO classificado: siglaTipoLideranca="${r.siglaTipoLideranca}" idTipoUnidadeLideranca=${r.idTipoUnidadeLideranca} (${r.nomeParlamentar}) — declare-o em lib/lideranca.mjs`);
   }
+}
+
+// ---------- Candidatura 2026 (INFORMATIVA — não pontua, não é título) ----------
+/**
+ * A qual cargo cada parlamentar pediu registro no TSE — as quatro decisões estão em
+ * scripts/lib/candidatura.mjs. As chaves são lidas AQUI, do cache em disco, e não
+ * viajam nos objetos do pipeline: o CPF entra na função e sai dela.
+ *
+ * Falha de rede não derruba a ingestão (sem chip o site fica quieto); arquivo íntegro
+ * sem as candidaturas, sim — aí a conclusão seria plausível e falsa.
+ */
+async function aplicaCandidaturas(todos) {
+  // Depois do pleito "concorre" fica falso sozinho: não vale nem baixar o arquivo.
+  if (!aindaVale(HOJE)) {
+    console.log(`[candidatura] pleito de ${PLEITO_2026} já ocorreu — chip não é mais emitido`);
+    return null;
+  }
+
+  let linhas;
+  let registroEm;
+  try {
+    const zip = lerZip(await cachedBin('tse-cand-2026.zip',
+      'https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2026.zip',
+      { minBytes: 100_000 }));
+    // o BRASIL cobre o país inteiro; os por UF são o mesmo dado fatiado
+    const csv = zip.get('consulta_cand_2026_BRASIL.csv');
+    if (!csv) throw new Error('consulta_cand_2026_BRASIL.csv ausente do zip');
+    // latin1, e parseCsvBR — nunca split
+    const { header, rows } = parseCsvBR(csv.toString('latin1'), ';');
+    linhas = rows.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i]])));
+    // DT_GERACAO é dd/mm/aaaa
+    registroEm = /^\d{4}-\d{2}-\d{2}$/.test(dataIso(linhas[0]?.DT_GERACAO)) ? dataIso(linhas[0].DT_GERACAO) : HOJE;
+  } catch (e) {
+    console.log(`⚠️  [candidatura] fonte do TSE indisponível (${e.message}) — nenhum chip nesta execução`);
+    return null;
+  }
+
+  const chaves = todos.map((p) => {
+    const f = join(RAW, p.casa === 'camara' ? `dep-detalhe-${p.id}.json` : `sen-${p.id}-detalhe.json`);
+    if (!existsSync(f)) return { casa: p.casa, slug: p.slug, uf: p.uf };
+    const d = JSON.parse(readFileSync(f, 'utf8'));
+    if (p.casa === 'camara') {
+      return { casa: p.casa, slug: p.slug, uf: p.uf,
+        cpf: d.dados?.cpf, nomeCivil: d.dados?.nomeCivil, nascimento: d.dados?.dataNascimento };
+    }
+    const parl = d.DetalheParlamentar?.Parlamentar ?? {};
+    return { casa: p.casa, slug: p.slug, uf: p.uf,
+      nomeCivil: parl.IdentificacaoParlamentar?.NomeCompletoParlamentar,
+      nascimento: parl.DadosBasicosParlamentar?.DataNascimento };
+  });
+
+  const { porSlug, desconhecidos, ambiguos, nascimentoDivergente, porCargoTse } =
+    casaCandidaturas(linhas, chaves, registroEm);
+
+  const aborta = motivoParaAbortar(porCargoTse);
+  if (aborta) {
+    console.log(`⚠️  [candidatura] ABORTADO: ${aborta} — o arquivo veio íntegro e sem o dado; nenhum chip emitido`);
+    return null;
+  }
+
+  for (const p of todos) {
+    const c = porSlug.get(p.slug);
+    if (c) p.candidatura2026 = c;
+  }
+
+  const cob = coberturaPorCasa(porSlug, todos);
+  console.log(`[candidatura] ${porSlug.size} de ${todos.length} com registro no TSE (arquivo de ${registroEm}) · `
+    + cob.map((c) => `${c.casa} ${c.com}/${c.total}`).join(' · '));
+  for (const c of cob.filter((x) => x.baixa)) {
+    console.log(`⚠️  [candidatura] só ${(c.taxa * 100).toFixed(0)}% da ${c.casa} casou — suspeite da CHAVE (coluna renomeada?), não de desistência em massa`);
+  }
+  if (ambiguos.length) {
+    console.log(`⚠️  [candidatura] ${ambiguos.length} sem chip por homônimo que UF e nascimento não desempataram: ${ambiguos.map((a) => a.slug).join(', ')}`);
+  }
+  // Auditoria, não erro: unidades é normal; dezenas = uma das fontes trocou de formato.
+  if (nascimentoDivergente.length) {
+    console.log(`[candidatura] ${nascimentoDivergente.length} com nascimento divergente entre a casa e o TSE (match mantido pelo nome): ${nascimentoDivergente.map((d) => `${d.slug} ${d.base}≠${d.tse}`).join(', ')}`);
+  }
+  for (const cd of new Set(desconhecidos.map((r) => `${r.CD_CARGO}=${r.DS_CARGO}`))) {
+    console.log(`⚠️  [candidatura] código de cargo NÃO classificado: ${cd} — declare-o em lib/candidatura.mjs`);
+  }
+
+  return { registroEm, pleitoEm: PLEITO_2026 };
 }
 
 // menos de 12 meses em exercício efetivo (~1 ano de 41) = mandato parcial: fora do
@@ -2340,6 +2446,11 @@ const licenciados = await fetchLicenciados(deputados, senadores);
 // representante não é líder, o bônus é 3 uma vez).
 await aplicaComando(full);
 
+// ---------- Candidatura 2026 (informativo — não pontua, não vira título) ----------
+// Roda aqui: as chaves (CPF na Câmara, nome civil no Senado) só existem depois que as
+// fichas civis das DUAS casas foram baixadas.
+const eleicao2026 = await aplicaCandidaturas(full);
+
 // aplicados após o merge para cobrir Câmara e Senado com a mesma regra.
 // Todos green/purple → nenhum bloqueia o gate do Tier S (que só olha red).
 for (const p of full) {
@@ -2797,6 +2908,7 @@ const index = full.map((p) => ({
   slug: p.slug, nome: p.nome, fotoUrl: p.fotoUrl, casa: p.casa, uf: p.uf, partido: p.partido,
   tier: p.tier, ops: p.ops, stats: p.stats,
   avail: Object.keys(p.rawNumbers), // stats existentes p/ este parlamentar
+  ...(p.candidatura2026 ? { candidatura2026: p.candidatura2026 } : {}),
   ...(p.mandatoParcial ? { mandatoParcial: true } : {}), // marca p/ Batalha/busca
   ...(p.presidenteCasa ? { presidenteCasa: true } : {}),
 }));
@@ -2815,6 +2927,8 @@ const meta = {
     ? ['ataque', 'stamina', 'eficiencia', 'tecnica', 'economia', 'fiscalizacao', 'influencia', 'comando', 'alinhamento']
     : ['ataque', 'stamina', 'eficiencia', 'tecnica', 'economia', 'fiscalizacao', 'comando', 'alinhamento'],
   tierCortes: TIER_CORTES,
+  /** ausente = fonte indisponível OU pleito já passou; nos dois casos, ninguém tem chip */
+  ...(eleicao2026 ? { eleicao2026 } : {}),
   pesos: pesosNormalizados('camara'),
   pesosPorCasa: {
     camara: pesosNormalizados('camara'),
