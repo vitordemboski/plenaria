@@ -44,7 +44,7 @@ export const STAT_META = [
   // "matérias que tocou (autoria + relatoria)" e não "proposições": o universo é maior
   // que o do Ataque logo acima, e o mesmo substantivo nos dois fazia os brutos da ficha
   // (305 × 737) parecerem contradição. Mesma frase nos rawNumbers do gerador.
-  { key: 'eficiencia', icon: '🎯', label: 'Eficiência', desc: 'matérias que tocou (autoria + relatoria) e avançaram — volume + aproveitamento, com bônus por lei (a norma só de homenagem ou data comemorativa não pontua)', weight: 28 },
+  { key: 'eficiencia', icon: '🎯', label: 'Eficiência', desc: 'matérias que tocou (autoria + relatoria) e avançaram nesta legislatura, inclusive projeto da legislatura passada que ela fez andar — volume + aproveitamento, com bônus por lei (a norma só de homenagem ou data comemorativa não pontua)', weight: 28 },
   { key: 'tecnica', icon: '📜', label: 'Técnica', desc: 'relatorias e emendas — trabalho técnico sobre o texto', weight: 16 },
   { key: 'economia', icon: '🪙', label: 'Economia', desc: 'frugalidade no uso da cota parlamentar (CEAP/CEAPS) — gasto mensal médio durante o exercício', weight: 12 },
   // informativos: aparecem no card e nos títulos, mas NÃO pontuam no Poder

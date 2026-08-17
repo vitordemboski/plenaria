@@ -25,6 +25,10 @@ export interface Lei {
   data?: string;
   /** página oficial da proposição na casa — a prova auditável de cada linha */
   url: string;
+  /** o projeto é da legislatura ANTERIOR e virou norma nesta. Conta em tudo que
+   *  descreve o que foi sancionado agora; fica de fora só da taxa de conversão por
+   *  tema, cujo denominador é o que se apresentou nesta legislatura. */
+  anterior?: boolean;
 }
 
 export interface Politician {

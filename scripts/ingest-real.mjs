@@ -37,6 +37,7 @@ import { TEMAS, OUTROS, deTemaCamara, deClasseSenado, contarTemas, destaqueDoCar
 import { normaDoDespacho, normaDoSenado, resumoEmenta, ordenaLeis, urlProposicaoCamara, urlMateriaSenado } from './lib/norma.mjs';
 import { agruparLeis, apresentadoVersusAprovado, contarPontuaveis, simbolicas, soHomenagem } from './lib/leis-temas.mjs';
 import { fonteHash, contarObsoletas, alvoNacional, alvoGuilda } from './lib/analises.mjs';
+import { moveuNestaLegislatura, INICIO_LEGISLATURA } from './lib/legislatura.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = join(ROOT, 'data', 'raw');
@@ -47,6 +48,15 @@ mkdirSync(OUT_PUBLIC, { recursive: true });
 
 const API = 'https://dadosabertos.camara.leg.br';
 const YEARS = [2023, 2024, 2025, 2026];
+/**
+ * Legislatura ANTERIOR. A matéria apresentada nela que ESTA legislatura fez andar
+ * conta — foi o marco legal dos jogos eletrônicos (PL 2796/2021 → Lei 14.852/2024) que
+ * denunciou a ausência: o autor aparecia sem a lei mais conhecida dele. Ver
+ * `moveuNestaLegislatura` para a regra e para por que a janela para aqui.
+ */
+const YEARS_ANTERIORES = [2019, 2020, 2021, 2022];
+/** início da legislatura atual — a data que decide o que é "movido por ela" */
+const TERM_START = INICIO_LEGISLATURA;
 /** legislatura corrente (2023–2027) — a numeração é a mesma nas duas casas */
 const LEG_ATUAL = 57;
 
@@ -270,9 +280,15 @@ const AVANCOU_RE = /transformad|norma jurídica|pronta para pauta|aprecia[çc][�
  * O bulk `proposicoesTramitacoes` NÃO resolve: não traz o campo de relator. Só a API
  * por proposição traz, daí o laço. Cache num JSON só — 23 mil arquivos soltos em
  * data/raw/ seria pior — com escrita incremental para sobreviver a interrupção.
+ *
+ * `comData` guarda `[idDeputado, dataDesignacao]` em vez de só o id, e vale para as
+ * matérias da legislatura ANTERIOR: nelas há relator designado em 2021 que não é ato
+ * desta legislatura, e a data é o único jeito de separar. Nas matérias desta
+ * legislatura toda designação é necessariamente de agora, então elas seguem no cache
+ * antigo, no formato antigo — trocar o formato lá custaria ~24 mil chamadas de novo.
  */
-async function relatoresPorProposicao(ids, concorrencia = 8) {
-  const file = join(RAW, 'relatores-historico.json');
+async function relatoresPorProposicao(ids, { concorrencia = 8, arquivo = 'relatores-historico.json', comData = false } = {}) {
+  const file = join(RAW, arquivo);
   const cache = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const faltam = ids.filter((id) => !(id in cache));
   if (!faltam.length) {
@@ -292,11 +308,17 @@ async function relatoresPorProposicao(ids, concorrencia = 8) {
           if (res.status >= 500) throw new Error(`${res.status}`);
           if (!res.ok) { cache[id] = []; ok = true; break; } // 404: proposição sem tramitação exposta
           const { dados } = JSON.parse(await res.text());
-          cache[id] = [...new Set((dados ?? [])
-            .map((d) => d.uriUltimoRelator)
-            .filter((u) => u && u.includes('/deputados/'))
-            .map((u) => Number(u.split('/').pop()))
-            .filter(Boolean))];
+          const designacoes = (dados ?? [])
+            .filter((d) => d.uriUltimoRelator?.includes('/deputados/'))
+            .map((d) => [Number(d.uriUltimoRelator.split('/').pop()), (d.dataHora ?? '').slice(0, 10)])
+            .filter(([dep]) => dep);
+          // primeira designação de cada relator: é a data em que ELE assumiu, e as
+          // tramitações seguintes só repetem o mesmo relator
+          const primeira = new Map();
+          for (const [dep, data] of designacoes) {
+            if (!primeira.has(dep) || data < primeira.get(dep)) primeira.set(dep, data);
+          }
+          cache[id] = comData ? [...primeira] : [...primeira.keys()];
           ok = true;
         } catch { await sleep(1200 * t); }
       }
@@ -384,7 +406,8 @@ async function fetchStatusProposicoes() {
   const relatoriasAvancadasByDep = new Map();
   const emendaIds = new Set();   // ids de EMC/EMP/EMR  → Técnica
   const fiscalIds = new Set();   // ids de RIC/PFC/REQ-convocação → Fiscalização
-  for (const y of YEARS) {
+  for (const y of [...YEARS_ANTERIORES, ...YEARS]) {
+    const anterior = y < YEARS[0];
     let body;
     try {
       body = await cached(`proposicoes-${y}.csv`, `${API}/arquivos/proposicoes/csv/proposicoes-${y}.csv`);
@@ -394,9 +417,11 @@ async function fetchStatusProposicoes() {
     const iTipo = header.indexOf('siglaTipo');
     const iDesc = header.indexOf('descricaoTipo');
     const iSit = header.indexOf('ultimoStatus_descricaoSituacao');
+    const iData = header.indexOf('ultimoStatus_dataHora');
     const iNum = header.indexOf('numero');
     const iAno = header.indexOf('ano');
     const iEmenta = header.indexOf('ementa');
+    let movidas = 0;
     for (const r of rows) {
       const tipo = r[iTipo];
       const desc = r[iDesc] ?? '';
@@ -405,18 +430,27 @@ async function fetchStatusProposicoes() {
       const fiscal = ehFiscalizacao(tipo, desc);
       if (!principal && !emenda && !fiscal) continue;
 
-      if (emenda) emendaIds.add(r[iId]);
-      if (fiscal) fiscalIds.add(r[iId]);
+      // emenda e ato de fiscalização são ATO com data de apresentação: os da
+      // legislatura passada não são trabalho desta, e a Técnica/Fiscalização os
+      // contariam sem saber a diferença
+      if (!anterior && emenda) emendaIds.add(r[iId]);
+      if (!anterior && fiscal) fiscalIds.add(r[iId]);
       if (!principal) continue; // o resto abaixo só vale para PL/PLP/PEC/PDL
 
       const sit = r[iSit] ?? '';
+      const dataSit = (r[iData] ?? '').slice(0, 10);
+      // Matéria da legislatura passada só entra se ESTA legislatura a moveu. Ver
+      // moveuNestaLegislatura() para por que a data confiável é a da SITUAÇÃO.
+      if (anterior && !moveuNestaLegislatura(dataSit)) continue;
+      if (anterior) movidas++;
+
       const aprovada = APROVADA_RE.test(sit);
       // ref/ementa de TODA proposição principal (não só das aprovadas): é o que
       // permite abrir "as 39 de Saúde" no clique do tema. A ementa já entra cortada
       // — guardar o texto integral de ~60 mil proposições em memória para depois
       // truncar tudo custaria centenas de MB sem servir a ninguém.
       statusById.set(r[iId], {
-        tipo, aprovada, avancou: AVANCOU_RE.test(sit),
+        tipo, aprovada, avancou: AVANCOU_RE.test(sit), anterior,
         ref: `${tipo} ${r[iNum]}/${r[iAno]}`,
         ementa: resumoEmenta(r[iEmenta], 180),
       });
@@ -425,33 +459,61 @@ async function fetchStatusProposicoes() {
           ref: `${tipo} ${r[iNum]}/${r[iAno]}`,
           ementa: resumoEmenta(r[iEmenta]), // painel de leis: corte mais generoso
           url: urlProposicaoCamara(r[iId]),
+          ...(anterior ? { anterior: true } : {}),
         });
       }
     }
-    console.log(`[status] ${y}: ${statusById.size} proposições principais · ${emendaIds.size} emendas · ${fiscalIds.size} de fiscalização (acumulado)`);
+    console.log(anterior
+      ? `[status] ${y}: ${movidas} proposições principais que ESTA legislatura moveu (acumulado ${statusById.size})`
+      : `[status] ${y}: ${statusById.size} proposições principais · ${emendaIds.size} emendas · ${fiscalIds.size} de fiscalização (acumulado)`);
   }
 
+  // nº da norma ("Lei 15.172/2025") e data da sanção — só para as transformadas.
+  // Sem isso a ficha diria "PL 358/2025 virou lei" sem dizer QUAL lei, que é
+  // justamente o nome pelo qual o leitor reconhece o resultado.
+  const normas = await normasPorProposicao([...leiById.keys()]);
+  let expurgadas = 0;
+  for (const [id, lei] of leiById) {
+    const n = normas[id];
+    if (n?.norma) lei.norma = n.norma;
+    if (n?.data) lei.data = n.data;
+    // Guarda das antigas: a data da SITUAÇÃO pode ser posterior à sanção (retificação
+    // republica a norma e carimba a situação de novo). A data do EVENTO de
+    // transformação é exata — quando ela existe e é anterior à legislatura, a lei é
+    // da safra passada e sai. Sem a data, a situação decide: o que a fonte não
+    // permite afirmar, não se deduz para o outro lado.
+    if (lei.anterior && n?.data && !moveuNestaLegislatura(n.data)) {
+      leiById.delete(id);
+      statusById.get(id).aprovada = false;
+      expurgadas++;
+    }
+  }
+  if (expurgadas) console.log(`[status] ${expurgadas} normas da legislatura passada descartadas pela data do evento de transformação`);
+
   // relatorias vêm do histórico completo de tramitação, não do relator atual
-  const hist = await relatoresPorProposicao([...statusById.keys()]);
+  const atuais = [...statusById].filter(([, s]) => !s.anterior).map(([id]) => id);
+  const anteriores = [...statusById].filter(([, s]) => s.anterior).map(([id]) => id);
+  const hist = await relatoresPorProposicao(atuais);
+  // designação é ATO com data: na matéria antiga, o relator de 2021 não é trabalho
+  // desta legislatura, ainda que ela tenha feito a matéria andar depois
+  const histAnt = anteriores.length
+    ? await relatoresPorProposicao(anteriores, { arquivo: 'relatores-anteriores.json', comData: true })
+    : {};
+  let relAnt = 0;
   for (const [id, st] of statusById) {
-    for (const depId of hist[id] ?? []) {
+    const deps = st.anterior
+      ? (histAnt[id] ?? []).filter(([, data]) => moveuNestaLegislatura(data)).map(([dep]) => dep)
+      : (hist[id] ?? []);
+    if (st.anterior) relAnt += deps.length;
+    for (const depId of deps) {
       relatoriasByDep.set(depId, (relatoriasByDep.get(depId) ?? 0) + 1);
       // relatoria que EFETIVAMENTE andou: designar ≠ entregar
       if (st.avancou) relatoriasAvancadasByDep.set(depId, (relatoriasAvancadasByDep.get(depId) ?? 0) + 1);
     }
   }
   const totalRel = [...relatoriasByDep.values()].reduce((s, v) => s + v, 0);
-  console.log(`[status] ${totalRel} relatorias (histórico completo de tramitação, não só o relator atual)`);
+  console.log(`[status] ${totalRel} relatorias (histórico completo de tramitação, não só o relator atual) — ${relAnt} delas em matéria da legislatura passada`);
 
-  // nº da norma ("Lei 15.172/2025") e data da sanção — só para as transformadas.
-  // Sem isso a ficha diria "PL 358/2025 virou lei" sem dizer QUAL lei, que é
-  // justamente o nome pelo qual o leitor reconhece o resultado.
-  const normas = await normasPorProposicao([...leiById.keys()]);
-  for (const [id, lei] of leiById) {
-    const n = normas[id];
-    if (n?.norma) lei.norma = n.norma;
-    if (n?.data) lei.data = n.data;
-  }
   return { statusById, leiById, relatoriasByDep, relatoriasAvancadasByDep, emendaIds, fiscalIds };
 }
 
@@ -468,7 +530,10 @@ async function fetchStatusProposicoes() {
 async function fetchTemasCamara() {
   const porProposicao = new Map();
   const naoMapeados = new Map();
-  for (const y of YEARS) {
+  // inclui os anos anteriores: a norma sancionada agora a partir de projeto de 2021
+  // precisa do tema oficial dela tanto para a barra "o que o Congresso aprova" quanto
+  // para o corte de homenagem que decide se ela pontua na Eficiência
+  for (const y of [...YEARS_ANTERIORES, ...YEARS]) {
     let body;
     try {
       body = await cached(`proposicoesTemas-${y}.csv`, `${API}/arquivos/proposicoesTemas/csv/proposicoesTemas-${y}.csv`);
@@ -496,7 +561,10 @@ async function fetchTemasCamara() {
 }
 
 async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temasPorProp) {
-  const propsByDep = new Map();     // id → {total, aprovadas, avancadas, porAno}
+  // `total` é o ATAQUE (apresentou nesta legislatura); `anteriores` são as matérias da
+  // legislatura passada que ESTA moveu, e entram só na EFICIÊNCIA. São contas
+  // diferentes de propósito: apresentar é ato datado, fazer andar não.
+  const propsByDep = new Map();     // id → {total, anteriores, aprovadas, avancadas, porAno}
   const leisByDep = new Map();      // id → [{ref, norma?, ementa, data?, url}] — "o que virou lei"
   // proposição DISTINTA de autoria parlamentar → temas. É o denominador da taxa
   // "quanto de cada tema vira lei": o lado das aprovadas é deduplicado, então o
@@ -510,7 +578,8 @@ async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temas
   // id → um array de rótulos POR PROPOSIÇÃO (não um contador): a contagem cheia
   // precisa saber quais temas vieram juntos para não contar o mesmo duas vezes
   const temasByDep = new Map();
-  for (const y of YEARS) {
+  for (const y of [...YEARS_ANTERIORES, ...YEARS]) {
+    const anterior = y < YEARS[0];
     let body;
     try {
       body = await cached(`proposicoesAutores-${y}.csv`, `${API}/arquivos/proposicoesAutores/csv/proposicoesAutores-${y}.csv`);
@@ -538,11 +607,18 @@ async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temas
         fiscalByDep.set(id, (fiscalByDep.get(id) ?? 0) + 1); nFis++;
       }
 
+      // nos anos anteriores o statusById só tem as que ESTA legislatura moveu: o
+      // `continue` abaixo é o que descarta o resto da safra velha
       const st = statusById.get(r[iId]);
-      if (!st) continue; // não é tipo principal → não conta no Ataque
-      const e = propsByDep.get(id) ?? { total: 0, aprovadas: 0, aprovadasPontuaveis: 0, avancadas: 0, porAno: {} };
-      e.total++;
-      e.porAno[y] = (e.porAno[y] ?? 0) + 1;
+      if (!st) continue; // não é tipo principal, ou é matéria antiga parada
+      const e = propsByDep.get(id) ?? { total: 0, anteriores: 0, anterioresAvancadas: 0, aprovadas: 0, aprovadasPontuaveis: 0, avancadas: 0, porAno: {} };
+      if (anterior) {
+        e.anteriores++;
+        if (st.avancou) e.anterioresAvancadas++;
+      } else {
+        e.total++;
+        e.porAno[y] = (e.porAno[y] ?? 0) + 1;
+      }
       if (st.avancou) e.avancadas++;
       if (st.aprovada) {
         e.aprovadas++; aprov++;
@@ -563,6 +639,13 @@ async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temas
         }
       }
       propsByDep.set(id, e);
+      count++;
+      // Daqui para baixo é o que o parlamentar APRESENTOU nesta legislatura: as
+      // prioridades temáticas, a lista navegável do painel e o denominador da taxa
+      // de conversão por tema. Matéria de 2021 não pertence a nenhum dos três — ela
+      // entra na Eficiência (esta legislatura a moveu) e no painel de leis, não no
+      // retrato da pauta atual do parlamentar.
+      if (anterior) continue;
       // prioridades: uma entrada por proposição, mesmo sem tema (a proposição sem
       // classificação é CONTADA como sem tema — some seria mentir no denominador)
       if (!temasByDep.has(id)) temasByDep.set(id, []);
@@ -579,9 +662,10 @@ async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temas
       if (!apresentadasDistintas.has(r[iId])) {
         apresentadasDistintas.set(r[iId], [...(temasPorProp.get(r[iId]) ?? [])]);
       }
-      count++;
     }
-    console.log(`[props] ${y}: ${count} autorias principais (PL/PLP/PEC/PDL) · ${aprov} viraram norma · ${nEmd} emendas · ${nFis} atos de fiscalização`);
+    console.log(anterior
+      ? `[props] ${y}: ${count} autorias em matéria que ESTA legislatura moveu · ${aprov} viraram norma nela`
+      : `[props] ${y}: ${count} autorias principais (PL/PLP/PEC/PDL) · ${aprov} viraram norma · ${nEmd} emendas · ${nFis} atos de fiscalização`);
   }
   return { propsByDep, leisByDep, emendasByDep, fiscalByDep, temasByDep, apresentadasDistintas, propsByTemaDep };
 }
@@ -888,7 +972,6 @@ function emExercicioEm(hist, date) {
 }
 
 // ---------- tempo efetivo em exercício no período (p/ mandato parcial) ----------
-const TERM_START = '2023-02-01';           // início da legislatura atual
 const HOJE = new Date().toISOString().slice(0, 10);
 /** soma meses cobertos por intervalos [{start,end}] recortados a [TERM_START, HOJE] */
 function mesesDeIntervalos(intervalos) {
@@ -997,69 +1080,9 @@ async function aplicaComando(todos) {
 // menos de 12 meses em exercício efetivo (~1 ano de 41) = mandato parcial: fora do
 // ranking. Unifica posse recente E licença/ministério prolongados (quase-ausentes).
 const MESES_MIN_RANK = 12;
-  const lid = textoLideranca(liderancas);
-  if (lid) partes.push(lid);
 
 // ---------- Presidência da Casa: fora do ranking (cargo institucional) ----------
 // Quem preside a Câmara/Senado não vota (só desempate/secreto), não autora nem relata
-/**
- * Liderança de bancada + Comando, para as duas casas de uma vez.
- *
- * A liderança NÃO sai de `/deputados/{id}/orgaos` (aquele endpoint não tem o título
- * "Líder" — conferido nos 43 títulos que ele devolve). Sai de `composicao/lideranca`
- * do Senado: UMA chamada, composição vigente, `casa` CD/SF/CN. Antes disso, o Comando
- * — o atributo que se chama peso institucional — punha 10 dos 21 líderes da Câmara
- * abaixo de 40, a faixa vermelha.
- *
- * Cache VOLÁTIL: liderança troca no meio da legislatura, e um cache permanente aqui
- * deixaria um ex-líder liderando para sempre.
- *
- * Falha de rede aqui só custa o BÔNUS, nunca o atributo: o Comando continua saindo das
- * comissões. Por isso não aborta — mas loga, porque "todo mundo sem liderança" é
- * exatamente o sucesso vazio que este projeto mais persegue.
- */
-async function aplicaComando(todos) {
-  let registros = [];
-  try {
-    registros = await senadoJson('liderancas.json',
-      'https://legis.senado.leg.br/dadosabertos/composicao/lideranca',
-      (j) => Array.isArray(j) && j.length > 0);
-  } catch (e) {
-    console.log(`⚠️  [lideranca] fonte indisponível (${e.message}) — Comando sai só das comissões`);
-  }
-
-  const { porSlug, semMatch, semRotulo, desconhecidos } = indexaLiderancas(registros, todos, HOJE);
-  for (const p of todos) {
-    const lids = porSlug.get(p.slug);
-    if (lids?.length) p.lideranca = lids;
-  }
-
-  for (const casa of ['camara', 'senado']) {
-    const daCasa = todos.filter((p) => p.casa === casa);
-    const dim = daCasa.map((p) => comandoRawDe(p.comissoes, p.lideranca)).sort((a, b) => a - b);
-    for (const p of daCasa) {
-      const rawC = comandoRawDe(p.comissoes, p.lideranca);
-      p.stats.comando = percentileRank(dim, rawC);
-      p.statRaw.comando = rawC;
-      p.rawNumbers.comando = comandoTexto(p.comissoes, p.lideranca);
-    }
-  }
-
-  const lideres = [...porSlug.values()].filter((l) => l.some((x) => x.papel === 'lider')).length;
-  console.log(`[lideranca] ${porSlug.size} parlamentares com liderança (${lideres} líderes) de ${registros.length} registros`);
-  // Unidades é o normal (vice-líder licenciado, suplente que saiu). Dezenas é match
-  // nominal quebrado — o deputado casa por NOME, e é aí que este pipeline já se queimou.
-  if (semMatch.length) {
-    console.log(`⚠️  [lideranca] ${semMatch.length} registros sem parlamentar na base: ${semMatch.map((r) => `${r.nomeParlamentar} (${r.casa})`).join(', ')}`);
-  }
-  if (semRotulo.length) {
-    console.log(`⚠️  [lideranca] ${semRotulo.length} registros que não viraram rótulo publicável (bancada sem nome ou sem data de designação): ${semRotulo.map((r) => `${r.nomeParlamentar} (unidade ${r.idTipoUnidadeLideranca})`).join(', ')}`);
-  }
-  for (const r of desconhecidos) {
-    console.log(`⚠️  [lideranca] código NÃO classificado: siglaTipoLideranca="${r.siglaTipoLideranca}" idTipoUnidadeLideranca=${r.idTipoUnidadeLideranca} (${r.nomeParlamentar}) — declare-o em lib/lideranca.mjs`);
-  }
-}
-
 // como os demais — o cargo suprime Stamina, Ataque e Técnica de uma vez. Compará-lo a
 // deputados de bancada é injusto (mesma lógica do ministro licenciado = mandato parcial).
 // Presidentes ATUAIS são detectados nos órgãos (Mesa Diretora, cargo "Presidente");
@@ -1162,8 +1185,15 @@ const votosDesconhecidos = new Map();
  *
  * É o que destrava a Eficiência da casa. As autorias/relatorias do /senador só trazem
  * o Codigo da matéria, sem desfecho; quem tem `situacaoAtual` é o /processo — e ele
- * aceita busca em LOTE por sigla+ano (4 tipos × 4 anos = 16 chamadas, ~4.800 processos),
- * em vez de uma chamada por matéria. Nunca troque isso por /processo/{id} num laço.
+ * aceita busca em LOTE por sigla+ano (4 tipos por ano, ~4.800 processos), em vez de
+ * uma chamada por matéria. Nunca troque isso por /processo/{id} num laço.
+ *
+ * Os anos da legislatura PASSADA entram (o senador tem mandato de 8 anos, e a matéria
+ * dele de 2021 que andou agora é entrega desta legislatura), mas só as matérias cuja
+ * situação atual foi alcançada nesta legislatura — o `dataSituacaoAtual` é o análogo
+ * exato do `ultimoStatus_dataHora` da Câmara. `anterioresMovidas` devolve o conjunto
+ * delas, para as autorias e relatorias saberem o que é universo e o que é matéria
+ * velha parada.
  */
 async function fetchProcessosSenado() {
   const situacaoPorMateria = new Map();
@@ -1173,11 +1203,18 @@ async function fetchProcessosSenado() {
   // codigoMateria → { norma, data } — ao contrário da Câmara, o Senado publica a
   // norma gerada em CAMPO ESTRUTURADO (`normaGerada`), com vocabulário fechado
   const normaPorMateria = new Map();
+  // matérias da legislatura passada que ESTA moveu — o universo estendido da Eficiência
+  const anterioresMovidas = new Set();
   for (const sigla of TIPOS_PRINCIPAIS) {
-    for (const ano of YEARS) {
+    for (const ano of [...YEARS_ANTERIORES, ...YEARS]) {
+      const anterior = ano < YEARS[0];
       const j = await senadoJson(`sen-processos-${sigla}-${ano}.json`,
         `https://legis.senado.leg.br/dadosabertos/processo?sigla=${sigla}&ano=${ano}`);
       for (const p of asArray(j)) {
+        if (anterior) {
+          if (!moveuNestaLegislatura(p.dataSituacaoAtual)) continue;
+          anterioresMovidas.add(String(p.codigoMateria));
+        }
         situacaoPorMateria.set(String(p.codigoMateria), p.situacaoAtual ?? '');
         if (p.id) idPorMateria.set(String(p.codigoMateria), p.id);
         const n = normaDoSenado(p.normaGerada);
@@ -1192,8 +1229,8 @@ async function fetchProcessosSenado() {
       }
     }
   }
-  console.log(`[senado] ${situacaoPorMateria.size} processos com situação de tramitação (PL/PLP/PEC/PDL 2023+)`);
-  return { situacaoPorMateria, idPorMateria, normaPorMateria };
+  console.log(`[senado] ${situacaoPorMateria.size} processos com situação de tramitação (PL/PLP/PEC/PDL) — ${anterioresMovidas.size} deles são matéria de ${YEARS_ANTERIORES[0]}–${YEARS_ANTERIORES.at(-1)} que ESTA legislatura moveu`);
+  return { situacaoPorMateria, idPorMateria, normaPorMateria, anterioresMovidas };
 }
 
 /**
@@ -1290,7 +1327,11 @@ async function fetchClassificacoesSenado(codigos, idPorMateria, concorrencia = 4
 }
 
 async function fetchSenado(socialMap) {
-  const { situacaoPorMateria, idPorMateria, normaPorMateria } = await fetchProcessosSenado();
+  const { situacaoPorMateria, idPorMateria, normaPorMateria, anterioresMovidas } = await fetchProcessosSenado();
+  // universo da Eficiência do Senado: matéria desta legislatura, ou da anterior que
+  // esta fez andar. O ano sozinho não decide mais nada.
+  const noUniverso = (m) => TIPOS_PRINCIPAIS.has(m?.Sigla)
+    && (Number(m.Ano) >= YEARS[0] || anterioresMovidas.has(String(m.Codigo)));
   const lista = await senadoJson('senado-lista.json', 'https://legis.senado.leg.br/dadosabertos/senador/lista/atual.json');
   const parls = asArray(lista.ListaParlamentarEmExercicio.Parlamentares.Parlamentar)
     .map((p) => p.IdentificacaoParlamentar)
@@ -1450,12 +1491,17 @@ async function fetchSenado(socialMap) {
           cargo: titleCase(c.DescricaoCargo ?? ''),
         })),
     };
+    // `autorias` é o universo da Eficiência; `autoriasNaLeg`, o Ataque. A matéria de
+    // 2021 que esta legislatura fez andar está só na primeira — apresentar é ato
+    // datado, fazer andar não (ver lib/legislatura.mjs).
     const autorias = asArray(aut.MateriasAutoriaParlamentar?.Parlamentar?.Autorias?.Autoria)
       .filter((a) => a.IndicadorAutorPrincipal === 'Sim')
       .map((a) => a.Materia)
-      .filter((m) => TIPOS_PRINCIPAIS.has(m.Sigla) && Number(m.Ano) >= 2023);
+      .filter((m) => m && noUniverso(m));
+    const autoriasNaLeg = autorias.filter((m) => Number(m.Ano) >= YEARS[0]);
+    const autoriasAnteriores = autorias.filter((m) => Number(m.Ano) < YEARS[0]);
     const propsAno = {};
-    for (const m of autorias) propsAno[m.Ano] = (propsAno[m.Ano] ?? 0) + 1;
+    for (const m of autoriasNaLeg) propsAno[m.Ano] = (propsAno[m.Ano] ?? 0) + 1;
 
     // A API devolve a votação de TODA a carreira do senador — o Renan Calheiros vem com
     // 1.378 votos de 1995 a 2022. Sem o recorte por legislatura, a Stamina do veterano é
@@ -1504,27 +1550,33 @@ async function fetchSenado(socialMap) {
     // qual é qual.
     const sit = (m) => situacaoPorMateria.get(String(m.Codigo));
     const avancadas = autorias.filter((m) => senadoAvancou(sit(m))).length;
+    const anterioresAvancadas = autoriasAnteriores.filter((m) => senadoAvancou(sit(m))).length;
     const viraramNorma = autorias.filter((m) => senadoVirouNorma(sit(m)));
     const aprovadas = viraramNorma.length;
     const leis = ordenaLeis(viraramNorma.map((m) => ({
       ref: m.DescricaoIdentificacao ?? `${m.Sigla} ${m.Numero}/${m.Ano}`,
       ementa: resumoEmenta(m.Ementa),
       url: urlMateriaSenado(m.Codigo),
+      ...(Number(m.Ano) < YEARS[0] ? { anterior: true } : {}),
       ...(normaPorMateria.get(String(m.Codigo)) ?? {}),
     })));
-    const relatoriasPrinc = relatoriasTodas
-      .map((r) => r.Materia)
-      .filter((m) => m && TIPOS_PRINCIPAIS.has(m.Sigla) && Number(m.Ano) >= 2023);
+    // o ano da matéria NÃO decide mais: decide o universo. Enquanto decidia, a mesma
+    // relatoria contava na Técnica (que já filtrava pela data de designação) e sumia
+    // da Eficiência — duas barras da mesma ficha discordando sobre o mesmo trabalho.
+    const relatoriasPrinc = relatoriasTodas.map((r) => r.Materia).filter((m) => m && noUniverso(m));
     const relatoriasAvancadas = relatoriasPrinc.filter((m) => senadoAvancou(sit(m))).length;
 
     const gasto = resolveGasto(s.nome, nomeCivil);
     if (gasto === null) semCeaps.push(s.nome);
 
-    porSenador.push({ ...s, props: autorias.length, propsAno, votos, nVotacoes: votacoes.length, relatorias,
+    porSenador.push({ ...s, props: autoriasNaLeg.length, propsAno, votos, nVotacoes: votacoes.length, relatorias,
+      anteriores: autoriasAnteriores.length, anterioresAvancadas,
       // códigos das autorias — a classificação temática é buscada em LOTE depois do
-      // laço (uma chamada por matéria dentro dele seria serial por senador)
-      autoriaCodigos: autorias.map((m) => String(m.Codigo)),
-      autorias, // objetos da matéria (ref/ementa) — a lista navegável sai deles
+      // laço (uma chamada por matéria dentro dele seria serial por senador).
+      // Prioridades e lista navegável são o retrato da pauta ATUAL: só o que ele
+      // apresentou nesta legislatura, como na Câmara.
+      autoriaCodigos: autoriasNaLeg.map((m) => String(m.Codigo)),
+      autorias: autoriasNaLeg, // objetos da matéria (ref/ementa) — a lista navegável sai deles
       sabatinas, votacoesAbertas, compareceuN,
       avancadas, aprovadas, leis, relatoriasPrinc: relatoriasPrinc.length, relatoriasAvancadas,
       gasto: gasto ?? 0, cotaResumo: resolveCota(s.nome, nomeCivil),
@@ -1536,8 +1588,15 @@ async function fetchSenado(socialMap) {
   // é o sintoma de um match nominal quebrado — confira a lista a cada ingestão.
   if (semCeaps.length) console.log(`[ceaps-sen] sem lançamentos (gasto 0): ${semCeaps.join(', ')}`);
 
-  // prioridades: classificação temática de TODAS as autorias da casa, em lote
-  const codigosAutoria = [...new Set(porSenador.flatMap((r) => r.autoriaCodigos))];
+  // prioridades: classificação temática de TODAS as autorias da casa, em lote.
+  // As normas de matéria ANTERIOR entram junto: elas não estão em `autoriaCodigos`
+  // (que é só a pauta desta legislatura), mas o painel "o que o Congresso aprova" e o
+  // corte de homenagem precisam do tema delas — sem isso a cobertura temática das
+  // normas cairia sozinha e o ⚠️ do fim da ingestão acusaria uma fonte que não quebrou.
+  const codigosAutoria = [...new Set([
+    ...porSenador.flatMap((r) => r.autoriaCodigos),
+    ...porSenador.flatMap((r) => r.leis.map((l) => l.url.split('/').pop())),
+  ])];
   const classifPorMateria = await fetchClassificacoesSenado(codigosAutoria, idPorMateria);
   for (const r of porSenador) {
     r.temasPorProposicao = r.autoriaCodigos.map((c) => [...(classifPorMateria.get(c) ?? [])]);
@@ -1607,7 +1666,7 @@ async function fetchSenado(socialMap) {
   // (teto +15), e percentil final para restaurar a distribuição 0–100. Ter a fórmula
   // idêntica é o que torna o atributo comparável entre as casas — os percentis é que são
   // calculados DENTRO de cada uma.
-  const eficTocouS = (r) => r.props + r.relatoriasPrinc;
+  const eficTocouS = (r) => r.props + (r.anteriores ?? 0) + r.relatoriasPrinc;
   const eficAndouS = (r) => r.avancadas + r.relatoriasAvancadas;
   const eficTaxaS = (r) => (eficTocouS(r) ? eficAndouS(r) / eficTocouS(r) : 0);
   const eficVolS = (r) => eficAndouS(r) + 2 * r.aprovadasPontuaveis;
@@ -1697,8 +1756,11 @@ async function fetchSenado(socialMap) {
       rawNumbers: {
         ataque: `${nf.format(r.props)} matérias relevantes de autoria principal (PL, PLP, PEC, PDL)`,
         stamina: `${nf.format(r.votos)} votos registrados em ${nf.format(r.nVotacoes)} votações nominais ocorridas durante o seu exercício, incluídas as sabatinas de autoridades (${Math.round(staxaSen(r) * 100)}%)${r.compareceuN.presencas - r.votos > 0 ? ` — esteve presente em mais ${nf.format(r.compareceuN.presencas - r.votos)} sem registrar voto, então compareceu a ${Math.round((r.compareceuN.presencas / Math.max(r.compareceuN.total, 1)) * 100)}% das votações` : ''}`,
-        tecnica: `relator designado em ${nf.format(r.relatoriasPrinc)} matérias relevantes (PL, PLP, PEC, PDL) desde 2023`,
-        eficiencia: `${nf.format(eficAndouS(r))} de ${nf.format(eficTocouS(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocouS(r) ? ` (${((eficAndouS(r) / eficTocouS(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${nf.format(r.avancadas)}/${nf.format(r.props)} de autoria, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatoriasPrinc)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLeiS(r))}`,
+        // "designado NESTA LEGISLATURA", não "desde 2023": o recorte é a data da
+        // designação, e as matérias podem ser mais antigas que ela (ver legislatura.mjs).
+        // "desde 2023" agora se leria como "matérias de 2023 em diante", que é falso.
+        tecnica: `relator designado nesta legislatura em ${nf.format(r.relatoriasPrinc)} matérias relevantes (PL, PLP, PEC, PDL)`,
+        eficiencia: `${nf.format(eficAndouS(r))} de ${nf.format(eficTocouS(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocouS(r) ? ` (${((eficAndouS(r) / eficTocouS(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${fraseAutoria(r.avancadas, r.props, r.anteriores, r.anterioresAvancadas)}, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatoriasPrinc)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLeiS(r))}`,
         economia: `${fmtReais(r.gasto)} de cota (CEAPS) usados nos ${nf.format(Math.round(Math.max(r.mesesExercicio, 1)))} meses em exercício — média de R$ ${nf.format(Math.round(gastoMensalS(r) / 1000))} mil/mês`,
         ...(influencia !== null ? {
           influencia: `${fmtSeg(r.social.seguidores)} seguidores no ${REDE_LABEL[r.social.rede] ?? r.social.rede} (@${r.social.handle}${r.social.coletadoEm ? `, coletado em ${r.social.coletadoEm}` : ''})`,
@@ -1910,6 +1972,10 @@ const raw = deputados.map((d) => {
   mesesExercicio,
   mandatoParcial: mesesExercicio < MESES_MIN_RANK,
   props: propsByDep.get(d.id)?.total ?? 0,
+  // autoria da legislatura PASSADA que esta fez andar. Entra na Eficiência (nos dois
+  // lados da fração), nunca no Ataque — apresentar é ato datado.
+  anteriores: propsByDep.get(d.id)?.anteriores ?? 0,
+  anterioresAvancadas: propsByDep.get(d.id)?.anterioresAvancadas ?? 0,
   aprovadas: propsByDep.get(d.id)?.aprovadas ?? 0,
   aprovadasPontuaveis: propsByDep.get(d.id)?.aprovadasPontuaveis ?? 0,
   leis: ordenaLeis(leisByDep.get(d.id) ?? []),
@@ -1950,7 +2016,11 @@ const staminaCam = escalaComparecimento(raw.map((r) => r.stTaxa)); // TAXA, não
 // "Tocar" = conversão de TUDO que o parlamentar toca: o que ele PROPÔS e o que
 // ele RELATOU. Ser designado relator não é entrega (só 26,6% das relatorias andam);
 // o que conta é a matéria avançar. Relator puro (sem autorias) deixa de zerar a taxa.
-const eficTocou = (r) => r.props + r.relatorias;
+//
+// A autoria de matéria da legislatura passada que ESTA fez andar entra nos DOIS lados
+// da fração (`anteriores` no denominador, junto com `props`). Contar o avanço sem
+// contar a matéria seria taxa inflada pela porta dos fundos.
+const eficTocou = (r) => r.props + (r.anteriores ?? 0) + r.relatorias;
 const eficAndou = (r) => r.avancadas + r.relatoriasAvancadas;
 const eficTaxa = (r) => (eficTocou(r) ? eficAndou(r) / eficTocou(r) : 0);
 const eficVol = (r) => eficAndou(r) + 2 * r.aprovadasPontuaveis;
@@ -2018,6 +2088,20 @@ const nf = new Intl.NumberFormat('pt-BR');
  * por quê: sem isso o leitor vê "3 já viraram norma" ao lado de um bônus de +5 e
  * conclui que a conta está errada.
  */
+/**
+ * O trecho de autoria do tooltip da Eficiência, igual nas duas casas.
+ *
+ * A matéria da legislatura passada aparece SEPARADA, nunca somada em silêncio ao lado
+ * do número de proposições apresentadas: o Ataque exibe "311 proposições apresentadas"
+ * na barra de cima, e um "41/339 de autoria" logo abaixo faria o leitor procurar as 28
+ * que faltam. Sem `anteriores`, a frase é exatamente a de antes.
+ */
+function fraseAutoria(avancadas, props, anteriores, anterioresAvancadas) {
+  const naLeg = `${nf.format(avancadas - anterioresAvancadas)}/${nf.format(props)} de autoria`;
+  if (!anteriores) return naLeg;
+  return `${naLeg} desta legislatura, ${nf.format(anterioresAvancadas)}/${nf.format(anteriores)} de autoria anterior que esta legislatura fez andar`;
+}
+
 function fraseLeis(aprovadas, pontuaveis, bonus) {
   if (!aprovadas) return '';
   const honorificas = aprovadas - pontuaveis;
@@ -2107,8 +2191,8 @@ const full = raw.map((r) => {
       // aqui é MAIOR que o do Ataque (que é só autoria), e com o mesmo substantivo nos
       // dois painéis os números se leem como contradição até o leitor chegar ao
       // travessão. A frase do Senado abaixo é idêntica de propósito.
-      eficiencia: `${nf.format(eficAndou(r))} de ${nf.format(eficTocou(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocou(r) ? ` (${((eficAndou(r) / eficTocou(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${nf.format(r.avancadas)}/${nf.format(r.props)} de autoria, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatorias)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLei(r))}`,
-      tecnica: `${nf.format(tecnicaBruta(r))} atos de trabalho sobre o texto — relator designado em ${nf.format(r.relatorias)} proposições relevantes${r.relatorias ? ` (${nf.format(r.relatoriasAvancadas)} ${r.relatoriasAvancadas === 1 ? 'avançou' : 'avançaram'})` : ''} e autor de ${nf.format(r.emendas)} ${r.emendas === 1 ? 'emenda' : 'emendas'} (na comissão, de plenário ou de relator)`,
+      eficiencia: `${nf.format(eficAndou(r))} de ${nf.format(eficTocou(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocou(r) ? ` (${((eficAndou(r) / eficTocou(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${fraseAutoria(r.avancadas, r.props, r.anteriores, r.anterioresAvancadas)}, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatorias)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLei(r))}`,
+      tecnica: `${nf.format(tecnicaBruta(r))} atos de trabalho sobre o texto — relator designado nesta legislatura em ${nf.format(r.relatorias)} proposições relevantes${r.relatorias ? ` (${nf.format(r.relatoriasAvancadas)} ${r.relatoriasAvancadas === 1 ? 'avançou' : 'avançaram'})` : ''} e autor de ${nf.format(r.emendas)} ${r.emendas === 1 ? 'emenda' : 'emendas'} (na comissão, de plenário ou de relator)`,
       fiscalizacao: `${nf.format(r.fiscal)} atos de cobrança ao Executivo — requerimentos de informação a ministro, convocações de ministro e propostas de fiscalização e controle (PFC)`,
       economia: `${fmtReais(r.gasto)} de cota (CEAP) usados nos ${nf.format(Math.round(Math.max(r.mesesExercicio, 1)))} meses em exercício — média de R$ ${nf.format(Math.round(gastoMensal(r) / 1000))} mil/mês`,
       ...(influencia !== null ? {
@@ -2456,6 +2540,13 @@ const leisTotal = [...statusById.values()].filter((s) => s.aprovada).length + no
 const todasAsLeis = full.flatMap((p) => p.leis ?? []);
 const leisPorTema = agruparLeis(todasAsLeis);
 const simbolicasNacional = simbolicas(todasAsLeis);
+// A TAXA de conversão ("3,6% das proposições de homenagem viram norma") compara uma
+// safra com ela mesma: numerador e denominador precisam ser a mesma coorte. A norma que
+// veio de projeto da legislatura passada conta na COMPOSIÇÃO acima (ela foi sancionada
+// agora, e o painel descreve o que o Congresso aprovou), mas fica fora daqui — dividi-la
+// pelas proposições apresentadas NESTA legislatura daria taxa inventada, o mesmo erro
+// que separou composição de taxa em leis-temas.mjs.
+const leisDaSafra = agruparLeis(todasAsLeis.filter((l) => !l.anterior));
 // denominador da taxa: proposições DISTINTAS de autoria principal nas duas casas
 const apresentadasNacional = contarTemas([
   ...apresentadasDistintas.values(), ...apresentadasSenado.values(),
@@ -2484,7 +2575,7 @@ const leis = {
   temas: leisPorTema,
   // e o contraste que responde "de fato": o que se APRESENTA × o que VIRA norma
   apresentadas: { temas: apresentadasNacional.temas, nComTema: apresentadasNacional.nComTema },
-  comparativo: apresentadoVersusAprovado(leisPorTema, apresentadasNacional),
+  comparativo: apresentadoVersusAprovado(leisDaSafra, apresentadasNacional),
   // o único recorte em que o leitor avalia o CONTEÚDO do que foi aprovado, e não
   // o volume. Rótulo descritivo de propósito: a plataforma conta, o leitor julga.
   simbolicas: simbolicasNacional,

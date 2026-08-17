@@ -149,9 +149,13 @@ Armadilhas conhecidas das APIs:
   carimbava a data de hoje no `meta.json`. Hoje o volátil (bulks, cota, votações,
   autorias, Senado) expira em 24h (`PLENARIA_CACHE_TTL_H`; `--fresh` ignora), e
   `dep-hist-*`/`dep-legs-*` (504 em rajada), `relatores-historico.json` (~24 mil
-  chamadas) e `normas-camara.json` (nº da lei; uma lei publicada não muda de número)
+  chamadas), `relatores-anteriores.json` (o mesmo para as matérias da legislatura passada) e
+  `normas-camara.json` (nº da lei; uma lei publicada não muda de número)
   são PERMANENTES — só voltam se o arquivo sumir. Efeito colateral disso:
   relatoria nova em proposição antiga não aparece sem apagar o `relatores-historico`.
+  Atenção ao inverso: os bulks `proposicoes-2019..2022.csv` são VOLÁTEIS de propósito —
+  é o `ultimoStatus` deles que diz se esta legislatura moveu a matéria, e congelá-los
+  congelaria o universo da Eficiência num retrato antigo.
 - **`updatedAt` é a data da fonte mais velha**, não a da execução (essa é `geradoEm`).
   O dado é tão atual quanto sua parte mais velha, e é o `updatedAt` que
   todas as páginas exibem ao leitor.
@@ -163,6 +167,21 @@ Armadilhas conhecidas das APIs:
   de estados de verdade. Mesmo cuidado ao ler colunas de texto livre: em
   `votacoesOrientacoes`, o campo `descricao` pode conter `;`, então as 3 últimas
   colunas são lidas pelo FIM (`r.at(-3)`, `r.at(-1)`), não por índice.
+- **A Eficiência mede o que ESTA legislatura MOVEU, não o que ela apresentou** — matéria da
+  legislatura anterior cuja situação atual foi alcançada nesta entra no universo, dos dois
+  lados da fração (`scripts/lib/legislatura.mjs`, com teste; o tamanho do que se perdia
+  está medido em docs/product-spec.md §13). **A data confiável é a da SITUAÇÃO, não a da
+  tramitação**: o `codSituacao` de cada tramitação é carimbado retroativamente em parte das
+  linhas — a PL 2796/2021 (marco dos jogos eletrônicos, Lei 14.852/2024) carrega
+  "Transformado em Norma Jurídica" numa tramitação de 2021-09-15, três anos antes de virar
+  lei —, então datar avanço por ele devolve número plausível e errado. O que serve é
+  `ultimoStatus_dataHora` (Câmara) / `dataSituacaoAtual` (Senado). Três decisões que um
+  agente reverteria sem saber: **autoria conta a qualquer tempo** (a matéria é dele; sem
+  isso o avanço não teria dono) mas **relatoria só se designada nesta legislatura** (uma
+  matéria passa por vários relatores, e relatar é ato datado); **Ataque, Prioridades e
+  Técnica seguem só o ato desta legislatura**; e a **taxa de conversão por tema não usa
+  norma de safra anterior** — o denominador dela é o que se apresentou agora, e misturar
+  coortes dá taxa inventada.
 - **`ultimoStatus_uriRelator` do CSV bulk é só o relator ATUAL — não serve p/ contar
   relatoria.** Uma proposição passa por várias comissões, cada uma com seu relator, e o
   CSV guarda só o último: capturávamos 10.989 de 16.860 (65%). O agregado não denuncia —

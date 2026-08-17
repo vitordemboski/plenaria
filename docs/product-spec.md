@@ -32,9 +32,9 @@ card e nos títulos, fora da nota.
 | Stat RPG | Ícone | Métrica real | Cálculo |
 |---|---|---|---|
 | **Stamina** (Vigor) | 🛡️ | Voto registrado nas votações nominais | votos registrados ÷ votações ocorridas durante o exercício (taxa, não contagem bruta — não penaliza quem assumiu tarde ou ficou licenciado). **Escala linear na taxa**, ancorada na mediana da casa (= 50), p5 = 0 e p95 = 100 — não percentil. No percentil a inclinação seguia a densidade local de colegas: no Senado, onde a mediana comparece a 92% e a distribuição encosta no teto de 100%, o mesmo 1 ponto percentual de presença valia de 0 a 7,5 pontos de atributo conforme o senador caísse num aglomerado ou num vazio. Com a escala linear a inclinação é constante dentro de cada metade, e a razão de sensibilidade entre as casas caiu de 2,3x para 1,3x. Resíduo assumido: a metade de cima do Senado segue íngreme (1,25 ponto de Poder por p.p.) porque metade da casa vive nos últimos 8 pontos percentuais — é limite do dado, não da escala. **No Senado entram também as votações secretas** — elas são a sabatina de autoridades (art. 52, III e IV: STF, STJ, TCU, Banco Central, agências, embaixadores), competência privativa da casa e 58% das suas votações nominais. Só a **presença** é lida; como o senador votou é secreto e a plataforma não exibe. A ausência e o não-voto são identificados pelo **código** do campo do voto (`AP`, `MIS`, `LS`/`LP`/`LAP`, `NCom` para ausência; `P-NRV` para presente sem voto — `scripts/lib/voto-senado.mjs`), nunca por texto livre: os motivos convivem na mesma coluna dos votos. **O numerador é o voto REGISTRADO, não a presença**: `P-NRV` é ~15% dos registros do Senado (22% nas secretas) e a Câmara só publica voto efetivo, então contar presença aqui faria a mesma palavra medir coisas diferentes nas duas casas. **Abstenção CONTA** — é posição formal, e a Stamina não julga o conteúdo do voto, só se o parlamentar participou. A taxa de presença segue visível na ficha do senador, ao lado da de voto |
-| **Ataque** (Força) | ⚔️ | Proposições relevantes de **autoria** | contagem de matérias principais apresentadas como autor (PL, PLP, PEC, PDL) — apresentar, não aprovar (o desfecho entra na Eficiência) |
+| **Ataque** (Força) | ⚔️ | Proposições relevantes de **autoria** | contagem de matérias principais apresentadas como autor (PL, PLP, PEC, PDL) **nesta legislatura** — apresentar, não aprovar (o desfecho entra na Eficiência). Apresentar é ato com data: a matéria de 2021 que esta legislatura fez andar conta na Eficiência, nunca aqui (ver §13) |
 | **Técnica** (Perícia) | 📜 | Relatorias + emendas de autoria | **escala logarítmica** ancorada na mediana da casa (= 50), topo = o maior da casa: cada DOBRO de trabalho vale o mesmo incremento em qualquer altura. No percentil a cauda alta saturava — de 95 a 639 atos tudo cabia entre 83 e 100, e quem fazia 1,9x o trabalho de um colega no topo levava 1 ponto. O **Ataque não acompanha** e segue percentil de propósito: em log a magnitude do volume bruto volta a mandar, o que desfaz o motivo de ele pesar menos que a Eficiência (medido: log nos dois reinstalava o empate entre um autor de 296 matérias com 15,7% de aproveitamento e um de 80 com 41,8%). Conteúdo: trabalho técnico **sobre o texto alheio**: relatorias designadas em proposições relevantes + emendas de autoria (EMC = na comissão, EMP = de plenário, EMR = de relator). **Relatoria conta em QUALQUER ponto da tramitação**, não só onde o parlamentar é o relator atual: uma proposição passa por várias comissões e o CSV bulk só guarda o último relator, o que fazia a plataforma enxergar 10.989 de 16.860 relatorias (65%) — e de forma desigual (três deputados apareciam com zero apesar de terem 13 a 19), porque quem relata cedo é substituído e some. No Senado, que não expõe emendas por autor nos Dados Abertos, o atributo conta só relatorias |
-| **Eficiência** | 🎯 | O que andou ÷ o que tocou | conversão de **autorias E relatorias**: `(avançadas + relatorias_avançadas) ÷ (apresentadas + relatorias)`, em blend com o volume que avançou + bônus por lei — **norma cujo ÚNICO tema oficial é "Homenagens e Datas" não entra em nenhuma das duas contas** (ver §11). Ser designado relator não é entregar — a maioria das relatorias não avança. Relatoria é lida do histórico completo de tramitação (ver Técnica), então quem relatou numa comissão e viu a matéria seguir adiante recebe o crédito, em vez de perdê-lo para o relator seguinte. **Nas duas casas**: na Câmara o desfecho vem do CSV bulk de proposições; no Senado, do `/processo` (`situacaoAtual`), lido por allowlist explícita de situações — "remetida à Câmara dos Deputados" é o análogo exato de "apreciação pelo Senado" (a matéria foi aprovada na casa de origem). Conta só matérias principais (PL, PLP, PEC, PDL) da legislatura, nas duas casas |
+| **Eficiência** | 🎯 | O que andou ÷ o que tocou | conversão de **autorias E relatorias**: `(avançadas + relatorias_avançadas) ÷ (apresentadas + relatorias)`, em blend com o volume que avançou + bônus por lei — **norma cujo ÚNICO tema oficial é "Homenagens e Datas" não entra em nenhuma das duas contas** (ver §11). Ser designado relator não é entregar — a maioria das relatorias não avança. Relatoria é lida do histórico completo de tramitação (ver Técnica), então quem relatou numa comissão e viu a matéria seguir adiante recebe o crédito, em vez de perdê-lo para o relator seguinte. **Nas duas casas**: na Câmara o desfecho vem do CSV bulk de proposições; no Senado, do `/processo` (`situacaoAtual`), lido por allowlist explícita de situações — "remetida à Câmara dos Deputados" é o análogo exato de "apreciação pelo Senado" (a matéria foi aprovada na casa de origem). Conta só matérias principais (PL, PLP, PEC, PDL), nas duas casas. **O universo é o que ESTA legislatura moveu**, não o que ela apresentou: a matéria da legislatura anterior cuja situação atual foi alcançada nesta entra nos dois lados da fração (ver §13) |
 | **Influência** (Carisma) | 📢 | Seguidores no Instagram | **INFORMATIVO — não pontua no Poder** (alcance social ≠ entrega legislativa). Segue nos títulos e no card |
 | **Economia** (Frugalidade) | 🪙 | Uso da cota parlamentar (CEAP na Câmara, CEAPS no Senado) | **escala linear no gasto mensal**, ancorada na casa: mediana da casa = 50, gasto zero = 100, p95 = 0 (`scripts/lib/escala.mjs`). Gasto total ÷ meses em exercício efetivo (piso de 1 mês); quanto **menos** gasta por mês, maior o stat. É o ÚNICO atributo que não é percentil: percentil mede colocação e descarta magnitude, e a distribuição de gasto é apertada no meio com cauda longa embaixo — quem gastava 2,2x o de um colega frugal perdia 9 pontos, enquanto R$3 mil/mês a mais na mediana derrubava 24. A âncora na mediana existe porque o limiar de vermelho (< 40) é convenção compartilhada com os atributos percentílicos: uma reta simples entre os extremos jogava 72% da Câmara no vermelho e fazia o rótulo acusar quem gasta a mediana. Comparar totais da legislatura faria quem assumiu tarde (ou passou anos licenciado) parecer frugal só por ter estado menos tempo sentado — mesmo princípio da taxa da Stamina. Só a cota entra (não há auxílio-moradia nem verba de gabinete no cálculo — ver Armadilhas no AGENTS.md). A carta exibe também a **quebra por categoria** e o maior fornecedor (agregado por CNPJ), mas isso é informativo e não altera a nota |
 | **Comando** | 👑 | Comissões que integra + presidências + liderança de bancada | **INFORMATIVO — não pontua no Poder.** `total_órgãos + 3×presidências + vice-presidências + 3 se lidera bancada`. O bônus de liderança é 3 UMA VEZ, mesmo para quem lidera o partido e o bloco que o contém — é um poder, não dois. **Vice-liderança e representação de bancada são NOMEADAS na ficha, mas somam 0** (ver §12). Fora da nota de propósito: presidência e liderança são distribuídas por tamanho de bancada e senioridade, não por mérito individual — pontuá-las enviesaria o Poder a favor de veteranos e partidos grandes, contra estreantes |
@@ -729,3 +729,70 @@ bulk de proposições (conferidos todos os subtipos de REQ) —, que o sinal est
 "atrapalhar para negociar" é **intenção**, não fato derivável: o mesmo erro que rebatizou
 a "Safra Eleitoral". Obstrução já conta como voto registrado na Stamina, e é só isso que
 se pode afirmar sobre ela.
+
+---
+
+## 13. O recorte temporal — o que ESTA legislatura moveu
+
+O universo da Eficiência não é "o que foi apresentado nesta legislatura": é **o que ela
+fez andar**. Um projeto de 2021 que virou lei em 2024 é entrega desta legislatura, e
+ficava invisível — o autor do marco legal dos jogos eletrônicos (PL 2796/2021 → Lei
+14.852/2024) aparecia sem a lei mais conhecida dele.
+
+O tamanho do buraco, medido antes da correção, só entre parlamentares em exercício:
+
+| | contávamos | ficava de fora |
+|---|---|---|
+| créditos de norma na Câmara (soma por autor, como no ranking) | 396 | **371** |
+| relatorias (Câmara) | 15.643 | **7.558** (a estimativa por amostra, feita antes, apontava ~9,3 mil) |
+| relatorias principais (Senado) | 3.978 | **5.088** — mais da metade |
+
+### A regra
+
+Uma matéria principal (PL, PLP, PEC, PDL) está no universo se:
+
+1. foi **apresentada nesta legislatura**; ou
+2. foi apresentada na **legislatura anterior** e teve a **situação atual alcançada nesta**
+   (`ultimoStatus_dataHora ≥ 2023-02-01` na Câmara; `dataSituacaoAtual` no Senado).
+
+Ela conta para quem a **apresentou**, a qualquer tempo — a matéria é dele, e sem isso o
+avanço não teria dono —, e para quem foi **designado relator nesta legislatura**: há vários
+relatores ao longo da vida de uma matéria, e o ato de relatar é datado, então o crédito
+vai a quem estava trabalhando nela agora.
+
+**Ataque, Prioridades e Técnica seguem sendo só o ato desta legislatura**: apresentar,
+emendar e ser designado relator são atos com data. Quem apresentou em 2021 não recebe
+Ataque por isso agora.
+
+### Por que a data é a da SITUAÇÃO, e não a da tramitação
+
+O caminho intuitivo — varrer as tramitações e achar quando a matéria avançou — usa o
+`codSituacao` de cada tramitação, e ele é **furado**: a própria PL 2796/2021 carrega
+"Transformado em Norma Jurídica" numa tramitação de **2021-09-15**, três anos antes de
+virar lei (o campo é carimbado retroativamente em parte das linhas). Datar avanço por ele
+devolve número plausível e errado — o modo de falha nº 1 deste projeto.
+
+O que serve é a data da **situação atual**. Ela não é a data da última tramitação (a PL
+3820/2019 tem situação de 2019-12-12 e última tramitação em 2022-12-28), e foi conferida
+em **25 de 25** amostras: no dia da data há evento de avanço de verdade — parecer do
+relator, encerramento de prazo, remessa ao Senado. Nas normas há uma guarda a mais: se a
+data do **evento** de transformação (a mesma que dá o nº da lei) for anterior à
+legislatura, a norma é descartada. Lógica em `scripts/lib/legislatura.mjs`, com teste.
+
+### Consequências que um agente reverteria sem saber
+
+- **A matéria antiga PARADA fica fora do denominador.** Esta legislatura não a moveu. O
+  cemitério de proposições arquivadas em 2019 não penaliza quem está no segundo mandato —
+  entra só o que teve desfecho agora, para o bem (avançou) ou para o mal (foi arquivada
+  nesta legislatura).
+- **A janela para na legislatura anterior (2019–2022).** É uma escolha de custo: cada
+  legislatura a mais são 3 bulks anuais e milhares de chamadas de tramitação. Quem está no
+  quinto mandato ainda tem matéria de 2015 viva, e ela não conta.
+- **A taxa de conversão por tema (§11) NÃO usa as normas de safra anterior.** Composição e
+  taxa medem coisas diferentes: a norma sancionada agora entra na composição ("31% das
+  normas são de homenagem"), mas dividi-la pelas proposições apresentadas nesta
+  legislatura daria taxa inventada — o denominador é de outra safra.
+- **`props` ≠ universo da Eficiência.** No JSON, `props` é o Ataque (apresentadas nesta
+  legislatura) e `anteriores` é o que veio da anterior. O tooltip exibe os dois separados,
+  nunca somados em silêncio: o leitor vê "311 proposições apresentadas" na barra de cima e
+  um "41/339" logo abaixo procuraria as 28 que faltam.

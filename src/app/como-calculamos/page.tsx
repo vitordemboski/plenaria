@@ -113,6 +113,20 @@ export default function MethodologyPage() {
             por isso a allowlist exclui esses subtipos de propósito.
           </p>
         )}
+        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>
+          O recorte de tempo: <span className="key">o que esta legislatura moveu</span>. Um projeto
+          apresentado na legislatura passada que virou lei agora é entrega desta — o marco legal dos
+          jogos eletrônicos nasceu de um PL de 2021 e foi sancionado em 2024. Por isso a{' '}
+          <span className="key">Eficiência</span> conta também a matéria antiga cuja tramitação andou
+          nesta legislatura, dos dois lados da conta: ela entra tanto no que o parlamentar tocou quanto
+          no que avançou. A matéria antiga que ficou <span className="key">parada</span> não entra em
+          lado nenhum — esta legislatura não a moveu, e o cemitério de projetos arquivados há anos não
+          deve pesar contra quem está no segundo mandato. Já o{' '}
+          <span className="key">Ataque</span>, as <span className="key">Prioridades</span> e a{' '}
+          <span className="key">Técnica</span> seguem contando só o ato desta legislatura: apresentar,
+          emendar e ser designado relator são atos com data, e quem apresentou em 2021 não recebe
+          Ataque por isso hoje. A janela para na legislatura anterior (2019–2022).
+        </p>
         {temTecnica && (
           <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>
             Nota sobre a <span className="key">Técnica</span>: mede trabalho técnico sobre o texto alheio

@@ -218,7 +218,10 @@ export function LeisPorTema({ agregado, comparativo, titulo = '📊 O que vira l
         {agregado.nSemTema > 0 && <> {nf.format(agregado.nSemTema)} {agregado.nSemTema === 1 ? 'norma ficou' : 'normas ficaram'} sem classificação na fonte.</>}
         {comparativo && (
           <> A conversão aparece como &ldquo;—&rdquo; quando o tema tem poucas normas: com 2 leis,
-          &ldquo;50% de aproveitamento&rdquo; seria ruído apresentado como fato.</>
+          &ldquo;50% de aproveitamento&rdquo; seria ruído apresentado como fato. E ela compara uma
+          safra com ela mesma: a norma que nasceu de projeto da legislatura passada entra na
+          composição — foi sancionada agora —, mas não na taxa, porque o denominador dela é o
+          que se apresentou <i>nesta</i>.</>
         )}{' '}
         Classificação oficial das duas casas, não nossa e não de IA — o mapa dos dois vocabulários
         está em <a href="/como-calculamos/#prioridades">como calculamos</a>.

@@ -121,9 +121,9 @@ conta diferente da nossa (inclui coautoria; medido: 42 contra 39). Ver product-s
 | 513 deputados atuais (nome, partido, UF, foto oficial) | API `/deputados` + `/partidos` | identidade + brasões de guilda reais |
 | Votos nominais (~1.600 votações, ~500k votos) | bulk `votacoesVotos-{ano}.csv` — só voto EFETIVO (a Câmara não publica presença sem voto) | **Stamina** |
 | Autorias de PL/PLP/PEC/PDL | bulk `proposicoesAutores-{ano}.csv` + `proposicoes-{ano}.csv` (tipo/status) | **Ataque** + produção anual |
-| Situação das proposições ("Transformada em norma") | bulk `proposicoes-{ano}.csv` | **Eficiência** |
+| Situação das proposições ("Transformada em norma") | bulk `proposicoes-{ano}.csv`, dos anos desta legislatura **e da anterior** (2019–2022) | **Eficiência** — o universo é o que ESTA legislatura moveu: a matéria antiga entra se o `ultimoStatus_dataHora` dela cai dentro da legislatura. Ver product-spec §13 (a data da tramitação NÃO serve) |
 | Cota parlamentar (~R$ 840 mi, 748k lançamentos) | API `/deputados/{id}/despesas` (por deputado, cacheada em `cota-{id}.json`) — **não** o bulk `cotas/Ano-{ano}.csv.zip`, que parou de publicar as passagens SIGEPA em ago/2025 | **Economia** + scatter Gasto × Entrega |
-| Relator designado + emendas de autoria (EMC/EMP/EMR) | API `/proposicoes/{id}/tramitacoes` (relator de CADA etapa, ~24k chamadas cacheadas em `relatores-historico.json`) + bulk `proposicoesAutores` | **Técnica** — trabalho sobre o texto alheio. O `ultimoStatus_uriRelator` do bulk só traz o relator ATUAL e capturava 65% das relatorias |
+| Relator designado + emendas de autoria (EMC/EMP/EMR) | API `/proposicoes/{id}/tramitacoes` (relator de CADA etapa, ~24k chamadas cacheadas em `relatores-historico.json`, mais ~12k das matérias da legislatura passada em `relatores-anteriores.json`, que guardam a DATA da designação) + bulk `proposicoesAutores` | **Técnica** — trabalho sobre o texto alheio. O `ultimoStatus_uriRelator` do bulk só traz o relator ATUAL e capturava 65% das relatorias |
 | RIC + PFC + convocação de ministro (~9k atos/ano) | bulk `proposicoes-{ano}.csv` (allowlist por `descricaoTipo`) | **Fiscalização** (informativa) |
 | Orientação da bancada "Governo" por votação | bulk `votacoesOrientacoes-{ano}.csv` × votos individuais | **Alinhamento** (informativo) |
 
