@@ -14,8 +14,11 @@
  * mesmo que a regra do título — se o gate mudar, a evidência muda junto.
  */
 
+import { PISO_MESES_RITMO } from './exercicio.mjs';
+
 const nf = new Intl.NumberFormat('pt-BR');
 const pct = (x) => `${Math.round(x * 100)}%`;
+const ritmo = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 // com artigo: as frases dizem "mediana DA Câmara" / "mediana DO Senado"
 const daCasa = (casa) => (casa === 'senado' ? 'do Senado' : 'da Câmara');
 const naCasa = (casa) => (casa === 'senado' ? 'no Senado' : 'na Câmara');
@@ -39,6 +42,7 @@ export function referenciasDaCasa(pessoas) {
     comparecimento: mediana(pessoas.map((p) => p.bruto?.comparecimento)),
     gastoMes: mediana(pessoas.map((p) => p.bruto?.gastoMes)),
     proposicoes: mediana(pessoas.map((p) => p.bruto?.proposicoes)),
+    proposicoesMes: mediana(pessoas.map((p) => p.bruto?.proposicoesMes)),
     // taxa AGREGADA (não mediana): "de cada 100 relatorias da casa, quantas andaram"
     relatoriaAvanco: relatorias ? avancadas / relatorias : null,
   };
@@ -85,7 +89,18 @@ export function evidenciaDeTitulos(p, ref) {
     // que o leitor veja também aquele em que o parlamentar NÃO está mal.
     const partes = [];
     if (b.seguidores != null) partes.push(`${nf.format(b.seguidores)} seguidores no Instagram`);
-    if (b.proposicoes != null) {
+    if (b.proposicoes != null && b.exercicioParcial && b.proposicoesMes != null) {
+      // Esteve fora parte da legislatura: o Ataque que disparou o gate é o RITMO no
+      // exercício, então comparar o total com a mediana de quem esteve sentado o tempo
+      // todo diria outra coisa que a regra (ver lib/exercicio.mjs).
+      partes.push(
+        `${nf.format(b.proposicoes)} proposições relevantes apresentadas em ${nf.format(Math.round(b.mesesExercicio))} meses em exercício, ` +
+        // abaixo do piso o divisor da nota é o piso, não os meses — dizer "por mês" sem
+        // isso publicaria um ritmo que não é a divisão que o leitor faz de cabeça
+        `${ritmo(b.proposicoesMes)} por mês${b.mesesExercicio < PISO_MESES_RITMO ? ` contado sobre o piso de ${PISO_MESES_RITMO} meses` : ''}` +
+        `${ref.proposicoesMes != null ? ` (mediana ${daCasa(casa)}: ${ritmo(ref.proposicoesMes)} por mês)` : ''}`,
+      );
+    } else if (b.proposicoes != null) {
       partes.push(
         `${nf.format(b.proposicoes)} proposições relevantes apresentadas` +
         `${ref.proposicoes != null ? ` (mediana ${daCasa(casa)}: ${nf.format(ref.proposicoes)})` : ''}`,

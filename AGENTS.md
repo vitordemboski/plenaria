@@ -488,6 +488,16 @@ Armadilhas conhecidas das APIs:
   outra embute "senador vale mais que deputado" no Poder. É a âncora na mediana que
   neutraliza isso: reta entre extremos deslocava a Stamina +2,1 (Câmara) × +3,8 (Senado);
   a ancorada, +0,56 × +0,94.
+- **Contagem compara RITMO no exercício, não total** (`scripts/lib/exercicio.mjs`, com teste).
+  Ataque, Técnica e o volume da Eficiência entram como `contagem × meses da legislatura ÷
+  max(meses em exercício, 24)` — o princípio que a Stamina e a Economia já seguiam, e que a
+  `/como-calculamos` promete ao leitor. Sem isso, quem passou 14 meses numa secretaria de
+  Estado era comparado ao total de quem esteve sentado o tempo todo. Duas decisões que um
+  agente reverteria sem saber: o **piso de 24 meses** existe para não extrapolar janela curta
+  (sem ele 13 meses viravam 3,4x; medido, 61 mudanças de Tier contra 44) e **não** é corte de
+  elegibilidade (essa segue em `MESES_MIN_RANK`); e a **taxa** da Eficiência e o **bônus por
+  lei** ficam sem escala — taxa já independe do tempo, lei é evento. O número exibido segue
+  sendo o total, com os meses ao lado, e a evidência do Blogueiro compara ritmo com ritmo.
 - **Percentil é invariante a transformação monotônica.** Normalizar o log do valor, usar
   "taxa de falta" no lugar de "taxa de presença" ou winsorizar a ENTRADA do percentil não
   mudam nada — são as três primeiras ideias que ocorrem e as três são no-ops. Para mudar a

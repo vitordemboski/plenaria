@@ -92,3 +92,22 @@ test('referência da casa ausente não quebra a frase: sai só o bruto', () => {
   assert.match(ev['fantasma-do-plenario'], /41%/);
   assert.doesNotMatch(ev['fantasma-do-plenario'], /mediana/);
 });
+
+test('Blogueiro de quem esteve fora parte da legislatura compara RITMO, como o gate', () => {
+  const p = {
+    casa: 'camara', titles: ['blogueiro-de-plenario'],
+    bruto: { seguidores: 500000, proposicoes: 8, proposicoesMes: 8 / 30, mesesExercicio: 29.9, exercicioParcial: true, comparecimento: 0.64 },
+  };
+  const ev = evidenciaDeTitulos(p, { proposicoes: 40, proposicoesMes: 1.08, comparecimento: 0.8 });
+  assert.match(ev['blogueiro-de-plenario'], /8 proposições relevantes apresentadas em 30 meses em exercício, 0,3 por mês \(mediana da Câmara: 1,1 por mês\)/);
+  assert.doesNotMatch(ev['blogueiro-de-plenario'], /mediana da Câmara: 40/);
+});
+
+test('abaixo do piso de 24 meses, a evidência declara o piso — 9 em 13 meses não é "0,4 por mês"', () => {
+  const p = {
+    casa: 'camara', titles: ['blogueiro-de-plenario'],
+    bruto: { seguidores: 565102, proposicoes: 9, proposicoesMes: 9 / 24, mesesExercicio: 13.2, exercicioParcial: true, comparecimento: 0.66 },
+  };
+  const ev = evidenciaDeTitulos(p, { proposicoesMes: 1.0, comparecimento: 0.59 });
+  assert.match(ev['blogueiro-de-plenario'], /0,4 por mês contado sobre o piso de 24 meses/);
+});

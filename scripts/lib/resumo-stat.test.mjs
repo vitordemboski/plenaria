@@ -48,3 +48,11 @@ test('singular/plural nas contagens de 1', () => {
   assert.equal(r.fiscalizacao, '1 ato de cobrança ao Executivo');
   assert.equal(r.comando, '1 comissão ativa');
 });
+
+test('quem esteve fora parte da legislatura leva os meses no Ataque e na Técnica', () => {
+  const r = resumoCurtoStats({ props: 8, relatorias: 9, emendas: 3, mesesExercicio: 29.9, mesesLegislatura: 44 });
+  assert.equal(r.ataque, '8 proposições apresentadas em 30 meses');
+  assert.equal(r.tecnica, '9 relatorias + 3 emendas em 30 meses');
+  const cheio = resumoCurtoStats({ props: 8, mesesExercicio: 44, mesesLegislatura: 44 });
+  assert.equal(cheio.ataque, '8 proposições apresentadas');
+});

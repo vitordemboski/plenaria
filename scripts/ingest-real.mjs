@@ -40,6 +40,7 @@ import { fonteHash, contarObsoletas, alvoNacional, alvoGuilda } from './lib/anal
 import { moveuNestaLegislatura, INICIO_LEGISLATURA } from './lib/legislatura.mjs';
 import { casaCandidaturas, coberturaPorCasa, motivoParaAbortar, aindaVale, dataIso, PLEITO_2026 } from './lib/candidatura.mjs';
 import { lerZip } from './lib/zip.mjs';
+import { fatorExercicio, mesesDivisor, exercicioParcial, fraseRitmo } from './lib/exercicio.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = join(ROOT, 'data', 'raw');
@@ -1186,6 +1187,10 @@ async function aplicaCandidaturas(todos) {
 // menos de 12 meses em exercício efetivo (~1 ano de 41) = mandato parcial: fora do
 // ranking. Unifica posse recente E licença/ministério prolongados (quase-ausentes).
 const MESES_MIN_RANK = 12;
+// meses decorridos da legislatura até hoje — a régua do "ritmo no exercício" que
+// Ataque, Técnica e o volume da Eficiência comparam (ver lib/exercicio.mjs)
+const MESES_LEGISLATURA = mesesDeIntervalos([{ start: TERM_START, end: null }]);
+const fx = (r) => fatorExercicio(r.mesesExercicio, MESES_LEGISLATURA);
 
 // ---------- Presidência da Casa: fora do ranking (cargo institucional) ----------
 // Quem preside a Câmara/Senado não vota (só desempate/secreto), não autora nem relata
@@ -1748,7 +1753,9 @@ async function fetchSenado(socialMap) {
   // registra o senador em TODA votação do seu mandato, inclusive as que ele faltou (o
   // motivo da ausência vem no CAMPO DO VOTO, e `compareceu()` a tira do numerador).
   const staxaSen = (r) => (r.nVotacoes ? r.votos / r.nVotacoes : 0);
-  const dimA = porSenador.map((r) => r.props).sort((a, b) => a - b);
+  // Ataque, Técnica e o volume da Eficiência comparam o RITMO no exercício (× fx), não
+  // o total — quem passou meses licenciado não perde por isso (ver lib/exercicio.mjs).
+  const dimA = porSenador.map((r) => r.props * fx(r)).sort((a, b) => a - b);
   const staminaS = escalaComparecimento(porSenador.map(staxaSen));
   // Economia compara o gasto MENSAL durante o exercício, não o total da legislatura:
   // quem assumiu tarde gastou menos no total por ter estado menos tempo sentado, não
@@ -1761,7 +1768,7 @@ async function fetchSenado(socialMap) {
   // Batalha e as Guildas comparam deputado com senador, "Técnica" precisa medir a MESMA
   // coisa nas duas casas. (O Senado segue sem emendas por autor nos Dados Abertos, então
   // aqui é só relatoria; na Câmara é relatoria + emendas.)
-  const tecnicaS = escalaLog(porSenador.map((r) => r.relatoriasPrinc));
+  const tecnicaS = escalaLog(porSenador.map((r) => r.relatoriasPrinc * fx(r)));
   const economiaS = escalaFrugalidade(porSenador.map((r) => gastoMensalS(r)));
   const comSoc = porSenador.filter((r) => r.social);
   const dimI = comSoc.length >= 5 ? comSoc.map((r) => r.social.seguidores).sort((a, b) => a - b) : null;
@@ -1775,7 +1782,7 @@ async function fetchSenado(socialMap) {
   const eficTocouS = (r) => r.props + (r.anteriores ?? 0) + r.relatoriasPrinc;
   const eficAndouS = (r) => r.avancadas + r.relatoriasAvancadas;
   const eficTaxaS = (r) => (eficTocouS(r) ? eficAndouS(r) / eficTocouS(r) : 0);
-  const eficVolS = (r) => eficAndouS(r) + 2 * r.aprovadasPontuaveis;
+  const eficVolS = (r) => (eficAndouS(r) + 2 * r.aprovadasPontuaveis) * fx(r);
   const bonusLeiS = (r) => Math.min(30, 5 * r.aprovadasPontuaveis); // não é redundante com o 2x — ver bonusLei da Câmara
   const dimEfTaxaS = porSenador.map(eficTaxaS).sort((a, b) => a - b);
   const dimEfVolS = porSenador.map(eficVolS).sort((a, b) => a - b);
@@ -1789,9 +1796,9 @@ async function fetchSenado(socialMap) {
   const W = WEIGHTS_SENADO;
 
   for (const r of porSenador) {
-    const ataque = percentileRank(dimA, r.props);
+    const ataque = percentileRank(dimA, r.props * fx(r));
     const stamina = staminaS(staxaSen(r));
-    const tecnica = tecnicaS(r.relatoriasPrinc);
+    const tecnica = tecnicaS(r.relatoriasPrinc * fx(r));
     const eficiencia = percentileRank(dimEficS, eficBrutaS(r));
     const economia = economiaS(gastoMensalS(r));
     const influencia = dimI && r.social ? percentileRank(dimI, r.social.seguidores) : null;
@@ -1837,6 +1844,7 @@ async function fetchSenado(socialMap) {
         props: r.props, votos: r.votos, votacoes: r.nVotacoes,
         eficTocou: eficTocouS(r), eficAndou: eficAndouS(r),
         relatorias: r.relatoriasPrinc, gastoMes: gastoMensalS(r),
+        mesesExercicio: r.mesesExercicio, mesesLegislatura: MESES_LEGISLATURA,
         ...(influencia !== null ? { seguidores: r.social.seguidores } : {}),
       }),
       // brutos NUMÉRICOS que a evidência dos títulos vermelhos cita (e cuja mediana
@@ -1844,6 +1852,9 @@ async function fetchSenado(socialMap) {
       bruto: {
         comparecimento: staxaSen(r), votos: r.votos, votacoes: r.nVotacoes,
         gastoMes: gastoMensalS(r), proposicoes: r.props,
+        // o MESMO divisor da nota — a evidência do Blogueiro compara ritmo, como o gate
+        proposicoesMes: r.props / mesesDivisor(r.mesesExercicio, MESES_LEGISLATURA),
+        mesesExercicio: r.mesesExercicio, exercicioParcial: exercicioParcial(r.mesesExercicio, MESES_LEGISLATURA),
         eficTocou: eficTocouS(r), eficAndou: eficAndouS(r),
         ...(influencia !== null ? { seguidores: r.social.seguidores } : {}),
       },
@@ -1860,13 +1871,13 @@ async function fetchSenado(socialMap) {
       sexo: r.sexo,
       comissoes: r.comissoes,
       rawNumbers: {
-        ataque: `${nf.format(r.props)} matérias relevantes de autoria principal (PL, PLP, PEC, PDL)`,
+        ataque: `${nf.format(r.props)} matérias relevantes de autoria principal (PL, PLP, PEC, PDL)${fraseRitmo(r.mesesExercicio, MESES_LEGISLATURA)}`,
         stamina: `${nf.format(r.votos)} votos registrados em ${nf.format(r.nVotacoes)} votações nominais ocorridas durante o seu exercício, incluídas as sabatinas de autoridades (${Math.round(staxaSen(r) * 100)}%)${r.compareceuN.presencas - r.votos > 0 ? ` — esteve presente em mais ${nf.format(r.compareceuN.presencas - r.votos)} sem registrar voto, então compareceu a ${Math.round((r.compareceuN.presencas / Math.max(r.compareceuN.total, 1)) * 100)}% das votações` : ''}`,
         // "designado NESTA LEGISLATURA", não "desde 2023": o recorte é a data da
         // designação, e as matérias podem ser mais antigas que ela (ver legislatura.mjs).
         // "desde 2023" agora se leria como "matérias de 2023 em diante", que é falso.
-        tecnica: `relator designado nesta legislatura em ${nf.format(r.relatoriasPrinc)} matérias relevantes (PL, PLP, PEC, PDL)`,
-        eficiencia: `${nf.format(eficAndouS(r))} de ${nf.format(eficTocouS(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocouS(r) ? ` (${((eficAndouS(r) / eficTocouS(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${fraseAutoria(r.avancadas, r.props, r.anteriores, r.anterioresAvancadas)}, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatoriasPrinc)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLeiS(r))}`,
+        tecnica: `relator designado nesta legislatura em ${nf.format(r.relatoriasPrinc)} matérias relevantes (PL, PLP, PEC, PDL)${fraseRitmo(r.mesesExercicio, MESES_LEGISLATURA)}`,
+        eficiencia: `${nf.format(eficAndouS(r))} de ${nf.format(eficTocouS(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocouS(r) ? ` (${((eficAndouS(r) / eficTocouS(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${fraseAutoria(r.avancadas, r.props, r.anteriores, r.anterioresAvancadas)}, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatoriasPrinc)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLeiS(r))}${fraseRitmo(r.mesesExercicio, MESES_LEGISLATURA, { volume: true })}`,
         economia: `${fmtReais(r.gasto)} de cota (CEAPS) usados nos ${nf.format(Math.round(Math.max(r.mesesExercicio, 1)))} meses em exercício — média de R$ ${nf.format(Math.round(gastoMensalS(r) / 1000))} mil/mês`,
         ...(influencia !== null ? {
           influencia: `${fmtSeg(r.social.seguidores)} seguidores no ${REDE_LABEL[r.social.rede] ?? r.social.rede} (@${r.social.handle}${r.social.coletadoEm ? `, coletado em ${r.social.coletadoEm}` : ''})`,
@@ -2103,7 +2114,11 @@ const raw = deputados.map((d) => {
   };
 });
 
-const dimAtaque = raw.map((r) => r.props).sort((a, b) => a - b);
+// Ataque, Técnica e o volume da Eficiência comparam o RITMO no exercício (× fx), não o
+// total da legislatura — o mesmo princípio da Stamina e da Economia: quem passou meses
+// licenciado no Executivo, ou assumiu tarde como suplente, não perde por não estar
+// sentado. Piso de 24 meses no divisor (ver lib/exercicio.mjs).
+const dimAtaque = raw.map((r) => r.props * fx(r)).sort((a, b) => a - b);
 const staminaCam = escalaComparecimento(raw.map((r) => r.stTaxa)); // TAXA, não contagem bruta
 // Eficiência = BLEND de duas dimensões, para não punir quem produz muito:
 //   • aproveitamento (taxa): o que andou ÷ o que tocou → recompensa precisão
@@ -2129,7 +2144,7 @@ const staminaCam = escalaComparecimento(raw.map((r) => r.stTaxa)); // TAXA, não
 const eficTocou = (r) => r.props + (r.anteriores ?? 0) + r.relatorias;
 const eficAndou = (r) => r.avancadas + r.relatoriasAvancadas;
 const eficTaxa = (r) => (eficTocou(r) ? eficAndou(r) / eficTocou(r) : 0);
-const eficVol = (r) => eficAndou(r) + 2 * r.aprovadasPontuaveis;
+const eficVol = (r) => (eficAndou(r) + 2 * r.aprovadasPontuaveis) * fx(r);
 const dimEficTaxa = raw.map(eficTaxa).sort((a, b) => a - b);
 const dimEficVol = raw.map(eficVol).sort((a, b) => a - b);
 // bônus direto por lei sancionada (a conquista mais rara e valiosa): +5 por
@@ -2176,7 +2191,7 @@ console.log(`[camara] eficiência: ${raw.reduce((t, r) => t + r.aprovadas, 0)} a
 // Medido: log nos dois reinstalava o empate entre um autor de 296 matérias com
 // 15,7% de aproveitamento e um de 80 com 41,8%.
 const tecnicaBruta = (r) => r.relatorias + r.emendas;
-const tecnicaCam = escalaLog(raw.map(tecnicaBruta));
+const tecnicaCam = escalaLog(raw.map((r) => tecnicaBruta(r) * fx(r)));
 // Fiscalização = controle do Executivo. Só existe na Câmara: o RQS do Senado não
 // tem rótulo de subtipo, e separar fiscalização de "voto de pesar" ali exigiria
 // regex em texto livre — o que o guardrail proíbe.
@@ -2228,10 +2243,10 @@ function fraseLeis(aprovadas, pontuaveis, bonus) {
 }
 
 const full = raw.map((r) => {
-  const ataque = percentileRank(dimAtaque, r.props);
+  const ataque = percentileRank(dimAtaque, r.props * fx(r));
   const stamina = staminaCam(r.stTaxa);
   const eficiencia = efic(r); // já é o blend 0–100 (taxa + volume)
-  const tecnica = tecnicaCam(tecnicaBruta(r));
+  const tecnica = tecnicaCam(tecnicaBruta(r) * fx(r));
   const fiscalizacao = percentileRank(dimFiscal, r.fiscal);
   const economia = economiaCam(gastoMensal(r));
   const influencia = dimInfl && r.social ? percentileRank(dimInfl, r.social.seguidores) : null;
@@ -2288,6 +2303,7 @@ const full = raw.map((r) => {
       eficTocou: eficTocou(r), eficAndou: eficAndou(r),
       relatorias: r.relatorias, emendas: r.emendas, gastoMes: gastoMensal(r),
       fiscal: r.fiscal,
+      mesesExercicio: r.mesesExercicio, mesesLegislatura: MESES_LEGISLATURA,
       ...(influencia !== null ? { seguidores: r.social.seguidores } : {}),
       ...(alinhamentoPct !== null ? { alinhamentoPct } : {}),
     }),
@@ -2296,19 +2312,22 @@ const full = raw.map((r) => {
     bruto: {
       comparecimento: r.stTaxa, votos: r.votos, votacoes: r.votacoesMandato,
       gastoMes: gastoMensal(r), proposicoes: r.props,
+      // o MESMO divisor da nota — a evidência do Blogueiro compara ritmo, como o gate
+      proposicoesMes: r.props / mesesDivisor(r.mesesExercicio, MESES_LEGISLATURA),
+      mesesExercicio: r.mesesExercicio, exercicioParcial: exercicioParcial(r.mesesExercicio, MESES_LEGISLATURA),
       eficTocou: eficTocou(r), eficAndou: eficAndou(r),
       ...(r.social ? { seguidores: r.social.seguidores } : {}),
     },
     // números brutos exibidos no card ("de onde vem cada atributo")
     rawNumbers: {
-      ataque: `${nf.format(r.props)} proposições relevantes apresentadas (PL, PLP, PEC, PDL)`,
+      ataque: `${nf.format(r.props)} proposições relevantes apresentadas (PL, PLP, PEC, PDL)${fraseRitmo(r.mesesExercicio, MESES_LEGISLATURA)}`,
       stamina: `${nf.format(r.votos)} votos registrados em ${nf.format(r.votacoesMandato)} votações nominais ocorridas durante o seu exercício (${Math.round(r.stTaxa * 100)}%) — o dado publicado pela Câmara traz o voto efetivo, não a presença em plenário`,
       // "matérias que tocou (autoria + relatoria)", nunca só "proposições": o universo
       // aqui é MAIOR que o do Ataque (que é só autoria), e com o mesmo substantivo nos
       // dois painéis os números se leem como contradição até o leitor chegar ao
       // travessão. A frase do Senado abaixo é idêntica de propósito.
-      eficiencia: `${nf.format(eficAndou(r))} de ${nf.format(eficTocou(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocou(r) ? ` (${((eficAndou(r) / eficTocou(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${fraseAutoria(r.avancadas, r.props, r.anteriores, r.anterioresAvancadas)}, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatorias)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLei(r))}`,
-      tecnica: `${nf.format(tecnicaBruta(r))} atos de trabalho sobre o texto — relator designado nesta legislatura em ${nf.format(r.relatorias)} proposições relevantes${r.relatorias ? ` (${nf.format(r.relatoriasAvancadas)} ${r.relatoriasAvancadas === 1 ? 'avançou' : 'avançaram'})` : ''} e autor de ${nf.format(r.emendas)} ${r.emendas === 1 ? 'emenda' : 'emendas'} (na comissão, de plenário ou de relator)`,
+      eficiencia: `${nf.format(eficAndou(r))} de ${nf.format(eficTocou(r))} matérias que tocou (autoria + relatoria) avançaram na tramitação${eficTocou(r) ? ` (${((eficAndou(r) / eficTocou(r)) * 100).toFixed(1).replace('.', ',')}%)` : ''} — ${fraseAutoria(r.avancadas, r.props, r.anteriores, r.anterioresAvancadas)}, ${nf.format(r.relatoriasAvancadas)}/${nf.format(r.relatorias)} de relatoria (PL, PLP, PEC, PDL)${fraseLeis(r.aprovadas, r.aprovadasPontuaveis, bonusLei(r))}${fraseRitmo(r.mesesExercicio, MESES_LEGISLATURA, { volume: true })}`,
+      tecnica: `${nf.format(tecnicaBruta(r))} atos de trabalho sobre o texto — relator designado nesta legislatura em ${nf.format(r.relatorias)} proposições relevantes${r.relatorias ? ` (${nf.format(r.relatoriasAvancadas)} ${r.relatoriasAvancadas === 1 ? 'avançou' : 'avançaram'})` : ''} e autor de ${nf.format(r.emendas)} ${r.emendas === 1 ? 'emenda' : 'emendas'} (na comissão, de plenário ou de relator)${fraseRitmo(r.mesesExercicio, MESES_LEGISLATURA)}`,
       fiscalizacao: `${nf.format(r.fiscal)} atos de cobrança ao Executivo — requerimentos de informação a ministro, convocações de ministro e propostas de fiscalização e controle (PFC)`,
       economia: `${fmtReais(r.gasto)} de cota (CEAP) usados nos ${nf.format(Math.round(Math.max(r.mesesExercicio, 1)))} meses em exercício — média de R$ ${nf.format(Math.round(gastoMensal(r) / 1000))} mil/mês`,
       ...(influencia !== null ? {
@@ -2345,7 +2364,7 @@ const TITLE_DEFS_REAIS = [
     regra: 'Influência ≥ 85 (seguidores nas redes sociais) estando no QUARTIL INFERIOR da própria casa em algum eixo de entrega — Ataque < 25 ou Stamina < 25 (voto registrado) — E sem NENHUM título verde de entrega (Artilheiro, Relator-Mor, Legislador Efetivo, Relator que Entrega, Presença de Ferro, Guardião do Cofre): muita projeção, pouca entrega. O limiar é o quartil, não a mediana: estar na média da casa NÃO rotula ninguém. Quem tem prova factual de entrega não é rotulado Blogueiro.' },
   // --- positivos de entrega ---
   { slug: 'artilheiro', label: '⚔️ Artilheiro', cor: 'green',
-    regra: 'Ataque ≥ 90 — entre os 10% que mais apresentam proposições relevantes (PL, PLP, PEC, PDL) na sua casa.' },
+    regra: 'Ataque ≥ 90 — entre os 10% que mais apresentam proposições relevantes (PL, PLP, PEC, PDL) na sua casa, no ritmo por mês em exercício.' },
   { slug: 'relator-mor', label: '📜 Relator-Mor', cor: 'green',
     regra: 'Técnica ≥ 90 — entre os 10% mais designados relatores de proposições na sua casa.' },
   { slug: 'presenca-de-ferro', label: '🛡️ Presença de Ferro', cor: 'green',

@@ -63,6 +63,19 @@ export default function MethodologyPage() {
           <span className="key">Ataque</span> segue percentil de propósito: em log, a magnitude do volume
           bruto voltaria a mandar, desfazendo o motivo de ele pesar menos que a Eficiência.
         </p>
+        <p>
+          <span className="key">Ataque, Técnica e o volume da Eficiência comparam o ritmo no exercício</span>,
+          não o total da legislatura — o mesmo princípio da Stamina e da Economia. Quem passou meses
+          licenciado (para assumir um ministério ou uma secretaria de Estado, por exemplo) ou assumiu tarde
+          como suplente não perde pontos por não estar sentado: a contagem é dividida pelos meses em
+          exercício e levada ao equivalente da legislatura inteira antes de entrar na escala da casa. Há um{' '}
+          <span className="key">piso de 24 meses</span> nesse divisor, para não extrapolar demais uma
+          janela curta: quem esteve 13 meses em exercício tem a produção multiplicada por no máximo 1,8,
+          e não por 3,4. O piso não tira ninguém do ranking — quem pontua continua sendo quem tem ao menos
+          12 meses em exercício. O número exibido na ficha segue sendo o total, com os meses ao lado. As
+          leis sancionadas não viram ritmo: o bônus por lei da Eficiência conta cada norma uma vez, como
+          fato.
+        </p>
         <div className="legend-list">
           {AVAILABLE_STAT_META.map((s) => (
             <div key={s.key}>

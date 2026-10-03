@@ -12,6 +12,8 @@
  * a imagem e a ficha contam histórias diferentes sobre o mesmo parlamentar.
  */
 
+import { sufixoMeses } from './exercicio.mjs';
+
 const nf = new Intl.NumberFormat('pt-BR');
 const pct = (x) => `${Math.round(x * 100)}%`;
 
@@ -30,7 +32,11 @@ export function seguidoresCurto(n) {
 export function resumoCurtoStats(n) {
   const r = {};
 
-  if (n.props != null) r.ataque = `${nf.format(n.props)} ${n.props === 1 ? 'proposição apresentada' : 'proposições apresentadas'}`;
+  // Quem esteve fora parte da legislatura ganha "em N meses": a nota compara o ritmo, e
+  // na imagem não há tooltip para dizer por que 8 proposições valem mais que 10 de outro.
+  const meses = sufixoMeses(n.mesesExercicio, n.mesesLegislatura);
+
+  if (n.props != null) r.ataque = `${nf.format(n.props)} ${n.props === 1 ? 'proposição apresentada' : 'proposições apresentadas'}${meses}`;
 
   if (n.votos != null && n.votacoes) {
     r.stamina = `${nf.format(n.votos)} de ${nf.format(n.votacoes)} votações · ${pct(n.votos / n.votacoes)}`;
@@ -47,9 +53,9 @@ export function resumoCurtoStats(n) {
 
   if (n.relatorias != null) {
     // A Técnica do Senado é só relatoria; a da Câmara soma emendas.
-    r.tecnica = n.emendas != null
+    r.tecnica = (n.emendas != null
       ? `${nf.format(n.relatorias)} ${n.relatorias === 1 ? 'relatoria' : 'relatorias'} + ${nf.format(n.emendas)} ${n.emendas === 1 ? 'emenda' : 'emendas'}`
-      : `${nf.format(n.relatorias)} ${n.relatorias === 1 ? 'relatoria' : 'relatorias'}`;
+      : `${nf.format(n.relatorias)} ${n.relatorias === 1 ? 'relatoria' : 'relatorias'}`) + meses;
   }
 
   if (n.gastoMes != null) r.economia = `R$ ${nf.format(Math.round(n.gastoMes / 1000))} mil/mês de cota`;
