@@ -1769,14 +1769,14 @@ async function fetchSenado(socialMap) {
   // Eficiência — MESMA fórmula da Câmara (ver eficBruta lá): blend do percentil da TAXA
   // (andou ÷ tocou) com o do VOLUME (andou + 2× virou lei PONTUÁVEL — a norma só de
   // "Homenagens e Datas" não entra), mais bônus de +5 por lei
-  // (teto +15), e percentil final para restaurar a distribuição 0–100. Ter a fórmula
+  // (teto +30), e percentil final para restaurar a distribuição 0–100. Ter a fórmula
   // idêntica é o que torna o atributo comparável entre as casas — os percentis é que são
   // calculados DENTRO de cada uma.
   const eficTocouS = (r) => r.props + (r.anteriores ?? 0) + r.relatoriasPrinc;
   const eficAndouS = (r) => r.avancadas + r.relatoriasAvancadas;
   const eficTaxaS = (r) => (eficTocouS(r) ? eficAndouS(r) / eficTocouS(r) : 0);
   const eficVolS = (r) => eficAndouS(r) + 2 * r.aprovadasPontuaveis;
-  const bonusLeiS = (r) => Math.min(15, 5 * r.aprovadasPontuaveis); // não é redundante com o 2x — ver bonusLei da Câmara
+  const bonusLeiS = (r) => Math.min(30, 5 * r.aprovadasPontuaveis); // não é redundante com o 2x — ver bonusLei da Câmara
   const dimEfTaxaS = porSenador.map(eficTaxaS).sort((a, b) => a - b);
   const dimEfVolS = porSenador.map(eficVolS).sort((a, b) => a - b);
   const eficBrutaS = (r) =>
@@ -2133,7 +2133,7 @@ const eficVol = (r) => eficAndou(r) + 2 * r.aprovadasPontuaveis;
 const dimEficTaxa = raw.map(eficTaxa).sort((a, b) => a - b);
 const dimEficVol = raw.map(eficVol).sort((a, b) => a - b);
 // bônus direto por lei sancionada (a conquista mais rara e valiosa): +5 por
-// lei, teto de +15. Somado ao blend ANTES do percentil final.
+// lei, teto de +30. Somado ao blend ANTES do percentil final.
 //
 // Parece redundante com o `2 * r.aprovadas` do eficVol — NÃO É, e a diferença é
 // estrutural: aquele entra no valor BRUTO, antes do percentil, e por isso satura
@@ -2143,7 +2143,17 @@ const dimEficVol = raw.map(eficVol).sort((a, b) => a - b);
 // o autor de 3 leis cai de 83 para 72 em qualquer variante. Trocar o volume por
 // escala log é pior ainda (cai para 58, e a 17ª lei passa a valer 8 pontos em vez
 // de 15). A mistura de unidades é proposital; não "limpe" para um mecanismo só.
-const bonusLei = (r) => Math.min(15, 5 * r.aprovadasPontuaveis);
+//
+// O TETO é o que prende, não o percentil final — e a intuição erra a direção aqui.
+// Com teto +15 ele saturava na 3ª lei, e 90 dos 513 deputados estavam nele: para
+// esse grupo, uma lei sancionada a mais valia +0,28 ponto de Poder, o MESMO que
+// gastar R$ 1 mil/mês a menos de cota (Airton Faleiro, 6 leis, ficava com Eficiência
+// 49, a mediana da casa). Passar o teto para +30 leva essa lei marginal a +1,12 sem
+// mexer na distribuição: fração da casa abaixo de 40 idêntica (39,8% câmara / 39,5%
+// senado), mediana idêntica, deslocamento médio de Poder de −0,02, e 11 mudanças de
+// Tier em 594. Mover o bônus para DEPOIS do percentil final foi medido e é pior:
+// não muda a lei marginal (+0,28) e satura 40 deputados em Eficiência 100 contra 3.
+const bonusLei = (r) => Math.min(30, 5 * r.aprovadasPontuaveis);
 // pontuação BRUTA de eficiência = blend (taxa + volume) + bônus por lei.
 const eficBruta = (r) =>
   (percentileRank(dimEficTaxa, eficTaxa(r)) + percentileRank(dimEficVol, eficVol(r))) / 2

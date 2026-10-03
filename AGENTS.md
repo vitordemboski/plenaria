@@ -254,7 +254,7 @@ Armadilhas conhecidas das APIs:
   a plataforma opinando — o mesmo erro que derrubou a "Safra Eleitoral". Sem cor de
   alarme, e o prompt da IA proíbe o adjetivo explicitamente (`docs/prompts/leis-v1.md`).
 - **Norma só de "Homenagens e Datas" não pontua na Eficiência** — nem no `2 × leis` do
-  volume, nem no bônus `min(15, 5 × leis)`. É o tema de MAIOR conversão do Congresso
+  volume, nem no bônus `min(30, 5 × leis)`. É o tema de MAIOR conversão do Congresso
   (3,6% × 0,5% da Saúde): título de Capital Nacional tramita sem oposição, e premiá-lo
   como entrega faz a Eficiência medir facilidade de tramitação. O corte é ESTRITO
   (`soHomenagem`, com teste) — homenagem + outro tema PONTUA, e norma **sem tema** também
@@ -264,6 +264,21 @@ Armadilhas conhecidas das APIs:
   `leisPontuaveis`, não `leisAprovadas`** — selo e pontuação têm de dizer a mesma coisa —,
   e por isso o painel dos Insights que conta TODAS as normas se chama "Quem mais emplacou":
   nome igual com regra diferente é a plataforma se contradizendo em duas telas.
+- **O teto do bônus por lei é o que prende a Eficiência no topo — não o percentil final.**
+  A intuição erra a direção aqui, e a sonda errada confirma o erro: testar a mudança num
+  parlamentar já perto do teto comprime tudo e faz parecer que o teto não importa. Meça a
+  **lei marginal na casa inteira**. Com teto `+15` o bônus saturava na 3ª lei e 90 dos 513
+  deputados estavam nele: para esse grupo, uma lei sancionada a mais valia **+0,28 ponto de
+  Poder — o mesmo que gastar R$ 1 mil/mês a menos de cota** (Airton Faleiro, 6 leis, ficava
+  com Eficiência 49, a mediana da casa; Benedita da Silva, 10 leis, com 74). Com `+30` a lei
+  marginal vai a +1,12 e a distribuição não se move: fração da casa abaixo de 40 idêntica
+  (39,8% câmara / 39,5% senado), mediana idêntica, deslocamento médio de Poder −0,02,
+  assimetria entre as casas 0,02, 11 mudanças de Tier em 594. **Mover o bônus para DEPOIS do
+  percentil final foi medido e é pior**: não muda a lei marginal (+0,28), satura 40 deputados
+  em Eficiência 100 contra 3, e a compressão no topo promovia a Tier S justamente quem tem
+  UMA lei. Toda variante nova passa pelos dois testes: a fração `< 40` tem de cair na faixa
+  dos atributos percentílicos puros, e o deslocamento médio de Poder tem de ser igual nas
+  duas casas (os cortes de Tier são absolutos entre elas).
 - **"Virou lei" NÃO pontua** — a contagem já entra na Eficiência como bônus; o painel só
   a EXIBE. Exibir não pode virar segundo atributo, senão a mesma lei conta duas vezes. E a
   agregação de guilda é **soma simples**, não soma÷soma como as prioridades: uma lei
