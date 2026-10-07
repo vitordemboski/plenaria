@@ -811,20 +811,85 @@ legislatura, a norma é descartada. Lógica em `scripts/lib/legislatura.mjs`, co
   nunca somados em silêncio: o leitor vê "311 proposições apresentadas" na barra de cima e
   um "41/339" logo abaixo procuraria as 28 que faltam.
 
-## 14. Candidatura 2026 — a qual cargo cada um concorre
+## 14. Eleições 2026 — quem estará na próxima legislatura
 
-O site descreve o mandato; em ano eleitoral, falta o que a pessoa está pedindo agora. O
-chip **🗳️ Concorre em 2026** nomeia o cargo do pedido de registro no TSE.
+Até o pleito (04/10/2026) o site exibia o chip **🗳️ Concorre em 2026**, com o cargo do
+pedido de registro. Passado o pleito, "concorre" ficou falso e o chip saiu de todas as
+telas; no lugar entrou o **destino de cada parlamentar na 58ª legislatura** (posse em
+01/02/2027), pelo resultado do TSE.
 
 **É informativo**: não pontua no Poder, não vira título, não abre nem fecha gate, e não
-tem cor de status — concorrer não é mérito nem falta (mesmo princípio do
-`higherIsBetter: null` do Alinhamento).
+tem cor de status — sair do Congresso não é mérito nem falta (mesmo princípio do
+`higherIsBetter: null` do Alinhamento). A rampa da aba de Insights é a dourada
+sequencial, sem verde nem vermelho.
 
 Fonte: `consulta_cand_2026.zip` (Dados Abertos do TSE, CC-BY), arquivo
 `consulta_cand_2026_BRASIL.csv`, latin1, lido com `parseCsvBR` e um leitor de ZIP sem
-dependências (`scripts/lib/zip.mjs`). Cache **VOLÁTIL de 24h**: candidatura muda até o
-pleito (indeferimento, renúncia, substituição), e congelá-la publicaria candidato que
-desistiu.
+dependências (`scripts/lib/zip.mjs`). Depois do pleito o TSE preenche
+`CD_SIT_TOT_TURNO` (1/2/3 = eleito, por QP ou por média; 4 = não eleito; 5 = suplente;
+6 = 2º turno; −1 = `#NULO`, sem resultado). Cache **VOLÁTIL de 24h**: o 2º turno
+(25/10) e decisões judiciais mexem no arquivo. Lógica pura em
+`scripts/lib/resultado2026.mjs` e textos em `scripts/lib/eleicao-texto.mjs` (os dois com
+teste); a chave de correspondência continua em `scripts/lib/candidatura.mjs`.
+
+### Os destinos
+
+| destino | quem | selo |
+|---|---|---|
+| `fica` | reeleito para a mesma casa | ficha: "Reeleito para a Câmara" |
+| `muda` | deputado eleito senador, ou o inverso | cards: "↪ Vai ao Senado" |
+| `sai` | fora do Congresso em 2027 | cards: "🚪 Sai em 2027" |
+| `segue` | senador eleito em 2022 (mandato até 2031) | ficha: "Mandato segue até 2031" |
+| `pendente` | senador até 2031 no 2º turno para governo | cards: "⏳ 2º turno" |
+| (ausente) | não dá para afirmar | nenhum — nunca um "fica" presumido |
+
+O `sai` carrega o **motivo**: `nao-reeleito` (disputou a própria cadeira; suplente é
+"ficou como suplente", porque pode assumir), `outro-cargo` (governo, assembleia,
+suplência, Senado para deputado — com a situação: eleito, 2º turno, não eleito) ou
+`fim-de-mandato` (o mandato acaba e o nome não está entre os eleitos).
+
+### Cinco decisões
+
+1. **"Fica" e "muda" saem da LISTA DE ELEITOS, não da candidatura casada.** A lista das
+   cadeiras em disputa é fechada — 513 deputados e 54 senadores — e o portão exige as duas
+   inteiras antes de afirmar qualquer coisa. Medido no arquivo de 05/10/2026: 385 eleitos
+   por QP + 128 por média = 513; 54 senadores. Com a lista inteira, "não está entre os
+   eleitos" é fato sobre um conjunto conhecido; incompleta, ela transformaria eleito em
+   derrotado.
+2. **Todo mandato de deputado acaba em 31/01/2027.** Quem não está entre os 513 sai da
+   Câmara, tenha disputado o que for — inclusive quem ainda disputa o 2º turno para governo:
+   não concorreu à Câmara. No Senado o fim vem do `/senador/{id}/mandatos` (o mandato que
+   cobre a legislatura 57): a turma de 2018 acaba em 2027; a de 2022 segue até 2031 e só sai
+   se eleita para outro cargo.
+3. **`#NULO` na própria cadeira não afirma nada.** É candidatura sem resultado publicado
+   (sub judice, indeferida em recurso): o voto pode ser validado depois.
+4. **Senado casa por nome — e o "sai" exige que nenhum eleito da UF pareça a mesma
+   pessoa.** Um nome civil grafado diferente no TSE faria um reeleito "sair". A guarda:
+   nome de urna igual ao nome parlamentar, ou dois sobrenomes em comum com algum eleito da
+   UF → sem afirmação. Medido em 05/10/2026: dos 12 senadores da turma de 2018 sem
+   candidatura casada, nenhum tinha eleito parecido na UF.
+5. **Suplente em exercício numa cadeira que vai até 2031 fica sem afirmação**: a cadeira
+   segue, mas quem senta nela depende do titular. Suplente numa cadeira que acaba em 2027
+   sai com ela.
+
+### O que se afirma, e o que não
+
+- **`fim-de-mandato` nunca vira "não se candidatou".** O que se sabe é que o nome não está
+  entre os eleitos; o cruzamento pode ter falhado em achar a candidatura. A frase diz
+  "não encontramos candidatura correspondente".
+- **Tier × reeleição é correlação.** A aba Eleições cruza os dois, e diz ao lado do número
+  que o Poder mede o exercício do mandato, não o voto.
+- **A taxa de reeleição só conta quem disputou a própria cadeira.** Quem foi para o governo
+  não "perdeu a reeleição"; contá-lo baixaria a taxa por fora.
+- **Sem afirmação fica à vista**: segmento próprio nas barras, fora dos dois lados do
+  filtro, com a contagem na nota.
+
+### A previsão morre na posse
+
+Em 01/02/2027 "estará na próxima legislatura" deixa de ser previsão. O gerador compara a
+data da execução com `POSSE_2027` e **para de emitir o campo**; os selos, o filtro e a aba
+somem juntos. A essa altura o site precisa trocar de legislatura (`LEG_ATUAL = 58`), que é
+outro trabalho.
 
 ### A chave: CPF na Câmara, nome civil no Senado
 
@@ -842,43 +907,25 @@ forma desigual — some mais quem usa nome de urna distante do civil ("Doutor Lu
 "Paulinho da Força"). O CPF vem de `dep-detalhe-{id}.json`, é usado só como chave e
 **não é gravado, logado nem consultado em lugar nenhum**; a `/sobre` afirma isso ao
 público. O Senado não publica CPF: lá a chave é o nome civil completo, com UF e
-nascimento desempatando homônimo; ambíguo até o fim fica **sem chip**.
+nascimento desempatando homônimo; ambíguo até o fim fica **sem afirmação**.
 
 **A data de nascimento confirma, nunca reprova.** Exigir nome + nascimento iguais
 descartava dois senadores porque as fontes discordam: Carlos Viana é 22/03/1963 no
 Senado e 23/03 no TSE; Jader Barbalho é 1944 no Senado e 1945 no TSE. Nos dois o nome
 civil é idêntico e a UF bate — o filtro estrito tirava do ar candidato real.
 
-### O que se afirma, e o que não
-
-- **"Registrou pedido", nunca "candidatura deferida".** `DS_SITUACAO_CANDIDATURA` vinha
-  `#NE` em 100% das linhas: o TSE não publica deferimento nesse arquivo nessa fase.
-- **Ausência de chip não afirma nada.** Sem correspondência, o campo não é emitido e
-  nenhuma superfície escreve "não se candidatou" — falha de match viraria afirmação
-  falsa sobre pessoa nomeada, em ano eleitoral. O filtro da Tier List carrega essa
-  ressalva em texto, porque uma lista filtrada se lê como fato sobre quem ficou fora.
-- **Cargo é o da fonte, incluindo o Executivo.** Dos 499 deputados: 437 disputam a
-  Câmara, 42 o Senado, 10 assembleia, 5 governo, 1 vice-governo, 1 vice-presidência,
-  3 suplência. Dos 51 senadores: 32 o Senado, 9 governo, 4 suplência, 3 a Câmara, 2
-  assembleia, 1 a Presidência. São os 42 deputados candidatos ao Senado que tornam o
-  chip **um cargo**, e não um sim/não de reeleição: num binário eles apareceriam iguais
-  a quem não se candidatou.
-- **Suplente de senador é rótulo próprio**, não "concorre ao Senado" — são cargos
-  diferentes (Jader Barbalho é o caso real).
-- **Código de cargo desconhecido é logado e fica sem chip**, nunca vira rótulo cru.
-
-### O chip morre no pleito
-
-Em 04/10/2026 "concorre" fica falso sozinho, sem ninguém tocar no código. O gerador
-compara a data da execução com `meta.eleicao2026.pleitoEm` e **para de emitir o campo**;
-os chips e o filtro somem juntos, porque todos tratam ausência como silêncio.
-"Eleito / não eleito" é outra feature, com outro dataset.
+O registro de candidatura (antes do pleito) mostrou: dos 499 deputados casados, 437
+disputavam a Câmara, 42 o Senado, 10 assembleia, 5 governo, 1 vice-governo, 1
+vice-presidência, 3 suplência; dos 51 senadores, 32 o Senado, 9 governo, 4 suplência, 3 a
+Câmara, 2 assembleia, 1 a Presidência. `DS_SITUACAO_CANDIDATURA` vinha `#NE` em 100% das
+linhas — por isso o chip dizia "registrou pedido", nunca "deferida".
 
 ### Superfícies
 
-Ficha (chip + linha no relatório), cards das listas (`CandMini`, forma curta do
-gerador), filtro da Tier List (`?eleicao=`) e a **imagem do ShareButton / card OG**.
-A imagem é a exceção que confirma a regra dos títulos: selo é rótulo avaliativo que
-viaja sem a regra, sem o bruto e sem o canal de correção — "Concorre ao Senado" não
-avalia ninguém. Mas vai **com a data**, porque a peça circula sem revalidação e o
-registro pode ser indeferido depois.
+Ficha (selo + linha no relatório), cards das listas (`EleicaoMini`, só `sai`/`muda`/
+`pendente` — quem fica não ganha chip, a lista viraria um mar de rótulos iguais), filtro
+da Tier List (`?legislatura=sai|fica|muda`, com a contagem de quem está fora de todos os
+recortes), aba **Eleições 2026** dos Insights e a **imagem do ShareButton / card OG**. A
+imagem é a exceção que confirma a regra dos títulos: selo é rótulo avaliativo que viaja
+sem a regra, sem o bruto e sem o canal de correção — "não reeleito" não avalia ninguém.
+Mas vai **com a data do arquivo**, porque a peça circula sem revalidação.

@@ -1,5 +1,7 @@
 /**
- * Candidatura 2026 — a qual cargo cada parlamentar em exercício pediu registro.
+ * Candidatura 2026 — a qual cargo cada parlamentar em exercício pediu registro. Passado o
+ * pleito, é a CHAVE do resultado (`resultado2026.mjs`): a linha casada traz o cargo
+ * disputado e a situação.
  * Fonte: `consulta_cand_2026_BRASIL.csv` (bulk do TSE, latin1, regerado diariamente).
  *
  * Quatro decisões que um agente reverteria sem saber:
@@ -13,10 +15,10 @@
  * 3. **Ausência não afirma nada**: sem match, o campo não é emitido — o site nunca
  *    diz "não é candidato", que seria falso quando o match é que falhou.
  * 4. **O verbo é "registrou", nunca "deferida"**: `DS_SITUACAO_CANDIDATURA` vinha
- *    `#NE` em 100% das 20.456 linhas. E o chip morre no pleito (`aindaVale`).
+ *    `#NE` em 100% das 20.456 linhas.
  */
 
-/** Dia do pleito. Depois dele o campo deixa de ser emitido (ver `aindaVale`). */
+/** Dia do pleito (1º turno — o único que decide cadeira no Congresso). */
 export const PLEITO_2026 = '2026-10-04';
 
 /** `CD_CARGO` → rótulo. Vocabulário FECHADO: código fora daqui é logado e fica sem
@@ -77,10 +79,6 @@ export function chipDaCandidatura(r, casa, registroEm) {
   };
 }
 
-/** "Concorre" vira falso sozinho em 04/10 — sem isto o chip sobrevive ao pleito
- *  afirmando o que já não é verdade. "Eleito/não eleito" é outro dataset. */
-export const aindaVale = (hoje, pleito = PLEITO_2026) => String(hoje) <= pleito;
-
 /**
  * Casa as candidaturas do TSE com os parlamentares em exercício. Os três descartes
  * saem SEPARADOS: num balde só, o aviso aponta a causa errada.
@@ -88,7 +86,8 @@ export const aindaVale = (hoje, pleito = PLEITO_2026) => String(hoje) <= pleito;
  * @param {object[]} linhas  linhas do CSV do TSE como objetos
  * @param {{casa:string,slug:string,uf:string,cpf?:string,nomeCivil?:string,nascimento?:string}[]} parlamentares
  * @param {string} registroEm  `DT_GERACAO` do arquivo, em ISO
- * @returns {{porSlug: Map<string, object>, desconhecidos: object[], ambiguos: object[],
+ * @returns {{porSlug: Map<string, object>, linhaPorSlug: Map<string, object>,
+ *            desconhecidos: object[], ambiguos: object[],
  *            nascimentoDivergente: object[], porCargoTse: Map<number, number>}}
  */
 export function casaCandidaturas(linhas, parlamentares, registroEm) {
@@ -116,6 +115,7 @@ export function casaCandidaturas(linhas, parlamentares, registroEm) {
   }
 
   const porSlug = new Map();
+  const linhaPorSlug = new Map();
   const ambiguos = [];
   const nascimentoDivergente = [];
 
@@ -147,10 +147,10 @@ export function casaCandidaturas(linhas, parlamentares, registroEm) {
     }
 
     const chip = chipDaCandidatura(achado, p.casa, registroEm);
-    if (chip) porSlug.set(p.slug, chip);
+    if (chip) { porSlug.set(p.slug, chip); linhaPorSlug.set(p.slug, achado); }
   }
 
-  return { porSlug, desconhecidos, ambiguos, nascimentoDivergente, porCargoTse };
+  return { porSlug, linhaPorSlug, desconhecidos, ambiguos, nascimentoDivergente, porCargoTse };
 }
 
 /**

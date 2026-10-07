@@ -386,32 +386,38 @@ export default function MethodologyPage() {
       </div>
 
       <div className="panel detail-block">
-        <h3>7. Candidatura 2026 — o que o chip diz (e o que ele não diz)</h3>
+        <h3>7. Eleições 2026 — quem estará na próxima legislatura</h3>
         <p>
-          O chip <b>🗳️ Concorre em 2026</b> nomeia o cargo para o qual o parlamentar
-          <b> registrou pedido de candidatura</b>, segundo o arquivo público de candidaturas do{' '}
-          <span className="key">TSE</span> (Dados Abertos, licença CC-BY). É informação factual, como
-          partido e UF: <b>não pontua no Poder, não gera título e não interfere em Tier nem em gate</b> —
-          e não tem cor de status, porque concorrer não é mérito nem falta.
+          Cada ficha diz onde o parlamentar estará na legislatura que toma posse em{' '}
+          <b>01/02/2027</b>: <b>reeleito</b>, <b>muda de casa</b> (deputado eleito senador, ou o inverso),{' '}
+          <b>fora da próxima legislatura</b> ou, no Senado, <b>mandato segue até 2031</b>. A fonte é o
+          resultado publicado pelo <span className="key">TSE</span> no arquivo de candidaturas (Dados
+          Abertos, licença CC-BY), com a data do arquivo ao lado. É informação factual, como partido e UF:
+          <b> não pontua no Poder, não gera título e não interfere em Tier nem em gate</b> — e não tem cor
+          de status, porque sair do Congresso não é mérito nem falta.
         </p>
         <div className="rule-list">
-          <div><b>&ldquo;Registrou&rdquo;, não &ldquo;foi deferida&rdquo;</b> — nessa fase o arquivo do
-            TSE não publica o deferimento do registro. O que afirmamos é o pedido, com a data do arquivo
-            ao lado. Uma candidatura pode ser indeferida depois.</div>
-          <div><b>O cargo é o que a fonte diz</b> — quem disputa a reeleição aparece como reeleição; quem
-            concorre ao Senado, a governo estadual ou à Presidência aparece com o cargo que pediu. Suplente
-            de senador é rótulo próprio: não é o mesmo que concorrer ao Senado.</div>
+          <div><b>&ldquo;Fica&rdquo; e &ldquo;sai&rdquo; vêm da lista de eleitos, não de palpite</b> — a
+            lista das cadeiras em disputa é fechada (513 deputados e 54 senadores em 2026), e só a usamos
+            quando ela vem inteira. Todo mandato de deputado termina em 31/01/2027, então quem não está
+            entre os eleitos não volta, tenha disputado o que for. No Senado, a turma eleita em 2022 segue
+            até 2031 e só sai se for eleita para outro cargo.</div>
+          <div><b>O motivo é o que a fonte diz</b> — disputou a reeleição e não voltou (suplente é
+            &ldquo;ficou como suplente&rdquo;, porque pode assumir se um titular sair), foi eleito para
+            outro cargo, ainda disputa o 2º turno para governo, disputou outro cargo e não foi eleito — ou
+            o mandato termina e o nome não está entre os eleitos. Neste último caso <b>não afirmamos que a
+            pessoa não se candidatou</b>: dizemos só que não encontramos a candidatura.</div>
           <div><b>Como sabemos que é a mesma pessoa</b> — na Câmara, pelo CPF (lido só para isso, em
             memória, nunca publicado; ver a <a href="/sobre/#privacidade">Privacidade</a>). No Senado, que
-            não publica CPF, pelo nome civil completo, com UF e data de nascimento desempatando homônimo.
-            Sem certeza, não há chip.</div>
-          <div><b>Ausência de chip NÃO significa que a pessoa não é candidata</b> — significa que não
-            encontramos correspondência: o registro pode não ter sido publicado ainda, ou o cruzamento
-            pode ter falhado. Por isso o site nunca escreve &ldquo;não se candidatou&rdquo; sobre
-            ninguém.</div>
-          <div><b>O chip vale até o pleito</b> — passada a eleição, &ldquo;concorre&rdquo; deixa de ser
-            verdade, e ele some de todas as telas. Resultado de eleição é outro dado, que esta página
-            anunciará se um dia for publicado aqui.</div>
+            não publica CPF, pelo nome civil completo, com UF e data de nascimento desempatando homônimo —
+            e só afirmamos que um senador sai se nenhum eleito da UF dele tiver nome parecido.</div>
+          <div><b>Sem certeza, sem afirmação</b> — candidatura sem resultado publicado (sub judice),
+            suplente em exercício numa cadeira que vai até 2031 e nome ambíguo ficam sem o selo, e não
+            entram nem na conta de quem fica nem na de quem sai.</div>
+          <div><b>A Tier e a reeleição andam lado a lado, não em causa e efeito</b> — a aba{' '}
+            <a href="/insights/eleicoes/">Eleições 2026</a> dos Insights cruza as duas, mas o Poder mede
+            o exercício do mandato, não o voto. E a previsão vale até a posse: em 01/02/2027 a legislatura
+            passa a ser outra.</div>
         </div>
       </div>
 

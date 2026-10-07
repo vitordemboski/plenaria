@@ -15,6 +15,7 @@ import { Prioridades, AnaliseIA } from '@/components/Prioridades';
 import { LeisRecentes, LeisPorTema, LeisSimbolicas } from '@/components/Leis';
 import { prioridadesNacionais, prioridadesPorCasa, assinaturasDasGuildas, analiseNacional, analiseLeis } from '@/lib/prioridades';
 import { guildSlug } from '@/lib/slug';
+import { EleicaoInsights } from '@/components/EleicaoInsights';
 
 /** R$ a partir de milhares: "R$ 1,6 mi" acima de mil, senão "R$ 740 mil" */
 const fmtMilReais = (mil: number) =>
@@ -41,6 +42,8 @@ export const SECTION_META = [
     desc: 'O que o Congresso de fato aprovou: as proposições transformadas em norma jurídica nesta legislatura, quem as assinou e as mais recentes, com ementa e fonte oficial.' },
   { id: 'prioridades', label: '🗂️ Prioridades', title: 'Prioridades',
     desc: 'Em que o Congresso legisla — a distribuição temática oficial das proposições, por casa e a assinatura de cada guilda. Informativa: não pontua no Poder.' },
+  { id: 'eleicoes', label: '🗳️ Eleições 2026', title: 'Eleições 2026',
+    desc: 'Quem fica e quem sai do Congresso na legislatura de 2027, pelo resultado do TSE: quantos de cada Tier, a taxa de reeleição, quem muda de casa e quem vai para o Executivo.' },
   { id: 'perfil', label: '👥 Perfil', title: 'Perfil',
     desc: 'Quem compõe o Congresso: renovação, gênero, sabatinas e a distribuição das bancadas por estado.' },
   { id: 'governo', label: '🏛️ Governo × Oposição', title: 'Governo × Oposição',
@@ -75,6 +78,8 @@ export function availableSectionIds(): string[] {
       // mesma regra da aba de prioridades: sem nenhuma norma na fonte, a aba
       // inteira não existe — melhor que um título com corpo vazio
       : s.id === 'leis' ? !!insights.leis?.total
+      // sem resultado do TSE nesta geração (fonte fora, lista incompleta, posse passada)
+      : s.id === 'eleicoes' ? !!insights.eleicao && !!meta.eleicao2026
       : true))
     .map((s) => s.id);
 }
@@ -616,6 +621,9 @@ export function buildSectionNodes(): Record<string, React.ReactNode> {
   ) : null;
 
   const nodes: Record<string, React.ReactNode> = { panorama, atributos, gastos, perfil };
+  if (insights.eleicao && meta.eleicao2026) {
+    nodes.eleicoes = <EleicaoInsights e={insights.eleicao} resultadoEm={meta.eleicao2026.resultadoEm} />;
+  }
   if (leisSecao) nodes.leis = leisSecao;
   if (prioridades) nodes.prioridades = prioridades;
   if (governo) nodes.governo = governo;

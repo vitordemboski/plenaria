@@ -152,36 +152,35 @@ export interface Politician {
    *  para ter liderança — nenhum dos dois é "Líder". Ver scripts/lib/lideranca.mjs. */
   lideranca?: { papel: 'lider' | 'vice' | 'representante'; rotulo: string; desde: string }[];
   /**
-   * Pedido de REGISTRO de candidatura em 2026 (bulk do TSE). Estado factual, como
-   * partido e UF: não pontua no Poder, não é título e não abre nem fecha gate.
+   * Onde a pessoa estará na 58ª legislatura (posse em 01/02/2027), segundo o resultado
+   * do TSE. Estado factual, como partido e UF: não pontua, não é título, sem cor.
    *
-   * **Ausente NÃO significa "não é candidato"** — significa que não houve
-   * correspondência: a pessoa pode ter registrado e o match ter falhado, ou o TSE
-   * ainda não ter publicado. Nenhuma superfície afirma a ausência (ver
-   * scripts/lib/candidatura.mjs).
-   *
-   * O verbo é "registrou", nunca "deferida": `DS_SITUACAO_CANDIDATURA` vinha `#NE`
-   * em 100% das linhas quando isto foi escrito — o TSE não publica deferimento nesse
-   * arquivo nessa fase.
+   * **Ausente NÃO significa "fica"** — significa que não dá para afirmar (resultado
+   * pendente na fonte, suplente em exercício, nome ambíguo entre os eleitos). Ver
+   * scripts/lib/resultado2026.mjs.
    */
-  candidatura2026?: Candidatura;
+  eleicao2026?: ResultadoEleicao;
 }
 
-/** Ver `Politician.candidatura2026`. */
-export interface Candidatura {
-  /** rótulo pronto, de vocabulário fechado: "Senado", "Governo de MG"… */
-  cargo: string;
-  /** forma curta para o card da lista ("Gov. MG"), do mesmo vocabulário */
-  curto: string;
-  /** concorre ao MESMO cargo que ocupa hoje */
-  reeleicao: boolean;
-  /** suplente de senador — outra coisa que concorrer ao Senado */
-  suplente: boolean;
-  /** UF da CANDIDATURA — pode diferir da UF do mandato */
-  uf: string;
-  /** data de geração do arquivo do TSE (ISO). A imagem compartilhável a exibe:
-   *  ela circula sem o site e a candidatura pode ser indeferida depois. */
-  registroEm: string;
+/** Ver `Politician.eleicao2026`. */
+export interface ResultadoEleicao {
+  /** fica = reeleito para a mesma casa · muda = eleito para a outra casa ·
+   *  sai = fora do Congresso em 2027 · segue = senador com mandato até 2031 ·
+   *  pendente = senador até 2031 no 2º turno para outro cargo */
+  destino: 'fica' | 'muda' | 'sai' | 'segue' | 'pendente';
+  /** por que sai (ou por que está pendente) */
+  motivo?: 'nao-reeleito' | 'outro-cargo' | 'fim-de-mandato';
+  /** cargo disputado, do vocabulário fechado do gerador — ausente = sem candidatura casada */
+  cargo?: string;
+  curto?: string;
+  /** UF da candidatura */
+  uf?: string;
+  /** situação no 1º turno; ausente = sem candidatura casada ou sem resultado na fonte */
+  situacao?: 'eleito' | 'nao-eleito' | 'suplente' | 'segundo-turno';
+  /** fim do mandato atual (só Senado — todo deputado termina em 31/01/2027) */
+  fimMandato?: string;
+  /** data de geração do arquivo do TSE (ISO) */
+  resultadoEm: string;
 }
 
 /** Registro slim servido em /data/index.json para busca e Modo Batalha. */
@@ -202,8 +201,8 @@ export interface PoliticianIndex {
   stats: Stats;
   /** stats existentes p/ este parlamentar (ausente = todos) */
   avail?: StatKey[];
-  /** candidatura 2026 (ver `Politician.candidatura2026`) — ausente NÃO afirma nada */
-  candidatura2026?: Candidatura;
+  /** destino na próxima legislatura (ver `Politician.eleicao2026`) — ausente NÃO afirma nada */
+  eleicao2026?: ResultadoEleicao;
   /** posse recente → fora dos rankings (marca p/ Batalha/busca) */
   mandatoParcial?: boolean;
   /** preside a Casa → fora dos rankings (marca p/ Batalha/busca) */
@@ -267,10 +266,10 @@ export interface DataMeta {
     /** média de temas por proposição no Congresso (a razão de não somar 100%) */
     porProposicao: number;
   };
-  /** Eleição de 2026, quando há chip de candidatura nesta geração. Ausente = a fonte
-   *  do TSE não respondeu OU o pleito já passou — nos dois casos ninguém tem chip, e
-   *  passado o pleito ele não volta (dizer "concorre" depois da eleição é falso). */
-  eleicao2026?: { registroEm: string; pleitoEm: string };
+  /** Resultado de 2026, quando emitido nesta geração. Ausente = a fonte do TSE não
+   *  respondeu, a lista de eleitos veio incompleta OU a posse já passou — nos três
+   *  casos ninguém tem destino, e a aba Eleições dos Insights não existe. */
+  eleicao2026?: { resultadoEm: string; pleitoEm: string; posseEm: string };
   titulosDisponiveis: boolean;
   aviso: string | null;
 }
@@ -336,6 +335,28 @@ export interface LinhaComparativo {
   taxa: number | null;
 }
 
+/** contagem de destinos; `indefinido` = sem afirmação, nunca somado a quem fica */
+export interface ContagemDestino {
+  total: number; fica: number; muda: number; sai: number; segue: number; pendente: number; indefinido: number;
+}
+
+export type PessoaEleicao = RankPessoa & { tier: Tier | null; ops: number; sexo: 'M' | 'F' | null; eleicao2026: ResultadoEleicao };
+
+export interface InsightsEleicao {
+  casas: Record<Casa, ContagemDestino>;
+  /** `fora` = fora do ranking (mandato parcial, presidência da Casa) */
+  porTier: (ContagemDestino & { tier: Tier | 'fora' })[];
+  /** só quem disputou a PRÓPRIA cadeira — o denominador honesto da reeleição */
+  reeleicaoPorTier: { tier: Tier | 'fora'; disputaram: number; reeleitos: number }[];
+  motivos: { naoReeleito: number; outroCargoEleito: number; outroCargoSegundoTurno: number;
+    outroCargoNaoEleito: number; fimDeMandato: number };
+  porGuilda: (ContagemDestino & { sigla: string })[];
+  saemDoTopo: PessoaEleicao[];
+  mudam: PessoaEleicao[];
+  paraOutroCargo: PessoaEleicao[];
+  pendentes: PessoaEleicao[];
+}
+
 /** pessoa slim usada nos rankings/insights */
 export interface RankPessoa { slug: string; nome: string; casa: Casa; uf: string; partido: string }
 
@@ -384,6 +405,9 @@ export interface Insights {
     presencaMedia: number; presencaMediaAbertas: number;
     faltantes: (RankPessoa & { sabatina: number; abertas: number; gap: number })[];
   };
+  /** aba Eleições — agregados do resultado de 2026 (scripts/lib/resultado2026.mjs).
+   *  Ausente quando o resultado não foi emitido nesta geração. */
+  eleicao?: InsightsEleicao;
   /** representatividade de gênero por casa */
   genero?: { camara: { f: number; m: number }; senado: { f: number; m: number } };
   /**

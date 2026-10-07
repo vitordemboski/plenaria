@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  aindaVale, cargoDesconhecido, casaCandidaturas, chipDaCandidatura, coberturaPorCasa,
-  dataIso, motivoParaAbortar, normCpf, normNomeCivil, PLEITO_2026,
+  cargoDesconhecido, casaCandidaturas, chipDaCandidatura, coberturaPorCasa,
+  dataIso, motivoParaAbortar, normCpf, normNomeCivil,
 } from './candidatura.mjs';
 
 /** linha do TSE como o CSV a entrega (todos os campos são texto) */
@@ -163,9 +163,3 @@ test('cobertura por casa denuncia colapso de match sem reclamar de flutuação',
 
 // ---------- validade ----------
 
-test('o chip morre no pleito — "concorre" fica falso sozinho em 04/10', () => {
-  assert.equal(aindaVale('2026-08-16'), true);
-  assert.equal(aindaVale(PLEITO_2026), true);
-  assert.equal(aindaVale('2026-10-05'), false);
-  assert.equal(aindaVale('2027-01-01'), false);
-});

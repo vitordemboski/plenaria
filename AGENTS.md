@@ -394,20 +394,24 @@ Armadilhas conhecidas das APIs:
   partidos, então o ranking absoluto pareceria funcionar sem distinguir bancada nenhuma.
   O mapa dos dois vocabulários oficiais é EDITORIAL e está publicado em
   `/como-calculamos` — mexeu no mapa, mexa lá. Detalhe em docs/product-spec.md §10.
-- **Candidatura 2026: a chave é o CPF na Câmara e o NOME CIVIL no Senado**
-  (`scripts/lib/candidatura.mjs`, com teste). Medido: CPF casou 499 dos 513 deputados;
-  nome civil + UF, 484; nome parlamentar + UF, 445 — casar por nome perde ~15 candidatos
-  REAIS, e perde mais quem usa nome de urna distante do civil. O CPF é lido só como chave,
-  em memória, e **a `/sobre` afirma isso ao público** — mexeu, mexa lá. O Senado não expõe
-  CPF: nome civil completo (único em 51 de 81), com UF e nascimento desempatando homônimo.
-  **Nascimento CONFIRMA, nunca reprova**: as fontes discordam (Carlos Viana 22×23/03/1963,
-  Jader Barbalho 1944×1945) e o filtro estrito descartava os dois. Três regras que um
-  agente reverteria: **ausência não afirma nada** (sem match não há chip, e nenhuma tela
-  escreve "não se candidatou"); o verbo é **"registrou pedido"**, nunca "deferida"
-  (`DS_SITUACAO_CANDIDATURA` vinha `#NE` em 100% das linhas); e **o chip morre no pleito**
-  (`aindaVale` — depois de 04/10 "concorre" fica falso sozinho). Cache **VOLÁTIL 24h**:
-  candidatura muda até a eleição. Suplente de senador é rótulo próprio, não "concorre ao
-  Senado". Detalhe em docs/product-spec.md §14.
+- **Eleições 2026: o destino na próxima legislatura sai da LISTA DE ELEITOS, não da
+  candidatura casada** (`scripts/lib/resultado2026.mjs`, textos em `eleicao-texto.mjs`,
+  os dois com teste). O chip "Concorre em 2026" morreu no pleito; no lugar, cada ficha diz
+  `fica`/`muda`/`sai`/`segue`/`pendente`. A lista das cadeiras é FECHADA (513 + 54) e o
+  portão exige as duas inteiras — incompleta, ela transformaria eleito em derrotado. A
+  chave continua a da candidatura: **CPF na Câmara, NOME CIVIL no Senado** (medido: CPF
+  casou 499 dos 513; nome civil + UF, 484; nome parlamentar + UF, 445). O CPF é lido só
+  como chave, em memória, e **a `/sobre` afirma isso ao público** — mexeu, mexa lá.
+  **Nascimento CONFIRMA, nunca reprova** (Carlos Viana 22×23/03/1963, Jader Barbalho
+  1944×1945). Regras que um agente reverteria: **`fim-de-mandato` nunca vira "não se
+  candidatou"** (a frase é "não encontramos candidatura correspondente"); **`#NULO` na
+  própria cadeira não afirma nada** (sub judice); **senador só "sai" se nenhum eleito da UF
+  tiver nome parecido** (nome grafado diferente no TSE faria um reeleito sair); **suplente em
+  exercício numa cadeira até 2031 fica sem afirmação**; **sem afirmação nunca é somado a quem
+  fica**; a **taxa de reeleição só conta quem disputou a própria cadeira**; e **Tier ×
+  reeleição é correlação**, dito ao lado do número. Sem cor de status: a rampa da aba é a
+  dourada. O campo **morre na posse** (`POSSE_2027`) — aí é hora de trocar `LEG_ATUAL`.
+  Cache **VOLÁTIL 24h** (2º turno, decisões judiciais). Detalhe em docs/product-spec.md §14.
 - **Análise de IA só aparece se o `fonteHash` bater** (`scripts/lib/analises.mjs`):
   `data/analises.json` guarda o parágrafo junto do hash dos números que ele descreve, e a
   UI não renderiza quando divergem — senão um texto de julho ficaria ao lado das barras
@@ -596,12 +600,14 @@ node -e 'const P=require("./data/politicians.json");const z=k=>P.filter(k).lengt
 console.log("cota zero:", z(p=>!p.gastoMensalMedioMil), "de", P.length);
 console.log("ataque zero (senado):", z(p=>p.casa==="senado"&&!p.statRaw?.ataque), "de 81");
 console.log("sem prioridades:", z(p=>!p.prioridades), "de", P.length);
-console.log("com candidatura:", z(p=>p.candidatura2026), "de", P.length);'
+const d=k=>["camara","senado"].map(c=>c+" "+z(p=>p.casa===c&&p.eleicao2026?.destino===k)).join(" · ");
+console.log("eleições — fica:", d("fica"), "| sai:", d("sai"), "| sem afirmação:", z(p=>!p.eleicao2026));'
 ```
 
-A candidatura tem forma própria: a Câmara casa quase inteira (~97%) e o Senado bem menos
-(~63% — só parte da casa está em fim de mandato). Câmara abaixo de 400 é chave quebrada,
-não desistência em massa; zero nas duas é a fonte do TSE vazia.
+O resultado de 2026 tem forma própria: **sem afirmação** é unidades (sub judice, suplente
+em exercício numa cadeira até 2031, 2º turno); dezenas é chave quebrada ou eleito com nome
+grafado diferente. Fica + muda tem de bater com os eleitos que estão em exercício — zero em
+tudo é a lista de eleitos incompleta (o portão aborta e loga `⚠️ [eleicao] ABORTADO`).
 
 Leia a FORMA do número, não um valor de referência (que envelheceria): **unidades** é o
 normal — sempre há quem renuncie à cota, tenha tomado posse ontem ou não tenha autoria

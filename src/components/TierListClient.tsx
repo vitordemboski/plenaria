@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { PoliticianLink } from '@/components/PoliticianLink';
-import { rotuloCurtoCandidatura } from '@/lib/candidatura';
+import { EleicaoMini } from '@/components/EleicaoMini';
 import type { PoliticianIndex, Tier, Casa } from '@/lib/types';
 
 /** Versão da entrada sem `stats` — a home não precisa deles (payload menor). */
@@ -20,36 +21,30 @@ type CasaFilter = 'todos' | Casa;
 
 const CASAS: CasaFilter[] = ['todos', 'camara', 'senado'];
 
-/** Recorte por candidatura. NÃO existe a contraparte "não concorre": o site nunca
- *  afirma a ausência (ver scripts/lib/candidatura.mjs). */
-type CandFilter = 'todos' | 'concorre' | 'reeleicao' | 'outro' | 'camara' | 'senado';
+/** Recorte pelo resultado de 2026. "Fica" junta o reeleito e o senador com mandato até
+ *  2031; quem está sem afirmação (campo ausente) não entra em NENHUM recorte — nunca é
+ *  presumido como "fica" (ver scripts/lib/resultado2026.mjs). */
+type LegFilter = 'todos' | 'sai' | 'fica' | 'muda';
 
-const CANDS: CandFilter[] = ['todos', 'concorre', 'reeleicao', 'outro', 'camara', 'senado'];
+const LEGS: LegFilter[] = ['todos', 'sai', 'fica', 'muda'];
 
-const CAND_LABEL: Record<CandFilter, string> = {
-  todos: '🗳️ Eleição 2026: todos',
-  concorre: '🗳️ Concorre em 2026',
-  reeleicao: '🗳️ Disputa a reeleição',
-  outro: '🗳️ Concorre a outro cargo',
-  camara: '🗳️ Concorre à Câmara',
-  senado: '🗳️ Concorre ao Senado',
+const LEG_LABEL: Record<LegFilter, string> = {
+  todos: '🗳️ Próxima legislatura: todos',
+  sai: '🚪 Saem em 2027',
+  fica: '🔁 Ficam (reeleitos ou mandato até 2031)',
+  muda: '↪ Mudam de casa',
 };
 
-function passaNoFiltroCand(p: TierListEntry, f: CandFilter) {
+function passaNoFiltroLeg(p: TierListEntry, f: LegFilter) {
   if (f === 'todos') return true;
-  const c = p.candidatura2026;
-  if (!c) return false;
-  if (f === 'concorre') return true;
-  if (f === 'reeleicao') return c.reeleicao;
-  if (f === 'outro') return !c.reeleicao;
-  // suplente de senador não é candidato ao Senado
-  if (f === 'senado') return c.cargo === 'Senado';
-  return c.cargo === 'Câmara dos Deputados';
+  const d = p.eleicao2026?.destino;
+  if (f === 'fica') return d === 'fica' || d === 'segue';
+  return d === f;
 }
 
-type Filtros = { query: string; casa: CasaFilter; uf: string; cand: CandFilter };
+type Filtros = { query: string; casa: CasaFilter; uf: string; leg: LegFilter };
 
-const SEM_FILTRO: Filtros = { query: '', casa: 'todos', uf: 'todos', cand: 'todos' };
+const SEM_FILTRO: Filtros = { query: '', casa: 'todos', uf: 'todos', leg: 'todos' };
 
 /**
  * Os filtros vivem na URL (?q=&casa=&uf=), não só no estado do componente — assim o
@@ -70,21 +65,21 @@ const SEM_FILTRO: Filtros = { query: '', casa: 'todos', uf: 'todos', cand: 'todo
 function lerUrl(): Filtros {
   const p = new URLSearchParams(window.location.search);
   const casa = p.get('casa') as CasaFilter | null;
-  const cand = p.get('eleicao') as CandFilter | null;
+  const leg = p.get('legislatura') as LegFilter | null;
   return {
     query: p.get('q') ?? '',
     casa: casa && CASAS.includes(casa) ? casa : 'todos',
     uf: p.get('uf') ?? 'todos',
-    cand: cand && CANDS.includes(cand) ? cand : 'todos',
+    leg: leg && LEGS.includes(leg) ? leg : 'todos',
   };
 }
 
-function escreverUrl({ query, casa, uf, cand }: Filtros) {
+function escreverUrl({ query, casa, uf, leg }: Filtros) {
   const p = new URLSearchParams();
   if (query.trim()) p.set('q', query.trim());
   if (casa !== 'todos') p.set('casa', casa);
   if (uf !== 'todos') p.set('uf', uf);
-  if (cand !== 'todos') p.set('eleicao', cand);
+  if (leg !== 'todos') p.set('legislatura', leg);
   const qs = p.toString();
   window.history.replaceState(window.history.state, '', qs ? `?${qs}` : window.location.pathname);
 }
@@ -99,9 +94,11 @@ const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayout
  * (sem fetch em runtime); busca e filtro rodam 100% no client.
  */
 export function TierListClient({ list }: { list: TierListEntry[] }) {
-  const [{ query, casa, uf, cand }, setFiltros] = useState<Filtros>(SEM_FILTRO);
-  /** passado o pleito, ou com o TSE fora do ar, o campo some — e o filtro filtraria o vazio */
-  const temCandidatura = useMemo(() => list.some((p) => p.candidatura2026), [list]);
+  const [{ query, casa, uf, leg }, setFiltros] = useState<Filtros>(SEM_FILTRO);
+  /** sem resultado emitido (TSE fora do ar, lista incompleta, posse passada) o filtro
+   *  filtraria o vazio — some junto com o campo */
+  const resultadoEm = useMemo(() => list.find((p) => p.eleicao2026)?.eleicao2026?.resultadoEm, [list]);
+  const semAfirmacao = useMemo(() => list.filter((p) => !p.eleicao2026 || p.eleicao2026.destino === 'pendente').length, [list]);
 
   // Sincroniza estado ← URL na montagem E a cada popstate. O popstate é indispensável:
   // no "voltar" o Next NÃO remonta necessariamente este componente (ele reaproveita a
@@ -117,7 +114,7 @@ export function TierListClient({ list }: { list: TierListEntry[] }) {
   /** única porta de escrita: aplica o filtro no estado E na URL, com o valor novo em mãos.
    *  (fora do updater do setState — ele precisa ser puro; o StrictMode o roda duas vezes.) */
   const aplicar = (mudanca: Partial<Filtros>) => {
-    const proximo = { query, casa, uf, cand, ...mudanca };
+    const proximo = { query, casa, uf, leg, ...mudanca };
     setFiltros(proximo);
     escreverUrl(proximo);
   };
@@ -138,11 +135,11 @@ export function TierListClient({ list }: { list: TierListEntry[] }) {
     return list.filter((p) => {
       if (casa !== 'todos' && p.casa !== casa) return false;
       if (uf !== 'todos' && p.uf !== uf) return false;
-      if (!passaNoFiltroCand(p, cand)) return false;
+      if (!passaNoFiltroLeg(p, leg)) return false;
       if (!q) return true;
       return norm(p.nome).includes(q) || norm(p.uf).includes(q) || norm(p.partido).includes(q);
     });
-  }, [list, query, casa, uf, cand]);
+  }, [list, query, casa, uf, leg]);
 
   const byTier = useMemo(() => {
     const m = new Map<Tier, TierListEntry[]>(TIER_ORDER.map((t) => [t, []]));
@@ -190,26 +187,29 @@ export function TierListClient({ list }: { list: TierListEntry[] }) {
             <option key={sigla} value={sigla}>{sigla} ({n})</option>
           ))}
         </select>
-        {temCandidatura && (
+        {resultadoEm && (
           <select
             className="uf-filter"
-            data-ativo={cand !== 'todos' ? 'sim' : undefined}
-            value={cand}
-            onChange={(e) => aplicar({ cand: e.target.value as CandFilter })}
-            aria-label="Filtrar por candidatura em 2026"
+            data-ativo={leg !== 'todos' ? 'sim' : undefined}
+            value={leg}
+            onChange={(e) => aplicar({ leg: e.target.value as LegFilter })}
+            aria-label="Filtrar pelo resultado das eleições de 2026"
           >
-            {CANDS.map((v) => <option key={v} value={v}>{CAND_LABEL[v]}</option>)}
+            {LEGS.map((v) => <option key={v} value={v}>{LEG_LABEL[v]}</option>)}
           </select>
         )}
         <span className="count">{filtered.length} de {list.length}</span>
       </div>
 
-      {/* O recorte é de quem TEM registro correspondido — sem esta nota, a lista
-          seria lida como "os outros não se candidataram". */}
-      {cand !== 'todos' && (
+      {/* Sem esta nota, quem ficou sem afirmação sumiria dos dois lados calado e a
+          soma dos recortes pareceria errada. */}
+      {leg !== 'todos' && resultadoEm && (
         <p className="cand-nota">
-          Recorte por pedido de registro no TSE. Quem não aparece pode não ter registrado
-          <b> ou</b> não ter tido a candidatura correspondida — o site não afirma a ausência.
+          Recorte pelo resultado do TSE (arquivo de {resultadoEm.split('-').reverse().join('/')}), para a
+          legislatura que toma posse em 01/02/2027.
+          {semAfirmacao > 0 && <> {semAfirmacao} {semAfirmacao === 1 ? 'parlamentar fica' : 'parlamentares ficam'} fora
+            de <b>todos</b> os recortes: resultado pendente na fonte, suplente em exercício ou 2º turno.</>}
+          {' '}<Link href="/insights/eleicoes/">Ver o balanço da eleição →</Link>
         </p>
       )}
 
@@ -241,7 +241,7 @@ export function TierListClient({ list }: { list: TierListEntry[] }) {
                     <b>{p.nome}</b>
                     <small>
                       {p.casa === 'camara' ? 'Dep.' : 'Sen.'} · {p.uf} · {p.partido}
-                      {p.candidatura2026 && <em className="cand-mini">🗳️ {rotuloCurtoCandidatura(p.candidatura2026)}</em>}
+                      <EleicaoMini e={p.eleicao2026} casa={p.casa} />
                     </small>
                   </span>
                   <span className="ops">{p.ops}</span>

@@ -38,7 +38,8 @@ import { normaDoDespacho, normaDoSenado, resumoEmenta, ordenaLeis, urlProposicao
 import { agruparLeis, apresentadoVersusAprovado, contarPontuaveis, simbolicas, soHomenagem } from './lib/leis-temas.mjs';
 import { fonteHash, contarObsoletas, alvoNacional, alvoGuilda } from './lib/analises.mjs';
 import { moveuNestaLegislatura, INICIO_LEGISLATURA } from './lib/legislatura.mjs';
-import { casaCandidaturas, coberturaPorCasa, motivoParaAbortar, aindaVale, dataIso, PLEITO_2026 } from './lib/candidatura.mjs';
+import { casaCandidaturas, motivoParaAbortar, dataIso, PLEITO_2026 } from './lib/candidatura.mjs';
+import { indiceEleitos, motivoParaAbortar as motivoAbortarResultado, destinoNaLegislatura, situacaoTse, situacaoDesconhecida, aindaVale as aindaValeResultado, agregaEleicao, POSSE_2027 } from './lib/resultado2026.mjs';
 import { lerZip } from './lib/zip.mjs';
 import { fatorExercicio, mesesDivisor, exercicioParcial, fraseRitmo } from './lib/exercicio.mjs';
 
@@ -1101,24 +1102,24 @@ async function aplicaComando(todos) {
   }
 }
 
-// ---------- Candidatura 2026 (INFORMATIVA — não pontua, não é título) ----------
+// ---------- Eleições 2026: quem estará na próxima legislatura (INFORMATIVO) ----------
 /**
- * A qual cargo cada parlamentar pediu registro no TSE — as quatro decisões estão em
+ * Cruza o resultado do TSE com os parlamentares em exercício — as cinco decisões estão
+ * em scripts/lib/resultado2026.mjs; a chave (CPF na Câmara, nome civil no Senado), em
  * scripts/lib/candidatura.mjs. As chaves são lidas AQUI, do cache em disco, e não
  * viajam nos objetos do pipeline: o CPF entra na função e sai dela.
  *
- * Falha de rede não derruba a ingestão (sem chip o site fica quieto); arquivo íntegro
- * sem as candidaturas, sim — aí a conclusão seria plausível e falsa.
+ * Falha de rede não derruba a ingestão (sem o campo o site fica quieto); arquivo íntegro
+ * com a lista de eleitos incompleta, sim — aí "não volta" seria plausível e falso.
  */
-async function aplicaCandidaturas(todos) {
-  // Depois do pleito "concorre" fica falso sozinho: não vale nem baixar o arquivo.
-  if (!aindaVale(HOJE)) {
-    console.log(`[candidatura] pleito de ${PLEITO_2026} já ocorreu — chip não é mais emitido`);
+async function aplicaResultado2026(todos) {
+  if (!aindaValeResultado(HOJE)) {
+    console.log(`[eleicao] posse de ${POSSE_2027} já ocorreu — "próxima legislatura" não é mais previsão; nada emitido`);
     return null;
   }
 
   let linhas;
-  let registroEm;
+  let resultadoEm;
   try {
     const zip = lerZip(await cachedBin('tse-cand-2026.zip',
       'https://cdn.tse.jus.br/estatistica/sead/odsele/consulta_cand/consulta_cand_2026.zip',
@@ -1130,58 +1131,90 @@ async function aplicaCandidaturas(todos) {
     const { header, rows } = parseCsvBR(csv.toString('latin1'), ';');
     linhas = rows.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i]])));
     // DT_GERACAO é dd/mm/aaaa
-    registroEm = /^\d{4}-\d{2}-\d{2}$/.test(dataIso(linhas[0]?.DT_GERACAO)) ? dataIso(linhas[0].DT_GERACAO) : HOJE;
+    resultadoEm = /^\d{4}-\d{2}-\d{2}$/.test(dataIso(linhas[0]?.DT_GERACAO)) ? dataIso(linhas[0].DT_GERACAO) : HOJE;
   } catch (e) {
-    console.log(`⚠️  [candidatura] fonte do TSE indisponível (${e.message}) — nenhum chip nesta execução`);
+    console.log(`⚠️  [eleicao] fonte do TSE indisponível (${e.message}) — nenhum resultado nesta execução`);
+    return null;
+  }
+
+  const idx = indiceEleitos(linhas);
+  const abortaEleitos = motivoAbortarResultado(idx.contagem);
+  if (abortaEleitos) {
+    console.log(`⚠️  [eleicao] ABORTADO: ${abortaEleitos} — o arquivo veio íntegro sem o resultado inteiro; nenhum destino emitido`);
     return null;
   }
 
   const chaves = todos.map((p) => {
-    const f = join(RAW, p.casa === 'camara' ? `dep-detalhe-${p.id}.json` : `sen-${p.id}-detalhe.json`);
-    if (!existsSync(f)) return { casa: p.casa, slug: p.slug, uf: p.uf };
-    const d = JSON.parse(readFileSync(f, 'utf8'));
     if (p.casa === 'camara') {
+      const f = join(RAW, `dep-detalhe-${p.id}.json`);
+      const d = existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')).dados ?? {} : {};
       return { casa: p.casa, slug: p.slug, uf: p.uf,
-        cpf: d.dados?.cpf, nomeCivil: d.dados?.nomeCivil, nascimento: d.dados?.dataNascimento };
+        cpf: d.cpf, nomeCivil: d.nomeCivil, nascimento: d.dataNascimento };
     }
-    const parl = d.DetalheParlamentar?.Parlamentar ?? {};
+    const fd = join(RAW, `sen-${p.id}-detalhe.json`);
+    const parl = existsSync(fd) ? JSON.parse(readFileSync(fd, 'utf8')).DetalheParlamentar?.Parlamentar ?? {} : {};
+    // fim do mandato = o mandato que cobre ESTA legislatura (veterano traz os antigos)
+    const fm = join(RAW, `sen-${p.id}-mandatos.json`);
+    const mandatos = existsSync(fm)
+      ? asArray(JSON.parse(readFileSync(fm, 'utf8')).MandatoParlamentar?.Parlamentar?.Mandatos?.Mandato) : [];
+    const m = mandatos.find((x) => [x.PrimeiraLegislaturaDoMandato, x.SegundaLegislaturaDoMandato]
+      .some((l) => l?.NumeroLegislatura === String(LEG_ATUAL)));
     return { casa: p.casa, slug: p.slug, uf: p.uf,
       nomeCivil: parl.IdentificacaoParlamentar?.NomeCompletoParlamentar,
-      nascimento: parl.DadosBasicosParlamentar?.DataNascimento };
+      nomeParlamentar: parl.IdentificacaoParlamentar?.NomeParlamentar ?? p.nome,
+      nascimento: parl.DadosBasicosParlamentar?.DataNascimento,
+      fimMandato: m?.SegundaLegislaturaDoMandato?.DataFim ?? m?.PrimeiraLegislaturaDoMandato?.DataFim,
+      titular: m?.DescricaoParticipacao === 'Titular' };
   });
 
-  const { porSlug, desconhecidos, ambiguos, nascimentoDivergente, porCargoTse } =
-    casaCandidaturas(linhas, chaves, registroEm);
-
+  const { porSlug, linhaPorSlug, desconhecidos, ambiguos, porCargoTse } =
+    casaCandidaturas(linhas, chaves, resultadoEm);
   const aborta = motivoParaAbortar(porCargoTse);
   if (aborta) {
-    console.log(`⚠️  [candidatura] ABORTADO: ${aborta} — o arquivo veio íntegro e sem o dado; nenhum chip emitido`);
+    console.log(`⚠️  [eleicao] ABORTADO: ${aborta} — o arquivo veio íntegro e sem o dado; nenhum destino emitido`);
     return null;
   }
 
+  const semAfirmacao = [];
+  const chavePorSlug = new Map(chaves.map((c) => [c.slug, c]));
   for (const p of todos) {
-    const c = porSlug.get(p.slug);
-    if (c) p.candidatura2026 = c;
+    const chave = chavePorSlug.get(p.slug);
+    const linha = linhaPorSlug.get(p.slug);
+    const d = destinoNaLegislatura(chave, linha, idx);
+    if (!d) { semAfirmacao.push(p.slug); continue; }
+    const cand = porSlug.get(p.slug);
+    p.eleicao2026 = {
+      ...d,
+      // o cargo e a situação descrevem a disputa; o destino é o que se afirma
+      ...(cand ? { cargo: cand.cargo, curto: cand.curto, uf: cand.uf } : {}),
+      ...(linha && situacaoTse(linha) ? { situacao: situacaoTse(linha) } : {}),
+      ...(p.casa === 'senado' && chave.fimMandato ? { fimMandato: chave.fimMandato } : {}),
+      resultadoEm,
+    };
   }
 
-  const cob = coberturaPorCasa(porSlug, todos);
-  console.log(`[candidatura] ${porSlug.size} de ${todos.length} com registro no TSE (arquivo de ${registroEm}) · `
-    + cob.map((c) => `${c.casa} ${c.com}/${c.total}`).join(' · '));
-  for (const c of cob.filter((x) => x.baixa)) {
-    console.log(`⚠️  [candidatura] só ${(c.taxa * 100).toFixed(0)}% da ${c.casa} casou — suspeite da CHAVE (coluna renomeada?), não de desistência em massa`);
+  const conta = (casa, dest) => todos.filter((p) => p.casa === casa && p.eleicao2026?.destino === dest).length;
+  for (const casa of ['camara', 'senado']) {
+    console.log(`[eleicao] ${casa}: fica ${conta(casa, 'fica')} · muda de casa ${conta(casa, 'muda')} · sai ${conta(casa, 'sai')}`
+      + (casa === 'senado' ? ` · mandato segue ${conta(casa, 'segue')} · 2º turno ${conta(casa, 'pendente')}` : '')
+      + ` (TSE, arquivo de ${resultadoEm})`);
+  }
+  // Unidades é o normal (#NULO sub judice, suplente em cadeira até 2031). Dezenas é
+  // chave quebrada ou eleito com nome grafado diferente demais.
+  if (semAfirmacao.length) {
+    console.log(`⚠️  [eleicao] ${semAfirmacao.length} sem afirmação (resultado pendente na fonte, suplente em exercício ou nome parecido entre os eleitos): ${semAfirmacao.join(', ')}`);
   }
   if (ambiguos.length) {
-    console.log(`⚠️  [candidatura] ${ambiguos.length} sem chip por homônimo que UF e nascimento não desempataram: ${ambiguos.map((a) => a.slug).join(', ')}`);
-  }
-  // Auditoria, não erro: unidades é normal; dezenas = uma das fontes trocou de formato.
-  if (nascimentoDivergente.length) {
-    console.log(`[candidatura] ${nascimentoDivergente.length} com nascimento divergente entre a casa e o TSE (match mantido pelo nome): ${nascimentoDivergente.map((d) => `${d.slug} ${d.base}≠${d.tse}`).join(', ')}`);
+    console.log(`⚠️  [eleicao] ${ambiguos.length} homônimos que UF e nascimento não desempataram: ${ambiguos.map((a) => a.slug).join(', ')}`);
   }
   for (const cd of new Set(desconhecidos.map((r) => `${r.CD_CARGO}=${r.DS_CARGO}`))) {
-    console.log(`⚠️  [candidatura] código de cargo NÃO classificado: ${cd} — declare-o em lib/candidatura.mjs`);
+    console.log(`⚠️  [eleicao] código de cargo NÃO classificado: ${cd} — declare-o em lib/candidatura.mjs`);
+  }
+  for (const cd of new Set(linhas.filter(situacaoDesconhecida).map((r) => `${r.CD_SIT_TOT_TURNO}=${r.DS_SIT_TOT_TURNO}`))) {
+    console.log(`⚠️  [eleicao] situação de totalização NÃO classificada: ${cd} — declare-a em lib/resultado2026.mjs`);
   }
 
-  return { registroEm, pleitoEm: PLEITO_2026 };
+  return { resultadoEm, pleitoEm: PLEITO_2026, posseEm: POSSE_2027 };
 }
 
 // menos de 12 meses em exercício efetivo (~1 ano de 41) = mandato parcial: fora do
@@ -1445,14 +1478,16 @@ async function fetchSenado(socialMap) {
     && (Number(m.Ano) >= YEARS[0] || anterioresMovidas.has(String(m.Codigo)));
   const lista = await senadoJson('senado-lista.json', 'https://legis.senado.leg.br/dadosabertos/senador/lista/atual.json');
   const parls = asArray(lista.ListaParlamentarEmExercicio.Parlamentares.Parlamentar)
-    .map((p) => p.IdentificacaoParlamentar)
-    .map((i) => ({
+    .map(({ IdentificacaoParlamentar: i, Mandato: m }) => ({
       id: Number(i.CodigoParlamentar),
       nome: i.NomeParlamentar,
       partido: normalizaSigla(i.SiglaPartidoParlamentar ?? 'S/PART'),
-      uf: i.UfParlamentar,
+      // suplente recém-empossado vem sem UF na identificação — ela está no mandato
+      // (Lourdinha Pereira, 2026-10: sem o fallback, uf undefined derrubava o build)
+      uf: i.UfParlamentar ?? m?.UfParlamentar,
       foto: i.UrlFotoParlamentar?.replace('http://', 'https://'),
     }));
+  for (const p of parls.filter((x) => !x.uf)) console.log(`⚠️  [senado] ${p.nome} sem UF na identificação nem no mandato`);
   console.log(`[senado] ${parls.length} senadores em exercício`);
 
   // CEAPS (cota do Senado) — CSV latin1, decimal com vírgula, match por NOME
@@ -2475,10 +2510,10 @@ const licenciados = await fetchLicenciados(deputados, senadores);
 // representante não é líder, o bônus é 3 uma vez).
 await aplicaComando(full);
 
-// ---------- Candidatura 2026 (informativo — não pontua, não vira título) ----------
+// ---------- Eleições 2026 (informativo — não pontua, não vira título) ----------
 // Roda aqui: as chaves (CPF na Câmara, nome civil no Senado) só existem depois que as
 // fichas civis das DUAS casas foram baixadas.
-const eleicao2026 = await aplicaCandidaturas(full);
+const eleicao2026 = await aplicaResultado2026(full);
 
 // aplicados após o merge para cobrir Câmara e Senado com a mesma regra.
 // Todos green/purple → nenhum bloqueia o gate do Tier S (que só olha red).
@@ -2918,6 +2953,8 @@ const insights = {
   ],
   renovacao, leis, genero,
   ...(sabatina ? { sabatina } : {}),
+  // aba Eleições: só existe quando o resultado do TSE foi emitido nesta execução
+  ...(eleicao2026 ? { eleicao: agregaEleicao(full.map((p) => ({ ...p, fora: foraDoRanking(p) }))) } : {}),
   gastoPorCasa, guildGasto,
   gastoCategorias, topDivulgacao, divulgacaoInfluencia, concentracaoFornecedor, fornecedoresCota,
   guildRanking, ufAgg,
@@ -2937,7 +2974,7 @@ const index = full.map((p) => ({
   slug: p.slug, nome: p.nome, fotoUrl: p.fotoUrl, casa: p.casa, uf: p.uf, partido: p.partido,
   tier: p.tier, ops: p.ops, stats: p.stats,
   avail: Object.keys(p.rawNumbers), // stats existentes p/ este parlamentar
-  ...(p.candidatura2026 ? { candidatura2026: p.candidatura2026 } : {}),
+  ...(p.eleicao2026 ? { eleicao2026: p.eleicao2026 } : {}),
   ...(p.mandatoParcial ? { mandatoParcial: true } : {}), // marca p/ Batalha/busca
   ...(p.presidenteCasa ? { presidenteCasa: true } : {}),
 }));

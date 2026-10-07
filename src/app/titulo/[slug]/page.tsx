@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { politicians, titleDefs, getTitle, casaLabel, meta } from '@/lib/data';
 import type { StatKey } from '@/lib/types';
 import { PoliticianLink } from '@/components/PoliticianLink';
-import { CandMini } from '@/components/CandMini';
+import { EleicaoMini } from '@/components/EleicaoMini';
 import { JsonLd } from '@/components/JsonLd';
 import { breadcrumbLd } from '@/lib/jsonld';
 import { pageMeta } from '@/lib/seo';
@@ -89,7 +89,7 @@ export default async function TitlePage({ params }: { params: Promise<{ slug: st
               <small>
                 {casaLabel(p.casa, true)} · {p.uf} · {p.partido}
                 {rawKey && p.rawNumbers?.[rawKey] ? ` — ${p.rawNumbers[rawKey]}` : ''}
-                <CandMini c={p.candidatura2026} casa={p.casa} uf={p.uf} />
+                <EleicaoMini e={p.eleicao2026} casa={p.casa} />
               </small>
             </span>
             <span className={`badge ${titulo.cor === 'green' ? 'green' : 'red'}`}>Tier {p.tier}</span>

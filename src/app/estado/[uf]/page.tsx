@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { politicians, casaLabel, foraDoRanking, licenciadosDaUf } from '@/lib/data';
 import { Licenciados } from '@/components/Licenciados';
 import { PoliticianLink } from '@/components/PoliticianLink';
-import { CandMini } from '@/components/CandMini';
+import { EleicaoMini } from '@/components/EleicaoMini';
 import { JsonLd } from '@/components/JsonLd';
 import { breadcrumbLd } from '@/lib/jsonld';
 import { pageMeta } from '@/lib/seo';
@@ -56,7 +56,7 @@ export default async function StatePage({ params }: { params: Promise<{ uf: stri
             <span className="pos">{i + 1}</span>
             <span className="nm">
               <b>{p.nome}</b>
-              <small>{casaLabel(p.casa, true)} · {p.partido}<CandMini c={p.candidatura2026} casa={p.casa} uf={p.uf} /></small>
+              <small>{casaLabel(p.casa, true)} · {p.partido}<EleicaoMini e={p.eleicao2026} casa={p.casa} /></small>
             </span>
             <span className={`badge ${['S', 'A'].includes(p.tier) ? 'green' : ['D', 'F'].includes(p.tier) ? 'red' : 'purple'}`}>Tier {p.tier}</span>
             <span className="sc" style={{ color: 'var(--gold-2)' }}>{p.ops}</span>
@@ -70,7 +70,7 @@ export default async function StatePage({ params }: { params: Promise<{ uf: stri
             {parciais.map((p) => (
               <PoliticianLink key={p.slug} slug={p.slug} className="lrow">
                 <span className="pos">—</span>
-                <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.partido}<CandMini c={p.candidatura2026} casa={p.casa} uf={p.uf} /></small></span>
+                <span className="nm"><b>{p.nome}</b><small>{casaLabel(p.casa, true)} · {p.partido}<EleicaoMini e={p.eleicao2026} casa={p.casa} /></small></span>
                 <span className="badge purple">sem Tier</span>
                 <span className="sc" style={{ color: 'var(--muted)' }}>—</span>
               </PoliticianLink>
