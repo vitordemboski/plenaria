@@ -227,7 +227,8 @@ function cardPolitico({ p, foto, stats, credito, eleicao }) {
 
 /** Slug ASCII da guilda — MESMA regra de src/lib/slug.ts (MISSÃO → MISSAO); sigla
  *  acentuada quebra o output:export, então o arquivo tem de casar com a rota. */
-const guildSlug = (sigla) => sigla.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+// gêmeo de src/lib/slug.ts — a barra de "S/Partido" virava subpasta em public/og/
+const guildSlug = (sigla) => sigla.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9-]+/g, '-');
 
 /** Tier da guilda pelos cortes do meta.json — a MESMA tabela do ingest e da
  *  página da guilda. Não reintroduza uma constante local aqui: era exatamente a

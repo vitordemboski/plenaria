@@ -1,4 +1,5 @@
 import { PrefetchLink } from '@/components/PrefetchLink';
+import { guildSlug } from '@/lib/slug';
 import { politicians as allPoliticians, titleDefs, guilds, meta, TITLE_COR_META, RARIDADE_LABEL, foraDoRanking } from '@/lib/data';
 import type { TitleDef } from '@/lib/types';
 
@@ -59,7 +60,7 @@ export function TitlesGallery() {
           <h3 className="cor-green">🟢 Guildas mais elogiadas</h3>
           <div className="sub">Partidos com mais títulos elogiosos concedidos aos seus membros</div>
           {topBy('green').map(([sigla, v], i) => (
-            <PrefetchLink key={sigla} href={`/guilda/${sigla}/`} className="lrow">
+            <PrefetchLink key={sigla} href={`/guilda/${guildSlug(sigla)}/`} className="lrow">
               <span className="pos">{i + 1}</span>
               <span className="nm"><b>{guildBySigla[sigla]?.nome ?? sigla}</b><small>{sigla}</small></span>
               <span />
@@ -71,7 +72,7 @@ export function TitlesGallery() {
           <h3 className="cor-red">🔴 Guildas mais criticadas</h3>
           <div className="sub">Partidos com mais títulos críticos concedidos aos seus membros</div>
           {topBy('red').map(([sigla, v], i) => (
-            <PrefetchLink key={sigla} href={`/guilda/${sigla}/`} className="lrow">
+            <PrefetchLink key={sigla} href={`/guilda/${guildSlug(sigla)}/`} className="lrow">
               <span className="pos">{i + 1}</span>
               <span className="nm"><b>{guildBySigla[sigla]?.nome ?? sigla}</b><small>{sigla}</small></span>
               <span />
