@@ -201,8 +201,9 @@ async function fetchDeputados() {
 }
 
 async function fetchPartidos() {
-  const body = await cached('partidos.json', `${API}/api/v2/partidos?itens=100`, { json: true });
-  return new Map(JSON.parse(body).dados.map((p) => [p.sigla, p.nome]));
+  // retry: um 504 transitório aqui (1ª chamada após a listagem) abortava a ingestão inteira
+  const { dados } = await cachedRetry('partidos.json', `${API}/api/v2/partidos?itens=100`, { permanente: false });
+  return new Map(dados.map((p) => [p.sigla, p.nome]));
 }
 
 // ---------- 2. Stamina: votos nominais ----------
@@ -958,7 +959,7 @@ async function cachedRetry(name, url, { tentativas = 8, permanente = true } = {}
 }
 
 async function fichaCamara(id) {
-  const d = (await cachedGentil(`dep-detalhe-${id}.json`, `${API}/api/v2/deputados/${id}`)).dados;
+  const d = (await cachedRetry(`dep-detalhe-${id}.json`, `${API}/api/v2/deputados/${id}`, { permanente: false })).dados;
   const legs = (await cachedRetry(`dep-legs-${id}.json`,
     `${API}/api/v2/deputados?id=${id}&idLegislatura=${LEGISLATURAS}&itens=100`)).dados ?? [];
   const mandatos = new Set(legs.map((l) => l.idLegislatura)).size;
@@ -1244,8 +1245,8 @@ function ehPresidenteMesa(comissoes) {
 async function orgaosCamara(id) {
   const all = [];
   for (let pag = 1; ; pag++) {
-    const { dados } = await cachedGentil(`dep-orgaos-${id}-p${pag}.json`,
-      `${API}/api/v2/deputados/${id}/orgaos?itens=100&pagina=${pag}`);
+    const { dados } = await cachedRetry(`dep-orgaos-${id}-p${pag}.json`,
+      `${API}/api/v2/deputados/${id}/orgaos?itens=100&pagina=${pag}`, { permanente: false });
     all.push(...dados);
     if (dados.length < 100) break;
   }
@@ -1962,7 +1963,7 @@ async function fetchLicenciados(deputados, senadores) {
   for (const d of foraDaLista) {
     let status;
     try {
-      status = (await cachedGentil(`dep-status-${d.id}.json`, `${API}/api/v2/deputados/${d.id}`)).dados?.ultimoStatus;
+      status = (await cachedRetry(`dep-status-${d.id}.json`, `${API}/api/v2/deputados/${d.id}`, { permanente: false })).dados?.ultimoStatus;
     } catch (e) {
       console.log(`[licenca] ⚠️ status do deputado ${d.id} indisponível (${e.message}) — omitido`);
       continue;
