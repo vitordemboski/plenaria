@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   rotuloCategoria, resumoCota, dobrarCategorias,
   chaveFornecedor, destrincharFornecedores, formataCnpj, rankFornecedores,
+  valorLancamentoCeap,
 } from './cota.mjs';
 
 const CNPJ_A = '11.111.111/1111-11';
@@ -229,4 +230,24 @@ test('estorno é abatido (net) e categoria só-estorno some da barra', () => {
 test('sem lançamentos → total 0, categorias vazias, fornecedor null', () => {
   const r = resumoCota([], []);
   assert.deepEqual(r, { total: 0, categorias: [], fornecedor: null });
+});
+
+// fixtures reais de /deputados/204528/despesas (2026-11-24)
+test('valor do lançamento CEAP ignora o sinal invertido do valorLiquido', () => {
+  // a API passou a devolver valorLiquido = −valorDocumento em despesa comum
+  assert.equal(valorLancamentoCeap({ valorDocumento: 6.01, valorGlosa: 0, valorLiquido: -6.01 }), 6.01);
+  assert.equal(valorLancamentoCeap({ valorDocumento: 1088.3, valorGlosa: 0, valorLiquido: 1088.3 }), 1088.3);
+});
+
+test('estorno de verdade (documento negativo) continua abatendo', () => {
+  assert.equal(valorLancamentoCeap({ valorDocumento: -542.04, valorGlosa: 0, valorLiquido: 542.04 }), -542.04);
+});
+
+test('glosa é descontada do documento', () => {
+  assert.equal(valorLancamentoCeap({ valorDocumento: 500, valorGlosa: 120, valorLiquido: -380 }), 380);
+});
+
+test('sem valorDocumento cai no valorLiquido, nunca em zero', () => {
+  assert.equal(valorLancamentoCeap({ valorLiquido: 77.5 }), 77.5);
+  assert.equal(valorLancamentoCeap({}), 0);
 });

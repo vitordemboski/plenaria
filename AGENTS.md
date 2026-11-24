@@ -21,6 +21,7 @@ Leia `docs/product-spec.md` para o produto e `docs/architecture.md` para a arqui
 |---|---|
 | `npm run data:real` | Ingesta DADOS REAIS (Câmara + Senado) — cache em `data/raw/` (alguns GB); já roda o `fotos` no fim. Do zero leva ~1h (a API da Câmara devolve 504 em rajada); com cache quente, minutos |
 | `npm run data:fresh` | O mesmo com `--fresh`: ignora o TTL e re-baixa TODA fonte volátil (ver "Validade do cache" abaixo) |
+| `npm run data:check` | Sanidade pós-ingestão (`scripts/check-ingest.mjs`, lógica em `lib/sanidade.mjs`): falha com exit 1 se a FORMA do dado é impossível; já roda dentro do `data:real`/`data:fresh` |
 | `npm run fotos` | Baixa as fotos oficiais p/ `public/fotos/` como **WebP** e repõe os `fotoUrl` p/ caminho local |
 | `npm run og` | Gera os cards de compartilhamento: `public/og.jpg` (site), `public/og/<slug>.jpg` (parlamentar) e `og/guilda-<sigla>.jpg` (guilda) — um por parlamentar, guilda e o site; já roda no fim do `data:real`. `--only=<slug>`/`--guildas`/`--site` p/ iterar |
 | `npm run social:template` | Gera/atualiza o esqueleto de `data/social.csv` com handles oficiais |
@@ -134,6 +135,9 @@ As três regras, para qualquer fonte nova:
 | `/materia/{codigo}` | **descontinuado** (desativado em 2026-02-01), 200 com corpo vazio | mediria a mesma cobertura como 20% |
 | `/deputados/{id}/historico` | 504 transitório sob carga (~1 em 3, em rajada de 513) | histórico vazio = 0 meses de exercício = deputado fora do ranking |
 | CEAPS (Senado) | match por NOME sem casar | senador vira "o mais frugal" |
+| `/deputados/{id}/despesas` — `valorLiquido` | **sinal invertido** em 65–85% dos lançamentos (telefonia de R$ 6,01 → −6,01), descoberto em 2026-11-24 e já no ar desde 9/11 | soma da Câmara −R$ 548 mi; os MAIS frugais com Economia 0 (Adriana Ventura, R$ 7 mil/mês). Use `valorDocumento − valorGlosa` (`valorLancamentoCeap`) |
+| bulks `/arquivos/*.csv` acima de ~40 MB | o servidor corta a conexão aos ~17s (`terminated`); o `catch → [skip]` descartava o ANO inteiro com cache bom em disco | 0 de 513 deputados com prioridades; Stamina/Ataque sobre anos faltando. Hoje: retomada por `Range` (`baixaRetomando`) |
+| TSE `consulta_cand_2026` | a proporcional do Amapá inteira em `#NULO`/`#NE` (arquivo de 2026-11-24), governo e Senado da UF íntegros | 505 de 513 eleitos: o portão apagava o destino dos 594. Hoje: UF inteira sem resultado vira lacuna declarada (`resultado2026.mjs`) |
 
 Defesas hoje: `senadoJson` recebe um predicado `temDados`; a cota tem portão de sanidade;
 `historico` e `relatoresPorProposicao` abortam; a classificação do Senado só grava `null`
@@ -308,7 +312,7 @@ Armadilhas conhecidas das APIs:
   prefixo ÚNICO. Sem match o gasto vira 0 (ver Sucesso vazio).
 - A **quebra da cota por categoria/fornecedor** (`cotaResumo`, painel "Onde foi a cota") é
   INFORMATIVA — descreve o gasto, não pontua (a Economia continua sendo só o TOTAL). Lógica pura em `scripts/lib/cota.mjs` (com teste). Dois cuidados: (1) os valores são
-  **líquidos** — os estornos (vlrLiquido negativo) são abatidos por categoria, senão o total do
+  **líquidos** — os estornos (documento negativo — o sinal do `valorLiquido` não é confiável, ver Sucesso vazio) são abatidos por categoria, senão o total do
   painel diverge do total da Economia (bruto 1,92 mi × líquido 1,91 mi para o mesmo deputado);
   (2) rótulo de categoria desconhecido NUNCA é dropado — cai num rótulo limpo genérico, senão a
   fonte inventa uma categoria nova e ela some da barra em silêncio. As duas casas têm taxonomias
@@ -592,8 +596,12 @@ mobile de verdade, use um iframe de 390px ou o DevTools device mode.
 Mexeu em metadado/JSON-LD? Varra o `out/`: 1 `<h1>` por página, `og:title` sem duplicata,
 URLs do sitemap existindo em disco, JSON-LD parseável e sem `ratingValue`.
 
-**Reingeriu? Confira o que a fonte pode zerar em silêncio.** Estas três já quebraram, e
-nenhuma delas gera erro — todas produzem um número plausível:
+**Reingeriu? Leia o bloco `[sanidade]` no fim do log** — `npm run data:check` roda sozinho no
+fim do `data:real`/`data:fresh` e sai com 1 (❌) quando a forma é impossível: gasto negativo,
+mediana da cota fora de faixa, dezenas de zeros, casa inteira no vermelho num atributo. Os ⚠️
+dele são degradação honesta (bulk servido de cache antigo, eleição com lacuna) e somem sozinhos
+quando a fonte se corrige. Limiar novo vai para `lib/sanidade.mjs`, com teste — não para cá.
+O comando abaixo é o mesmo conteúdo, para inspecionar à mão:
 
 ```sh
 node -e 'const P=require("./data/politicians.json");const z=k=>P.filter(k).length;

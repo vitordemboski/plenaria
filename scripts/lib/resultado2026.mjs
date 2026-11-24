@@ -32,6 +32,16 @@ export const POSSE_2027 = '2027-02-01';
 export const FIM_MANDATO_2027 = '2027-01-31';
 /** Cadeiras em disputa em 2026: Câmara inteira; 2/3 do Senado. */
 export const CADEIRAS_2026 = { 6: 513, 5: 54 };
+/** Cadeiras por UF em 2026 — a Câmara pela distribuição vigente (soma 513); o Senado
+ *  renova 2/3, logo 2 por UF. É o que diz quantas cadeiras uma UF SEM resultado leva
+ *  consigo; sem a tabela, "faltam 8" não distinguiria o Amapá inteiro de 8 buracos
+ *  espalhados. */
+export const CADEIRAS_UF_CAMARA = {
+  AC: 8, AL: 9, AM: 8, AP: 8, BA: 39, CE: 22, DF: 8, ES: 10, GO: 17, MA: 18, MG: 53,
+  MS: 8, MT: 8, PA: 17, PB: 12, PE: 25, PI: 10, PR: 30, RJ: 46, RN: 8, RO: 8, RR: 8,
+  RS: 31, SC: 16, SE: 8, SP: 70, TO: 8,
+};
+const cadeirasDaUf = (cargo, uf) => (Number(cargo) === 6 ? CADEIRAS_UF_CAMARA[uf] ?? 0 : 2);
 
 /** `CD_SIT_TOT_TURNO` → situação. Vocabulário FECHADO: código fora daqui é logado.
  *  `-1` (#NULO) é ausência de resultado, não derrota — ver decisão 3. */
@@ -69,9 +79,15 @@ export function indiceEleitos(linhas) {
   const porNome = new Map();
   const lista = [];
   const contagem = { 5: 0, 6: 0 };
+  const vistas = { 5: new Set(), 6: new Set() };
+  const comResultado = { 5: new Set(), 6: new Set() };
   for (const r of linhas ?? []) {
     const cargo = Number(r.CD_CARGO);
-    if ((cargo !== 5 && cargo !== 6) || situacaoTse(r) !== 'eleito') continue;
+    if (cargo !== 5 && cargo !== 6) continue;
+    const ufR = String(r.SG_UF ?? '').toUpperCase();
+    vistas[cargo].add(ufR);
+    if (situacaoTse(r) !== null) comResultado[cargo].add(ufR);
+    if (situacaoTse(r) !== 'eleito') continue;
     contagem[cargo]++;
     const e = { cargo, uf: String(r.SG_UF ?? '').toUpperCase(), nome: r.NM_CANDIDATO, urna: r.NM_URNA_CANDIDATO };
     lista.push(e);
@@ -80,19 +96,31 @@ export function indiceEleitos(linhas) {
     const n = nomeNorm(r.NM_CANDIDATO);
     porNome.set(n, [...(porNome.get(n) ?? []), e]);
   }
-  return { porCpf, porNome, lista, contagem };
+  // UF em que NENHUM candidato do cargo tem resultado: o bloco veio vazio da fonte
+  const semResultado = Object.fromEntries([5, 6].map((c) =>
+    [c, new Set([...vistas[c]].filter((uf) => !comResultado[c].has(uf)))]));
+  return { porCpf, porNome, lista, contagem, semResultado };
 }
 
 /**
  * Sucesso vazio: arquivo íntegro com a lista de eleitos incompleta (totalização em
  * curso, resultado não carregado) transformaria eleito em "não volta". Sem as duas
  * listas inteiras, nenhum resultado é emitido.
+ *
+ * Exceção ESTREITA: UF em que nenhum candidato do cargo tem resultado (`semResultado`,
+ * todos #NULO) é lacuna DECLARADA — as cadeiras dela são descontadas, e quem disputou
+ * ali fica sem afirmação (#NULO na própria cadeira não afirma nada). Só vale se o resto
+ * fechar EXATO: um eleito a menos fora desse bloco é totalização parcial e aborta.
+ * Medido em 2026-11-24: o Amapá veio inteiro sem resultado e derrubava o destino dos
+ * 594 parlamentares por causa de 8 cadeiras.
  * @returns {string|null}
  */
-export function motivoParaAbortar(contagem) {
+export function motivoParaAbortar(contagem, semResultado = {}) {
   for (const [cargo, n] of Object.entries(CADEIRAS_2026)) {
+    const lacuna = [...(semResultado[cargo] ?? [])].reduce((t, uf) => t + cadeirasDaUf(cargo, uf), 0);
     const achados = contagem?.[cargo] ?? 0;
-    if (achados < n) {
+    // com lacuna, o fechamento tem de ser EXATO; sem ela, a regra de sempre
+    if (lacuna ? achados + lacuna !== n : achados < n) {
       return `${achados} de ${n} eleitos para ${cargo === '6' ? 'a Câmara' : 'o Senado'} — lista incompleta`;
     }
   }

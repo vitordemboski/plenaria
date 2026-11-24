@@ -35,6 +35,41 @@ test('lista de eleitos incompleta aborta em vez de virar "não volta"', () => {
   assert.equal(motivoParaAbortar({ 6: 513, 5: 54 }), null);
 });
 
+// Medido em 2026-11-24: o arquivo do TSE trouxe a eleição proporcional do AMAPÁ inteira
+// sem resultado (91 candidatos a federal com #NULO) — 505 de 513, o resto do país íntegro.
+test('UF inteira sem resultado vira lacuna declarada, não aborto', () => {
+  const ls = [
+    linha({ SG_UF: 'AP', CD_SIT_TOT_TURNO: '-1' }),
+    linha({ SG_UF: 'AP', CD_SIT_TOT_TURNO: '-1', NR_CPF_CANDIDATO: '2' }),
+    linha({ SG_UF: 'SP' }),
+    linha({ SG_UF: 'SP', CD_SIT_TOT_TURNO: '4', NR_CPF_CANDIDATO: '3' }),
+  ];
+  const { semResultado } = indiceEleitos(ls);
+  assert.deepEqual([...semResultado[6]], ['AP']);
+  assert.equal(motivoParaAbortar({ 6: 505, 5: 54 }, semResultado), null);
+});
+
+test('lacuna FORA do bloco da UF sem resultado continua abortando', () => {
+  const semResultado = { 6: new Set(['AP']), 5: new Set() };
+  // falta 1 eleito além das 8 cadeiras do AP: buraco parcial em outra UF
+  assert.match(motivoParaAbortar({ 6: 504, 5: 54 }, semResultado), /Câmara/);
+});
+
+test('UF com UM resultado não é "sem resultado" — totalização parcial aborta', () => {
+  const ls = [
+    linha({ SG_UF: 'AP', CD_SIT_TOT_TURNO: '-1' }),
+    linha({ SG_UF: 'AP', CD_SIT_TOT_TURNO: '2', NR_CPF_CANDIDATO: '2' }),
+  ];
+  const { semResultado } = indiceEleitos(ls);
+  assert.equal(semResultado[6].size, 0);
+  assert.match(motivoParaAbortar({ 6: 505, 5: 54 }, semResultado), /Câmara/);
+});
+
+test('deputado que disputou a cadeira na UF sem resultado fica sem afirmação', () => {
+  const ls = [linha({ SG_UF: 'AP', CD_SIT_TOT_TURNO: '-1', NR_CPF_CANDIDATO: '12345678901' })];
+  assert.equal(destinoNaLegislatura(dep({ uf: 'AP' }), ls[0], idx(...ls)), null);
+});
+
 test('a previsão morre na posse', () => {
   assert.equal(aindaVale('2026-10-06'), true);
   assert.equal(aindaVale('2027-01-31'), true);

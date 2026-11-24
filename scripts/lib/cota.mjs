@@ -255,3 +255,20 @@ export function dobrarCategorias(categorias, top = 5) {
   head.sort((a, b) => (a.categoria === 'Outros') - (b.categoria === 'Outros') || b.valor - a.valor);
   return head;
 }
+
+/**
+ * Valor de um lançamento da CEAP (Câmara) = `valorDocumento − valorGlosa`.
+ *
+ * NÃO leia o `valorLiquido`: medido em 2026-11-24, o `/deputados/{id}/despesas` o
+ * devolve com o SINAL INVERTIDO em 65–85% dos lançamentos de cada deputado (telefonia
+ * de R$ 6,01 → −6,01), sem padrão de tipo de documento. A soma da casa dava −R$ 548 mi;
+ * o gasto mensal virava negativo e a Economia (menor gasto = maior nota) punha os
+ * deputados mais frugais em ZERO — Adriana Ventura com R$ 7 mil/mês, Economia 0.
+ * `valorDocumento − valorGlosa` bate com |valorLiquido| em praticamente toda linha (4
+ * exceções em 2.459 conferidas) e preserva o estorno de verdade, que vem com o
+ * DOCUMENTO negativo.
+ */
+export function valorLancamentoCeap(d) {
+  if (typeof d?.valorDocumento === 'number') return d.valorDocumento - (d.valorGlosa ?? 0);
+  return d?.valorLiquido ?? 0;
+}

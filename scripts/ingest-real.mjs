@@ -26,7 +26,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCsvBR } from './lib/csv.mjs';
 import { TIPOS_PRINCIPAIS, TIPOS_EMENDA, ehFiscalizacao, alinhamento, senadoAvancou, senadoVirouNorma } from './lib/classificacao.mjs';
-import { resumoCota, percentuais, chaveFornecedor, destrincharFornecedores, rankFornecedores } from './lib/cota.mjs';
+import { resumoCota, percentuais, chaveFornecedor, destrincharFornecedores, rankFornecedores, valorLancamentoCeap } from './lib/cota.mjs';
 import { escalaFrugalidade, escalaComparecimento, escalaLog } from './lib/escala.mjs';
 import { compareceu, registrouVoto, codigoDesconhecido } from './lib/voto-senado.mjs';
 import { referenciasDaCasa, evidenciaDeTitulos } from './lib/evidencia.mjs';
@@ -126,6 +126,82 @@ async function cached(name, url, { json = false, method = 'GET', body: reqBody, 
   return body;
 }
 
+/** `cached` para os bulks CSV de `/arquivos/` (dezenas de MB por ano).
+ *
+ *  ARMADILHA (medido em 2026-11-24): sob a rajada de downloads o CDN da Câmara falha
+ *  transitoriamente e o antigo `catch → [skip]` DESCARTAVA O ANO INTEIRO — mesmo com o
+ *  arquivo bom da execução anterior em disco. Sumiram proposicoes-2021/2023..2026 e
+ *  votacoesVotos-2023/2025: a Câmara inteira saiu sem prioridades, e Stamina/Ataque
+ *  foram calculados sobre anos faltando, sem erro nenhum.
+ *
+ *  A causa não era rajada: o servidor CORTA a conexão por volta de 17s (`terminated`
+ *  no Node, curl 18), então todo arquivo acima de ~40 MB falhava SEMPRE, em qualquer
+ *  número de tentativas. Ele aceita `Range` — o download retoma de onde parou
+ *  (`baixaRetomando`). `Accept-Encoding: identity` é obrigatório: com gzip negociado,
+ *  o offset do Range e o `content-length` deixam de ser bytes do arquivo.
+ *
+ *  Regras: retenta com backoff; corpo menor que o `content-length` é falha (download
+ *  truncado não pode virar cache); esgotou → usa o cache velho com ⚠️ (o `updatedAt`
+ *  passa a refletir a idade dele, honestamente); sem cache → aborta. Só o 404 é
+ *  resposta definitiva e devolve null (ano ainda não publicado). */
+/** GET com retomada por `Range` — ver `cachedBulk`. null só no 404 inicial. */
+async function baixaRetomando(url, name, maxRetomadas = 30) {
+  const partes = [];
+  let lidos = 0, total = null;
+  for (let r = 0; ; r++) {
+    const headers = { 'Accept-Encoding': 'identity', ...(lidos ? { Range: `bytes=${lidos}-` } : {}) };
+    const res = await fetch(url, { headers });
+    if (!lidos && res.status === 404) return null;
+    if (lidos && res.status === 200) { partes.length = 0; lidos = 0; } // ignorou o Range: recomeça
+    else if (lidos && res.status !== 206) throw new Error(`${res.status} ao retomar ${url}`);
+    else if (!lidos && !res.ok) throw new Error(`${res.status} ${url}`);
+    if (res.headers.get('content-encoding')) throw new Error(`content-encoding inesperado: ${res.headers.get('content-encoding')}`);
+    if (total === null) total = Number(res.headers.get('content-length')) || null;
+    try {
+      for await (const c of res.body) { partes.push(c); lidos += c.length; }
+    } catch (e) {
+      if (!total || r >= maxRetomadas) throw new Error(`${e.message} (${lidos} de ${total ?? '?'} bytes)`);
+      console.log(`  [retoma] ${name}: ${(lidos / 1e6).toFixed(1)} de ${(total / 1e6).toFixed(1)} MB`);
+      continue;
+    }
+    if (total && lidos < total) throw new Error(`truncado: ${lidos} de ${total} bytes`);
+    if (total && lidos > total) throw new Error(`excedeu: ${lidos} de ${total} bytes`);
+    return Buffer.concat(partes.map((c) => Buffer.from(c)));
+  }
+}
+
+async function cachedBulk(name, url, { tentativas = 5 } = {}) {
+  const file = join(RAW, name);
+  if (cacheServe(file)) {
+    console.log(`[cache] ${name}`);
+    registraFonte(file, false);
+    return readFileSync(file, 'utf8');
+  }
+  let erro;
+  for (let t = 1; t <= tentativas; t++) {
+    console.log(`[fetch] ${url}${t > 1 ? ` (tentativa ${t})` : ''}`);
+    try {
+      const buf = await baixaRetomando(url, name);
+      if (buf === null) { console.log(`[skip] ${name}: 404 (não publicado)`); return null; }
+      if (buf.length < 1024) throw new Error(`corpo de ${buf.length} bytes`);
+      writeFileSync(file, buf);
+      registraFonte(file, false);
+      return buf.toString('utf8');
+    } catch (e) {
+      erro = e;
+      console.log(`  [retry ${t}/${tentativas}] ${name}: ${e.message}`);
+      if (t < tentativas) await new Promise((r) => setTimeout(r, 10000 * t));
+    }
+  }
+  if (existsSync(file)) {
+    const dias = ((Date.now() - statSync(file).mtimeMs) / 86400e3).toFixed(1);
+    console.log(`⚠️  [bulk] ${name}: download falhou (${erro?.message}) — usando o cache de ${dias} dias atrás`);
+    registraFonte(file, false);
+    return readFileSync(file, 'utf8');
+  }
+  throw new Error(`[bulk] ${name} indisponível e sem cache: ${erro?.message}`);
+}
+
 /** `cached` para arquivo BINÁRIO (.zip). O piso de bytes existe porque erro de CDN
  *  chega como HTML de 200: sem ele, "Not Found" sobrescreveria o cache bom e o TTL
  *  congelaria a falha por 24h. */
@@ -214,9 +290,8 @@ async function fetchVotos() {
   let totalVotacoes = 0;
   for (const y of YEARS) {
     let body;
-    try {
-      body = await cached(`votacoesVotos-${y}.csv`, `${API}/arquivos/votacoesVotos/csv/votacoesVotos-${y}.csv`);
-    } catch { console.log(`[skip] votacoesVotos-${y} indisponível`); continue; }
+    body = await cachedBulk(`votacoesVotos-${y}.csv`, `${API}/arquivos/votacoesVotos/csv/votacoesVotos-${y}.csv`);
+    if (body == null) continue;
     const { header, rows } = parseCsv(body);
     const iVot = header.indexOf('idVotacao');
     const iDep = header.indexOf('deputado_id');
@@ -255,10 +330,8 @@ async function fetchOrientacoesGoverno() {
   const orientacaoGov = new Map();
   for (const y of YEARS) {
     let body;
-    try {
-      body = await cached(`votacoesOrientacoes-${y}.csv`,
-        `${API}/arquivos/votacoesOrientacoes/csv/votacoesOrientacoes-${y}.csv`);
-    } catch { console.log(`[skip] votacoesOrientacoes-${y} indisponível`); continue; }
+    body = await cachedBulk(`votacoesOrientacoes-${y}.csv`, `${API}/arquivos/votacoesOrientacoes/csv/votacoesOrientacoes-${y}.csv`);
+    if (body == null) continue;
     const { header, rows } = parseCsv(body);
     const iVot = header.indexOf('idVotacao');
     for (const r of rows) {
@@ -434,9 +507,8 @@ async function fetchStatusProposicoes() {
   for (const y of [...YEARS_ANTERIORES, ...YEARS]) {
     const anterior = y < YEARS[0];
     let body;
-    try {
-      body = await cached(`proposicoes-${y}.csv`, `${API}/arquivos/proposicoes/csv/proposicoes-${y}.csv`);
-    } catch { console.log(`[skip] proposicoes-${y} indisponível`); continue; }
+    body = await cachedBulk(`proposicoes-${y}.csv`, `${API}/arquivos/proposicoes/csv/proposicoes-${y}.csv`);
+    if (body == null) continue;
     const { header, rows } = parseCsv(body);
     const iId = header.indexOf('id');
     const iTipo = header.indexOf('siglaTipo');
@@ -560,9 +632,8 @@ async function fetchTemasCamara() {
   // para o corte de homenagem que decide se ela pontua na Eficiência
   for (const y of [...YEARS_ANTERIORES, ...YEARS]) {
     let body;
-    try {
-      body = await cached(`proposicoesTemas-${y}.csv`, `${API}/arquivos/proposicoesTemas/csv/proposicoesTemas-${y}.csv`);
-    } catch { console.log(`[skip] proposicoesTemas-${y} indisponível`); continue; }
+    body = await cachedBulk(`proposicoesTemas-${y}.csv`, `${API}/arquivos/proposicoesTemas/csv/proposicoesTemas-${y}.csv`);
+    if (body == null) continue;
     const { header, rows } = parseCsv(body);
     const iUri = header.indexOf('uriProposicao');
     const iTema = header.indexOf('tema');
@@ -606,9 +677,8 @@ async function fetchProposicoes(statusById, leiById, emendaIds, fiscalIds, temas
   for (const y of [...YEARS_ANTERIORES, ...YEARS]) {
     const anterior = y < YEARS[0];
     let body;
-    try {
-      body = await cached(`proposicoesAutores-${y}.csv`, `${API}/arquivos/proposicoesAutores/csv/proposicoesAutores-${y}.csv`);
-    } catch { console.log(`[skip] proposicoesAutores-${y} indisponível`); continue; }
+    body = await cachedBulk(`proposicoesAutores-${y}.csv`, `${API}/arquivos/proposicoesAutores/csv/proposicoesAutores-${y}.csv`);
+    if (body == null) continue;
     const { header, rows } = parseCsv(body);
     const iDep = header.indexOf('idDeputadoAutor');
     const iProp = header.indexOf('proponente');
@@ -716,7 +786,9 @@ const CEAP_FILTRO = `idLegislatura=${LEG_ATUAL}`;
 // gasto mínimo → Economia alta → Guardião do Cofre); o que estava errado era desistir
 // cedo de um 5xx transitório, que o próprio AGENTS.md manda insistir.
 async function fetchCeapDeputado(id, tentativas = 8) {
-  const file = join(RAW, `cota-${id}.json`);
+  // v2: os `cota-{id}.json` antigos guardavam o valorLiquido com sinal invertido
+  // (ver valorLancamentoCeap) — servi-los perpetuaria o erro
+  const file = join(RAW, `cota-v2-${id}.json`);
   if (cacheServe(file)) {
     registraFonte(file, false);
     return JSON.parse(readFileSync(file, 'utf8'));
@@ -742,7 +814,7 @@ async function fetchCeapDeputado(id, tentativas = 8) {
       vistos.add(chave);
       lancamentos.push({
         categoria: d.tipoDespesa ?? '',
-        valor: d.valorLiquido ?? 0,
+        valor: valorLancamentoCeap(d),
         doc: d.cnpjCpfFornecedor ?? '',
         forn: (d.nomeFornecedor ?? '').trim(),
       });
@@ -802,6 +874,13 @@ async function fetchCeap(deputados, concorrencia = 4) {
   // fonte não vira erro — vira "o mais frugal da casa", com Economia alta e selo de
   // Guardião do Cofre. Deputado sem NENHUM lançamento é raríssimo; um décimo da casa
   // assim é a fonte quebrada, e publicar isso é pior que não publicar.
+  // Total líquido negativo é impossível (estorno não supera o gasto): é o sinal da
+  // fonte invertido de novo, e a Economia poria os mais frugais em zero.
+  const negativos = [...gastoByDep].filter(([, v]) => v < 0);
+  if (negativos.length) {
+    throw new Error(`[ceap] ${negativos.length} deputados com cota LÍQUIDA NEGATIVA (ex.: ${negativos.slice(0, 3).map(([i, v]) => `${i}: R$ ${Math.round(v)}`).join(', ')}). `
+      + `Confira o sinal de valorDocumento/valorLiquido em /deputados/{id}/despesas — ver valorLancamentoCeap.`);
+  }
   const semGasto = total - gastoByDep.size;
   if (semGasto > total * 0.1) {
     throw new Error(`[ceap] ${semGasto} de ${total} deputados sem NENHUM lançamento de cota. `
@@ -851,18 +930,20 @@ function tierDe(ops) {
 // de presença é o comportamento de menor esforço, a distribuição é comprimida no
 // topo (mediana ~93% no Senado) e a presença JÁ é protegida pelo gate de Tier S
 // (Stamina >= 70) — pesá-la como autoria a contaria duas vezes. Eficiência mede
-// desfecho (matéria que ANDOU, não morreu na gaveta): por isso 0.28 > 0.20.
+// desfecho (matéria que ANDOU, não morreu na gaveta): por isso 0.28 > 0.16.
 // Pelo mesmo motivo Eficiência (0.28) > Ataque (0.24): protocolar custa uma
-// assinatura, o insumo não pode valer mais que o desfecho.
+// assinatura, o insumo não pode valer mais que o desfecho. Técnica (relatoria) passou
+// a pesar MAIS que Stamina (0.20 × 0.16, trocados em 2026-11): relatar é trabalho de
+// mérito sobre a matéria dos outros; comparecer é o piso — e o piso já tem o gate.
 const WEIGHTS_CAMARA = {
-  ataque: 0.24, stamina: 0.20, eficiencia: 0.28, tecnica: 0.16, economia: 0.12,
+  ataque: 0.24, stamina: 0.16, eficiencia: 0.28, tecnica: 0.20, economia: 0.12,
 };
 // O Senado tem os mesmos 5 atributos que pontuam na Câmara (a Eficiência entrou quando
 // a tramitação passou a ser lida do /processo). O que a casa NÃO tem é Fiscalização —
 // e essa nem pontua em lugar nenhum. Os pesos são, portanto, idênticos: o que difere
 // entre as casas é o universo do percentil (Câmara ≠ Senado), não a fórmula.
 const WEIGHTS_SENADO = {
-  ataque: 0.24, stamina: 0.20, eficiencia: 0.28, tecnica: 0.16, economia: 0.12,
+  ataque: 0.24, stamina: 0.16, eficiencia: 0.28, tecnica: 0.20, economia: 0.12,
 };
 const WEIGHTS_POR_CASA = { camara: WEIGHTS_CAMARA, senado: WEIGHTS_SENADO };
 
@@ -1139,10 +1220,13 @@ async function aplicaResultado2026(todos) {
   }
 
   const idx = indiceEleitos(linhas);
-  const abortaEleitos = motivoAbortarResultado(idx.contagem);
+  const abortaEleitos = motivoAbortarResultado(idx.contagem, idx.semResultado);
   if (abortaEleitos) {
     console.log(`⚠️  [eleicao] ABORTADO: ${abortaEleitos} — o arquivo veio íntegro sem o resultado inteiro; nenhum destino emitido`);
     return null;
+  }
+  for (const [cargo, ufs] of Object.entries(idx.semResultado)) {
+    if (ufs.size) console.log(`⚠️  [eleicao] ${cargo === '6' ? 'Câmara' : 'Senado'}: ${[...ufs].join(', ')} sem NENHUM resultado na fonte (todos #NULO) — quem disputou ali fica sem afirmação`);
   }
 
   const chaves = todos.map((p) => {
@@ -1289,7 +1373,18 @@ const envelopesVazios = new Map();
  */
 async function senadoJson(name, url, temDados) {
   const file = join(RAW, name);
-  if (!temDados) return JSON.parse(await cached(name, url, { json: true }));
+  if (!temDados) {
+    // sem predicado ainda precisa de backoff: um único 429 aqui (cargos, sob a
+    // Promise.all de 7 chamadas por senador) abortava a ingestão inteira
+    for (let t = 1; ; t++) {
+      try { return JSON.parse(await cached(name, url, { json: true })); }
+      catch (e) {
+        if (t >= 6 || !/^(429|5\d\d) /.test(e.message ?? '')) throw e;
+        console.log(`  [retry ${t}/5] ${e.message}`);
+        await sleep(3000 * t);
+      }
+    }
+  }
 
   if (cacheServe(file)) {
     const j = JSON.parse(readFileSync(file, 'utf8'));

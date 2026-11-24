@@ -68,9 +68,9 @@ Com cada atributo normalizado (0–100), calcula-se o **Poder** — a nota geral
 
 ```
 Poder = (0.24 × Ataque)
-    + (0.20 × Stamina)
+    + (0.16 × Stamina)
     + (0.28 × Eficiência)
-    + (0.16 × Técnica)
+    + (0.20 × Técnica)
     + (0.12 × Economia)
 
 // Influência (Instagram) é INFORMATIVA: NÃO entra no Poder.
@@ -88,19 +88,21 @@ Pesos-base, idênticos nas duas casas:
 | Atributo | Câmara | Senado |
 |---|---|---|
 | Ataque | 0,24 | 0,24 |
-| Stamina | 0,20 | 0,20 |
+| Stamina | 0,16 | 0,16 |
 | Eficiência | 0,28 | 0,28 |
-| Técnica | 0,16 | 0,16 |
+| Técnica | 0,20 | 0,20 |
 | Economia | 0,12 | 0,12 |
 
 Informativos — peso 0, não entram na conta: **Fiscalização, Alinhamento, Influência, Comando**
 (Fiscalização e Alinhamento só existem na Câmara).
 
-Produção legislativa real (Ataque + Técnica + Eficiência = 68%) domina. **Eficiência (0,28) é o maior
-peso da fórmula** — acima de Stamina (0,20) e de Ataque (0,24), nessa ordem, por um único critério:
+Produção legislativa real (Ataque + Técnica + Eficiência = 72%) domina. **Eficiência (0,28) é o maior
+peso da fórmula** — acima de Ataque (0,24) e de Técnica (0,20), e bem acima de Stamina (0,16), por um único critério:
 o custo do ato. Comparecer é dever, mas é o comportamento de menor esforço e a distribuição é
 comprimida no topo (mediana ~93% no Senado) — além de a presença já ser piso obrigatório para o Tier S
-(`Stamina ≥ 70`), então pesá-la como autoria a contaria duas vezes. Protocolar uma proposição é o ato
+(`Stamina ≥ 70`), então pesá-la como autoria a contaria duas vezes. Pelo mesmo critério a **Técnica (relatoria, 0,20) pesa mais que a Stamina (0,16)** —
+os dois pesos foram trocados em 2026-11: relatar é trabalho de mérito sobre a matéria dos outros, e
+comparecer é o piso, que já tem gate próprio. Protocolar uma proposição é o ato
 legislativo mais barato que existe (custa uma assinatura), então o **insumo não pode valer mais que o
 desfecho**: com Ataque acima de Eficiência, quem apresentava ~4x mais matérias com um terço do
 aproveitamento empatava com quem convertia. O volume segue sendo o segundo maior peso — mais matérias
@@ -855,7 +857,11 @@ suplência, Senado para deputado — com a situação: eleito, 2º turno, não e
    inteiras antes de afirmar qualquer coisa. Medido no arquivo de 05/10/2026: 385 eleitos
    por QP + 128 por média = 513; 54 senadores. Com a lista inteira, "não está entre os
    eleitos" é fato sobre um conjunto conhecido; incompleta, ela transformaria eleito em
-   derrotado.
+   derrotado. **Única exceção: UF inteira sem resultado.** Se NENHUM candidato do cargo
+   numa UF tem resultado (todos `#NULO`), as cadeiras dela são descontadas pela tabela de
+   vagas por UF e quem disputou ali fica sem afirmação (decisão 3); o resto precisa fechar
+   EXATO. Medido no arquivo de 24/11/2026: a proporcional do Amapá veio inteira em `#NULO`
+   (505 de 513), e o portão antigo apagava o destino dos 594 parlamentares por 8 cadeiras.
 2. **Todo mandato de deputado acaba em 31/01/2027.** Quem não está entre os 513 sai da
    Câmara, tenha disputado o que for — inclusive quem ainda disputa o 2º turno para governo:
    não concorreu à Câmara. No Senado o fim vem do `/senador/{id}/mandatos` (o mandato que
